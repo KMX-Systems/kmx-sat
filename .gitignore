@@ -1,0 +1,46 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Other
+*.user
+*.spv
+*.bg
+
+# IDEs, build and other folders
+.cmake/
+.idea/
+.qtcreator/
+.vscode/
+asan/
+build/*
+default/
+debug/
+tsan/
+source/build/
+

@@ -1,0 +1,69 @@
+/// @file inc/kmx/sat/io/file_source.hpp
+/// @brief File abstraction inspired by CaDiCaL/Kissat, with support for compressed files when enabled.
+/// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
+#pragma once
+#ifndef PCH
+    #include <cstddef>
+    #include <string_view>
+#endif
+
+namespace kmx::sat::io
+{
+    /// @brief File abstraction inspired by CaDiCaL/Kissat, with support for compressed files when enabled.
+    ///
+    /// `file_source` is the single abstraction `dimacs_parser` and `io::fixture::binary::reader` read through,
+    /// covering plain files, optionally compressed streams (gzip/xz-style, when built with that support enabled, in
+    /// the CaDiCaL/Kissat tradition of piping through an external decompressor or a compression library), and
+    /// in-memory buffers for tests and fuzzing. `open` establishes the source; `read`/`getc` provide buffered and
+    /// single-character access respectively (`getc` matching the DIMACS parser's character-at-a-time grammar);
+    /// `close` releases the underlying resource; `is_compressed` reports whether decompression is active, which the
+    /// parser can use to adjust progress reporting or buffering strategy.
+    class file_source final
+    {
+    public:
+        /// @brief Constructs a file source with no open resource.
+        /// @throws None (noexcept).
+        file_source() noexcept = default;
+
+        /// @brief Opens a file or stream at the given path, transparently detecting compression if enabled.
+        /// @param path Path or identifier of the source to open.
+        /// @return True if the source was opened successfully.
+        /// @throws None (noexcept).
+        bool open(const std::string_view path) noexcept
+        {
+            return false;
+        }
+
+        /// @brief Reads up to `buffer_size` bytes into `buffer`.
+        /// @param buffer Destination buffer to read into.
+        /// @param buffer_size Maximum number of bytes to read.
+        /// @return Number of bytes actually read, which may be less than `buffer_size` at end of stream.
+        /// @throws None (noexcept).
+        std::size_t read(char* buffer, const std::size_t buffer_size) noexcept
+        {
+            return {};
+        }
+
+        /// @brief Reads a single character from the source.
+        /// @return The character read, or a negative value at end of stream.
+        /// @throws None (noexcept).
+        int getc() noexcept
+        {
+            return -1;
+        }
+
+        /// @brief Closes the underlying resource.
+        /// @throws None (noexcept).
+        void close() noexcept
+        {
+        }
+
+        /// @brief Checks whether this source is being transparently decompressed.
+        /// @return True if decompression is active for this source.
+        /// @throws None (noexcept).
+        bool is_compressed() const noexcept
+        {
+            return false;
+        }
+    };
+}
