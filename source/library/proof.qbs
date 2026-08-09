@@ -8,19 +8,38 @@ StaticLibrary {
         name: "proof"
         prefix: "inc/kmx/sat/proof/"
         files: [
-            "checker/lrat.hpp",
-            "checker/online.hpp",
-            "clause/id_allocator.hpp",
-            "event_stream.hpp",
-            "tracer/drat.hpp",
-            "tracer/frat.hpp",
-            "tracer/idrup.hpp",
-            "tracer/lidrup.hpp",
-            "tracer/like.hpp",
-            "tracer/lrat.hpp",
-            "tracer/variant_t.hpp",
-            "tracer/veripb.hpp",
-            "tracer/view.hpp",
+            "event_stream.hpp"
+        ]
+    }
+    Group {
+        name: "proof-clause"
+        prefix: "inc/kmx/sat/proof/clause/"
+        files: [
+            "id.hpp",
+            "id_allocator.hpp"
+        ]
+    }
+    Group {
+        name: "proof-checker"
+        prefix: "inc/kmx/sat/proof/checker/"
+        files: [
+            "lrat.hpp",
+            "online.hpp"
+        ]
+    }
+    Group {
+        name: "proof-tracer"
+        prefix: "inc/kmx/sat/proof/tracer/"
+        files: [
+            "drat.hpp",
+            "frat.hpp",
+            "idrup.hpp",
+            "lidrup.hpp",
+            "like.hpp",
+            "lrat.hpp",
+            "variant_t.hpp",
+            "veripb.hpp",
+            "view.hpp",
         ]
     }
     cpp.cxxLanguageVersion: "c++26"

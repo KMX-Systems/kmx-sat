@@ -10,22 +10,9 @@ StaticLibrary {
         prefix: "inc/kmx/sat/cdcl/"
         files: [
             "assumption_reuse_advisor.hpp",
-            "bank/arena.hpp",
-            "bank/watch_list.hpp",
             "chb_tracker.hpp",
-            "clause/database.hpp",
-            "clause/header.hpp",
-            "clause/learner.hpp",
-            "clause/minimizer.hpp",
-            "clause/storage.hpp",
-            "clause/view.hpp",
             "compaction_service.hpp",
             "conflict_analyzer.hpp",
-            "controller/reduce.hpp",
-            "controller/rephase.hpp",
-            "controller/restart.hpp",
-            "engine/backtrack.hpp",
-            "engine/decision.hpp",
             "evsids_heap.hpp",
             "extension_record.hpp",
             "external_frontend.hpp",
@@ -38,18 +25,67 @@ StaticLibrary {
             "propagator.hpp",
             "search_coordinator.hpp",
             "solver_core.hpp",
-            "stack/decision_frame.hpp",
-            "stack/extension.hpp",
-            "store/assignment.hpp",
-            "store/assumption.hpp",
-            "store/clause_cold.hpp",
-            "store/constraint.hpp",
-            "store/phase.hpp",
             "trail.hpp",
             "variable_mapper.hpp",
             "vmtf_queue.hpp",
             "watch.hpp",
             "witness_checker.hpp",
+        ]
+    }
+    Group {
+        name: "cdcl-bank"
+        prefix: "inc/kmx/sat/cdcl/bank/"
+        files: [
+            "arena.hpp",
+            "watch_list.hpp",
+        ]
+    }
+    Group {
+        name: "cdcl-clause"
+        prefix: "inc/kmx/sat/cdcl/clause/"
+        files: [
+            "database.hpp",
+            "header.hpp",
+            "learner.hpp",
+            "minimizer.hpp",
+            "storage.hpp",
+            "view.hpp",
+        ]
+    }
+    Group {
+        name: "cdcl-controller"
+        prefix: "inc/kmx/sat/cdcl/controller/"
+        files: [
+            "reduce.hpp",
+            "rephase.hpp",
+            "restart.hpp",
+        ]
+    }
+    Group {
+        name: "cdcl-engine"
+        prefix: "inc/kmx/sat/cdcl/engine/"
+        files: [
+            "backtrack.hpp",
+            "decision.hpp",
+        ]
+    }
+    Group {
+        name: "cdcl-stack"
+        prefix: "inc/kmx/sat/cdcl/stack/"
+        files: [
+            "decision_frame.hpp",
+            "extension.hpp",
+        ]
+    }
+    Group {
+        name: "cdcl-store"
+        prefix: "inc/kmx/sat/cdcl/store/"
+        files: [
+            "assignment.hpp",
+            "assumption.hpp",
+            "clause_cold.hpp",
+            "constraint.hpp",
+            "phase.hpp",
         ]
     }
     Group {

@@ -13,14 +13,32 @@ StaticLibrary {
         files: [
             "dimacs_parser.hpp",
             "file_source.hpp",
-            "fixture/binary/reader.hpp",
-            "fixture/binary/writer.hpp",
-            "fixture/manifest.hpp",
-            "fixture/schema.hpp",
-            "fixture/validator.hpp",
             "proof_output_pipeline.hpp",
-            "writer/format.hpp",
-            "writer/kmx_aio_proof.hpp",
+        ]
+    }
+    Group {
+        name: "io-writer"
+        prefix: "inc/kmx/sat/io/writer/"
+        files: [
+            "format.hpp",
+            "kmx_aio_proof.hpp",
+        ]
+    }
+    Group {
+        name: "io-fixture"
+        prefix: "inc/kmx/sat/io/fixture/"
+        files: [
+            "manifest.hpp",
+            "schema.hpp",
+            "validator.hpp",
+        ]
+    }
+    Group {
+        name: "io-fixture-binary"
+        prefix: "inc/kmx/sat/io/fixture/binary/"
+        files: [
+            "reader.hpp",
+            "writer.hpp",
         ]
     }
     cpp.cxxLanguageVersion: "c++26"

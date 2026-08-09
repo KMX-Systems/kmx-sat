@@ -9,10 +9,16 @@ StaticLibrary {
         prefix: "inc/kmx/sat/runtime/"
         files: [
             "co_fsm_adapter.hpp",
-            "controller/portfolio.hpp",
-            "controller/signal.hpp",
             "parallel_preprocess_executor.hpp",
             "shared_clause_exchange.hpp",
+        ]
+    }
+    Group {
+        name: "runtime-controller"
+        prefix: "inc/kmx/sat/runtime/controller/"
+        files: [
+            "portfolio.hpp",
+            "signal.hpp",
         ]
     }
     cpp.cxxLanguageVersion: "c++26"
