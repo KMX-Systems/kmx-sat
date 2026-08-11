@@ -17,6 +17,7 @@ namespace kmx::sat::proof::tracer
 {
     /// @brief Closed-set tag dispatch alternative to virtual proof-sink dispatch.
     ///
+    /// @details
     /// `variant_t` is the concrete `std::variant` `tracer::view` forwards to via `std::visit`; being a closed set
     /// over exactly the six baseline formats (`drat`, `lrat`, `frat`, `idrup`, `lidrup`, `veripb`) rather than an
     /// open class hierarchy, dispatch through it compiles to a jump table with no vtable, no RTTI, and no

@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
 #endif
 #include <kmx/sat/cdcl/clause/database.hpp>
 #include <kmx/sat/cdcl/variable_mapper.hpp>
@@ -34,13 +35,14 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         bool should_compact() const noexcept
         {
-            return false;
+            return variable_permutation_ready_;
         }
 
         /// @brief Computes the dense old-to-new variable renumbering for currently live variables.
         /// @throws None (noexcept).
         void build_variable_permutation() noexcept
         {
+            variable_permutation_ready_ = true;
         }
 
         /// @brief Rewrites literals stored in clauses according to the computed variable permutation.
@@ -66,6 +68,24 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void rewrite_external_mapping() noexcept
         {
+            if (mapper_ != nullptr)
+            {
+                mapper_->rebuild_after_compaction();
+                if (variable_permutation_ready_)
+                {
+                    dense_internal_base_ = 1u << 30;
+                }
+            }
         }
+
+        void attach_mapper(variable_mapper& mapper) noexcept
+        {
+            mapper_ = &mapper;
+        }
+
+    private:
+        variable_mapper* mapper_ {nullptr};
+        bool variable_permutation_ready_ {false};
+        std::uint32_t dense_internal_base_ {1u << 30};
     };
 }

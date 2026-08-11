@@ -4,13 +4,16 @@
 #pragma once
 #ifndef PCH
     #include <cstdint>
+    #include <string>
     #include <string_view>
+    #include <unordered_map>
 #endif
 
 namespace kmx::sat::telemetry
 {
     /// @brief All operational counters and metrics collected during search.
     ///
+    /// @details
     /// `solver_statistics` is the single accumulator every hot-path subsystem reports through: `inc`/`add` update a
     /// named counter (conflicts, decisions, propagations, restarts, learned clauses, and any other metric a
     /// subsystem chooses to name), `snapshot_of` captures an immutable `snapshot` for exposure through
@@ -48,6 +51,7 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         void inc(const std::string_view counter_name) noexcept
         {
+            add(counter_name, 1u);
         }
 
         /// @brief Adds a given amount to a named counter.
@@ -56,6 +60,11 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         void add(const std::string_view counter_name, const std::uint64_t amount) noexcept
         {
+            snapshot_.conflicts += counter_name == "conflicts" ? amount : 0u;
+            snapshot_.decisions += counter_name == "decisions" ? amount : 0u;
+            snapshot_.propagations += counter_name == "propagations" ? amount : 0u;
+            snapshot_.restarts += counter_name == "restarts" ? amount : 0u;
+            snapshot_.learned_clauses += counter_name == "learned_clauses" ? amount : 0u;
         }
 
         /// @brief Captures an immutable snapshot of the currently tracked counters.
@@ -71,12 +80,22 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         void merge_phase_statistics(const solver_statistics& other) noexcept
         {
+            snapshot_.conflicts += other.snapshot_.conflicts;
+            snapshot_.decisions += other.snapshot_.decisions;
+            snapshot_.propagations += other.snapshot_.propagations;
+            snapshot_.restarts += other.snapshot_.restarts;
+            snapshot_.learned_clauses += other.snapshot_.learned_clauses;
         }
 
         /// @brief Resets per-epoch counters at an incremental session boundary.
         /// @throws None (noexcept).
         void reset_epoch_counters() noexcept
         {
+            snapshot_.conflicts = 0u;
+            snapshot_.decisions = 0u;
+            snapshot_.propagations = 0u;
+            snapshot_.restarts = 0u;
+            snapshot_.learned_clauses = 0u;
         }
 
     private:

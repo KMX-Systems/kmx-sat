@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstdint>
 #endif
 
 namespace kmx::sat::cdcl
@@ -28,18 +29,25 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void begin_solve_epoch() noexcept
         {
+            in_epoch_ = true;
+            retained_learned_clauses_ = 0u;
         }
 
         /// @brief Closes the current solve epoch, finalizing which state is retained versus discarded.
         /// @throws None (noexcept).
         void end_solve_epoch() noexcept
         {
+            in_epoch_ = false;
         }
 
         /// @brief Marks a learned clause from the just-finished episode as eligible to persist into the next epoch.
         /// @throws None (noexcept).
         void retain_learned_clause() noexcept
         {
+            if (in_epoch_)
+            {
+                retained_learned_clauses_ += 1u;
+            }
         }
 
         /// @brief Discards all state scoped strictly to the episode that just ended (assumptions, temporary
@@ -47,12 +55,29 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void reset_transient_state() noexcept
         {
+            retained_learned_clauses_ = 0u;
         }
 
         /// @brief Carries forward only the subset of options explicitly designated as persistent across episodes.
         /// @throws None (noexcept).
         void persist_option_subset() noexcept
         {
+            persisted_option_subset_ = true;
         }
+
+        bool in_epoch() const noexcept
+        {
+            return in_epoch_;
+        }
+
+        std::uint32_t retained_learned_clauses() const noexcept
+        {
+            return retained_learned_clauses_;
+        }
+
+    private:
+        bool in_epoch_ {false};
+        bool persisted_option_subset_ {false};
+        std::uint32_t retained_learned_clauses_ {0u};
     };
 }

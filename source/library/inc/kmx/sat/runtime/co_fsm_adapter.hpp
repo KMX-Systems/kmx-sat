@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstdint>
 #endif
 
 namespace kmx::sat::runtime
@@ -21,5 +22,28 @@ namespace kmx::sat::runtime
         /// @brief Constructs an empty placeholder instance.
         /// @throws None (noexcept).
         co_fsm_adapter() noexcept = default;
+
+        /// @brief Activates the placeholder adapter.
+        /// @throws None (noexcept).
+        void activate() noexcept
+        {
+            active_ = true;
+        }
+
+        /// @brief Deactivates the placeholder adapter.
+        /// @throws None (noexcept).
+        void deactivate() noexcept
+        {
+            active_ = false;
+        }
+
+        /// @brief Returns whether the placeholder adapter is active.
+        [[nodiscard]] bool active() const noexcept
+        {
+            return active_;
+        }
+
+    private:
+        bool active_ {false};
     };
 }

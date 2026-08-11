@@ -3,7 +3,9 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
     #include <span>
+    #include <vector>
 #endif
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
 #include <kmx/sat/literal.hpp>
@@ -12,6 +14,7 @@ namespace kmx::sat::cdcl::clause
 {
     /// @brief Single entry point for all clauses derived from conflict analysis.
     ///
+    /// @details
     /// `clause::learner` is the funnel every clause produced by `conflict_analyzer`/`clause::minimizer` passes
     /// through before it becomes part of `clause::database`: `learn_clause` handles the general case, while
     /// `register_unit`/`register_binary`/`register_large` provide specialized fast paths matching CaDiCaL/Kissat's
@@ -32,7 +35,24 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         ref_t learn_clause(const std::span<const literal> literals) noexcept
         {
-            return {};
+            if (literals.empty())
+            {
+                return {};
+            }
+
+            if (literals.size() == 1)
+            {
+                register_unit(literals.front());
+                return last_learned_ref_;
+            }
+
+            if (literals.size() == 2)
+            {
+                register_binary(literals[0], literals[1]);
+                return last_learned_ref_;
+            }
+
+            return register_large(literals);
         }
 
         /// @brief Registers a learned unit clause using the specialized unit fast path.
@@ -40,6 +60,8 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         void register_unit(const literal lit) noexcept
         {
+            const literal unit_clause[] {lit};
+            last_learned_ref_ = append_clause(std::span<const literal> {unit_clause});
         }
 
         /// @brief Registers a learned binary clause using the specialized binary fast path.
@@ -48,6 +70,8 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         void register_binary(const literal first, const literal second) noexcept
         {
+            const literal binary_clause[] {first, second};
+            last_learned_ref_ = append_clause(std::span<const literal> {binary_clause});
         }
 
         /// @brief Registers a learned clause with three or more literals.
@@ -56,7 +80,8 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         ref_t register_large(const std::span<const literal> literals) noexcept
         {
-            return {};
+            last_learned_ref_ = append_clause(literals);
+            return last_learned_ref_;
         }
 
         /// @brief Assigns the derived clause's asserting literal at the post-backjump decision level.
@@ -64,6 +89,75 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         void assign_asserting_literal(const literal lit) noexcept
         {
+            last_asserting_literal_ = lit;
         }
+
+        /// @brief Returns the number of clauses recorded by this learner.
+        /// @return Number of learned clauses.
+        /// @throws None (noexcept).
+        std::size_t learned_clause_count() const noexcept
+        {
+            return learned_clauses_.size();
+        }
+
+        /// @brief Returns the most recently recorded learned clause.
+        /// @return Read-only span over the latest learned clause, or empty if none exists.
+        /// @throws None (noexcept).
+        std::span<const literal> last_learned_clause() const noexcept
+        {
+            if (learned_clauses_.empty())
+            {
+                return {};
+            }
+            return learned_clauses_.back();
+        }
+
+        /// @brief Returns the most recently assigned asserting literal.
+        /// @return Last asserting literal assigned via `assign_asserting_literal`.
+        /// @throws None (noexcept).
+        literal last_asserting_literal() const noexcept
+        {
+            return last_asserting_literal_;
+        }
+
+        /// @brief Returns whether this learner has recorded at least one learned clause.
+        /// @return True if `learn_clause` or a specialized registration path has created a clause.
+        [[nodiscard]] bool has_pending_clause() const noexcept
+        {
+            return !learned_clauses_.empty();
+        }
+
+        /// @brief Returns how many learned clauses of the requested size were registered.
+        /// @param size Clause size to count.
+        /// @return Number of learned clauses with the given size.
+        std::size_t clause_count_for_size(const std::size_t size) const noexcept
+        {
+            std::size_t count {0};
+            for (const auto& clause : learned_clauses_)
+            {
+                if (clause.size() == size)
+                {
+                    ++count;
+                }
+            }
+            return count;
+        }
+
+    private:
+        ref_t append_clause(const std::span<const literal> literals) noexcept
+        {
+            if (literals.empty())
+            {
+                return {};
+            }
+
+            learned_clauses_.emplace_back(literals.begin(), literals.end());
+            return ref_t {next_clause_offset_++};
+        }
+
+        std::vector<std::vector<literal>> learned_clauses_ {};
+        ref_t last_learned_ref_ {};
+        literal last_asserting_literal_ {};
+        ref_t::offset_t next_clause_offset_ {1};
     };
 }

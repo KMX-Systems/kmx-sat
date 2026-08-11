@@ -10,6 +10,7 @@ namespace kmx::sat::telemetry
 {
     /// @brief Moving averages for restart, reduce, and focused/stable modes.
     ///
+    /// @details
     /// `ema_tracker` maintains the fast/slow exponential-moving-average pairs that drive Glucose/Kissat-style
     /// adaptive search-mode switching: `update_glue_fast`/`update_glue_slow` track short- and long-window averages of
     /// learned-clause glue, `update_decision_rate` and `update_trail` track how quickly decisions accumulate and how
@@ -29,6 +30,7 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         void update_glue_fast(const double value) noexcept
         {
+            glue_fast_ = (glue_fast_ * 0.75) + (value * 0.25);
         }
 
         /// @brief Updates the slow (long-window) glue moving average with a new sample.
@@ -36,6 +38,7 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         void update_glue_slow(const double value) noexcept
         {
+            glue_slow_ = (glue_slow_ * 0.9) + (value * 0.1);
         }
 
         /// @brief Updates the decision-rate moving average with a new sample.
@@ -43,6 +46,7 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         void update_decision_rate(const double value) noexcept
         {
+            decision_rate_ = (decision_rate_ * 0.8) + (value * 0.2);
         }
 
         /// @brief Updates the trail-fullness moving average with a new sample.
@@ -50,6 +54,7 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         void update_trail(const double value) noexcept
         {
+            trail_ = (trail_ * 0.8) + (value * 0.2);
         }
 
         /// @brief Returns the current gap between the fast and slow glue moving averages.
@@ -57,10 +62,14 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         double fast_vs_slow_margin() const noexcept
         {
-            return {};
+            return glue_fast_ - glue_slow_;
         }
 
     private:
         solver_statistics solver_statistics_ {};
+        double glue_fast_ {0.0};
+        double glue_slow_ {0.0};
+        double decision_rate_ {0.0};
+        double trail_ {0.0};
     };
 }

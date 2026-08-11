@@ -3,8 +3,16 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
+    #include <cstdint>
+    #include <vector>
 #endif
+#include <kmx/sat/cdcl/failed_core_extractor.hpp>
+#include <kmx/sat/cdcl/model_reconstructor.hpp>
+#include <kmx/sat/cdcl/variable_mapper.hpp>
 #include <kmx/sat/literal.hpp>
+#include <kmx/sat/model_view.hpp>
+#include <kmx/sat/solve_request.hpp>
 #include <kmx/sat/variable.hpp>
 
 namespace kmx::sat::cdcl
@@ -30,12 +38,21 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         external_frontend() noexcept = default;
 
+        explicit external_frontend(variable_mapper& mapper) noexcept : mapper_ {&mapper}
+        {
+        }
+
         /// @brief Translates one caller-supplied (external) literal into its internal representation.
         /// @param lit External literal as supplied through the public `solver` surface.
         /// @return Internal literal usable by `solver_core` and its collaborators.
         /// @throws None (noexcept).
         literal import_external_literal(const literal lit) noexcept
         {
+            if (mapper_ != nullptr)
+            {
+                const variable internal = mapper_->ensure_external_variable(lit.variable_of());
+                return literal {internal, lit.is_negated()};
+            }
             return lit;
         }
 
@@ -45,6 +62,10 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         literal export_internal_literal(const literal lit) noexcept
         {
+            if (mapper_ != nullptr)
+            {
+                return mapper_->to_external_literal(lit);
+            }
             return lit;
         }
 
@@ -54,6 +75,10 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void freeze_variable(const variable var) noexcept
         {
+            if (mapper_ != nullptr)
+            {
+                mapper_->mark_inactive(var);
+            }
         }
 
         /// @brief Releases a previously frozen variable, allowing simplification passes to eliminate it again.
@@ -61,6 +86,10 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void melt_variable(const variable var) noexcept
         {
+            if (mapper_ != nullptr)
+            {
+                mapper_->mark_active(var);
+            }
         }
 
         /// @brief Stages one assumption literal for the next solve episode, kept separate from the clause database.
@@ -68,12 +97,22 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void push_assumption(const literal lit) noexcept
         {
+            assumptions_.push_back(import_external_literal(lit));
         }
 
         /// @brief Clears all staged assumptions, for example between unrelated incremental solve calls.
         /// @throws None (noexcept).
         void clear_assumptions() noexcept
         {
+            assumptions_.clear();
+        }
+
+        /// @brief Returns whether any assumptions are currently staged for the next episode.
+        /// @return True when at least one assumption literal is pending.
+        /// @throws None (noexcept).
+        bool has_pending_assumptions() const noexcept
+        {
+            return !assumptions_.empty();
         }
 
         /// @brief Assembles the validated `solve_request` payload for the upcoming episode from the currently staged
@@ -81,6 +120,21 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void prepare_solve_request() noexcept
         {
+            prepare_request_ = solve_request {};
+            prepare_request_.assumptions = assumptions_;
+            prepare_request_.decision_limit = 0u;
+            prepare_request_.conflict_limit = 0u;
+            prepare_request_.enabled_pass_mask = 0u;
+            prepare_request_.strict_mode = false;
+        }
+
+        /// @brief Applies a fully formed solve-request payload to the frontend's prepared request state.
+        /// @param request Request payload to expose for the next solve episode.
+        /// @throws None (noexcept).
+        void apply_prepared_request(const solve_request& request) noexcept
+        {
+            prepare_request_ = request;
+            prepare_request_.assumptions = assumptions_;
         }
 
         /// @brief Retrieves the failed-assumptions core after an unsatisfiable episode, delegating to
@@ -88,6 +142,7 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void capture_failed_core() noexcept
         {
+            failed_core_ = failed_core_extractor_.build_failed_core();
         }
 
         /// @brief Builds the externally visible model after a satisfiable episode, delegating to
@@ -95,6 +150,8 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void build_model_view() noexcept
         {
+            model_reconstructor_.drop_internal_only_variables();
+            model_view_ = model_reconstructor_.reconstruct_full_model();
         }
 
         /// @brief Applies a variable permutation produced by `compaction_service` to the external mapping so external
@@ -102,6 +159,39 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void apply_compaction_mapping() noexcept
         {
+            if (mapper_ != nullptr)
+            {
+                mapper_->rebuild_after_compaction();
+            }
         }
+
+        std::vector<literal> assumptions() const noexcept
+        {
+            return assumptions_;
+        }
+
+        solve_request const& prepared_request() const noexcept
+        {
+            return prepare_request_;
+        }
+
+        failed_core_view failed_core() const noexcept
+        {
+            return failed_core_;
+        }
+
+        model_view current_model_view() const noexcept
+        {
+            return model_view_;
+        }
+
+    private:
+        variable_mapper* mapper_ {nullptr};
+        std::vector<literal> assumptions_ {};
+        solve_request prepare_request_ {};
+        failed_core_view failed_core_ {};
+        model_view model_view_ {};
+        failed_core_extractor failed_core_extractor_ {};
+        model_reconstructor model_reconstructor_ {};
     };
 }

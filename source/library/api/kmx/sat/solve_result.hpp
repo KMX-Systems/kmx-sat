@@ -12,6 +12,7 @@ namespace kmx::sat
 {
     /// @brief Unified output object for SAT, UNSAT, and terminated/unknown states.
     ///
+    /// @details
     /// `solve_result` is the single return type of `solver::solve`, covering every terminal outcome of one episode so
     /// callers never need to branch on separate SAT/UNSAT return types: a satisfiable outcome exposes `model()`, an
     /// unsatisfiable outcome under assumptions exposes `failed_core()`, and every outcome carries a statistics
@@ -53,6 +54,27 @@ namespace kmx::sat
         /// @brief Constructs a default solve result with unknown status.
         /// @throws None (noexcept).
         solve_result() noexcept = default;
+
+        /// @brief Constructs a fully populated solve result.
+        /// @param status_value Terminal status of the episode.
+        /// @param model_value Model view associated with satisfiable outcomes.
+        /// @param failed_core_value Failed-core view associated with unsatisfiable outcomes under assumptions.
+        /// @param statistics_value Statistics snapshot captured for this episode.
+        /// @param proof_value Proof-activity summary for this episode.
+        /// @throws None (noexcept).
+        solve_result(
+            const status status_value,
+            const model_view model_value,
+            const failed_core_view failed_core_value,
+            const telemetry::solver_statistics::snapshot statistics_value,
+            const proof_summary proof_value) noexcept :
+            status_ {status_value},
+            model_ {model_value},
+            failed_core_ {failed_core_value},
+            statistics_snapshot_ {statistics_value},
+            proof_summary_ {proof_value}
+        {
+        }
 
         /// @brief Returns the terminal status produced by the last solve episode.
         /// @return Current solve status value.

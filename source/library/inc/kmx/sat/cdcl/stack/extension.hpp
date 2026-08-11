@@ -3,6 +3,8 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
+    #include <vector>
 #endif
 #include <kmx/sat/cdcl/extension_record.hpp>
 
@@ -10,6 +12,7 @@ namespace kmx::sat::cdcl::stack
 {
     /// @brief Journal of transformations that must be replayed during model reconstruction.
     ///
+    /// @details
     /// `stack::extension` is the ordered log of `extension_record` entries pushed by
     /// `bounded_variable_eliminator`/`blocked_clause_eliminator`/`covered_clause_eliminator`/`factorizer` as they
     /// simplify the formula; `push_bve_record`/`push_bce_record`/`push_factor_record` append one entry per
@@ -32,6 +35,7 @@ namespace kmx::sat::cdcl::stack
         /// @throws None (noexcept).
         void push_bve_record(const extension_record& record) noexcept
         {
+            records_.push_back(record);
         }
 
         /// @brief Appends a blocked/covered-clause-elimination reversal record.
@@ -39,6 +43,7 @@ namespace kmx::sat::cdcl::stack
         /// @throws None (noexcept).
         void push_bce_record(const extension_record& record) noexcept
         {
+            records_.push_back(record);
         }
 
         /// @brief Appends a factoring/BVA transformation reversal record.
@@ -46,6 +51,7 @@ namespace kmx::sat::cdcl::stack
         /// @throws None (noexcept).
         void push_factor_record(const extension_record& record) noexcept
         {
+            records_.push_back(record);
         }
 
         /// @brief Visits every record in last-in-first-out order for model reconstruction replay.
@@ -54,16 +60,30 @@ namespace kmx::sat::cdcl::stack
         {
         }
 
+        std::size_t size() const noexcept
+        {
+            return records_.size();
+        }
+
+        const std::vector<extension_record>& records() const noexcept
+        {
+            return records_;
+        }
+
         /// @brief Discards records scoped only to the just-finished incremental epoch.
         /// @throws None (noexcept).
         void clear_epoch_local() noexcept
         {
+            records_.clear();
         }
 
         /// @brief Discards every record in the journal, for example on a full session reset.
         /// @throws None (noexcept).
         void clear_all() noexcept
         {
+            records_.clear();
         }
+    private:
+        std::vector<extension_record> records_ {};
     };
 }

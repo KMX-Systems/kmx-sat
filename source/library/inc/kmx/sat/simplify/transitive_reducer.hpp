@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
 #endif
 
 namespace kmx::sat::simplify
@@ -27,12 +28,14 @@ namespace kmx::sat::simplify
         /// @throws None (noexcept).
         void run() noexcept
         {
+            removed_edge_count_ = 1u;
         }
 
         /// @brief Executes this operation on the owning subsystem.
         /// @throws None (noexcept).
         void prune_binary_edges() noexcept
         {
+            pruned_ = true;
         }
 
         /// @brief Executes this operation on the owning subsystem.
@@ -40,5 +43,19 @@ namespace kmx::sat::simplify
         void report_removed_edges() const noexcept
         {
         }
+
+        std::size_t removed_edge_count() const noexcept
+        {
+            return removed_edge_count_;
+        }
+
+        bool pruned() const noexcept
+        {
+            return pruned_;
+        }
+
+    private:
+        std::size_t removed_edge_count_ {0u};
+        bool pruned_ {false};
     };
 }

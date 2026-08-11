@@ -15,6 +15,7 @@ namespace kmx::sat
     /// ("add only while configuring/adding", "solve only once per episode", "no mutation after an unrecoverable
     /// error") as a single small state machine instead of scattered flags.
     ///
+    /// @details
     /// `error` is a terminal state reached only through an explicit `to(state::error)` call from a caller that has
     /// detected a `state_error`, `domain_error`, or `consistency_error`; per the library's error-recovery semantics,
     /// once in `error` every mutating operation must be rejected by the caller except a full `reset_session`, which is
@@ -82,12 +83,62 @@ namespace kmx::sat
             return state_ == state::solving;
         }
 
+        /// @brief Checks whether the machine is in a terminal error state.
+        /// @return True if the current state is error.
+        /// @throws None (noexcept).
+        bool expect_error() const noexcept
+        {
+            return state_ == state::error;
+        }
+
         /// @brief Transitions the machine to the requested state.
         /// @param state Target state to set.
         /// @throws None (noexcept).
         void to(const state state) noexcept
         {
             state_ = state;
+        }
+
+        /// @brief Transitions the machine into the adding phase for clause/assumption input.
+        /// @throws None (noexcept).
+        void transition_to_adding() noexcept
+        {
+            state_ = state::adding;
+        }
+
+        /// @brief Transitions the machine into the solving phase for a fresh search episode.
+        /// @throws None (noexcept).
+        void transition_to_solving() noexcept
+        {
+            state_ = state::solving;
+        }
+
+        /// @brief Transitions the machine into the satisfiable terminal state.
+        /// @throws None (noexcept).
+        void transition_to_sat() noexcept
+        {
+            state_ = state::sat;
+        }
+
+        /// @brief Transitions the machine into the unsatisfiable terminal state.
+        /// @throws None (noexcept).
+        void transition_to_unsat() noexcept
+        {
+            state_ = state::unsat;
+        }
+
+        /// @brief Transitions the machine into the steady/unknown terminal state.
+        /// @throws None (noexcept).
+        void transition_to_steady() noexcept
+        {
+            state_ = state::steady;
+        }
+
+        /// @brief Transitions the machine into the terminal error state.
+        /// @throws None (noexcept).
+        void transition_to_error() noexcept
+        {
+            state_ = state::error;
         }
 
     private:

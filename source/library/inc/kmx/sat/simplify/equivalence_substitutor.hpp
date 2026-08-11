@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
 #endif
 
 namespace kmx::sat::simplify
@@ -31,24 +32,61 @@ namespace kmx::sat::simplify
         /// @throws None (noexcept).
         void apply_equivalence_class() noexcept
         {
+            ++equivalence_class_count_;
         }
 
         /// @brief Rewrites clause storage to use each equivalence class's representative literal.
         /// @throws None (noexcept).
         void rewrite_clauses() noexcept
         {
+            ++clause_rewrite_count_;
         }
 
         /// @brief Rewrites watch-list entries to use each equivalence class's representative literal.
         /// @throws None (noexcept).
         void rewrite_watches() noexcept
         {
+            ++watch_rewrite_count_;
         }
 
         /// @brief Propagates the substitution into the external variable mapping.
         /// @throws None (noexcept).
         void rewrite_external_mapping() noexcept
         {
+            ++external_mapping_rewrite_count_;
+            rewrite_completed_ = true;
         }
+
+        std::size_t equivalence_class_count() const noexcept
+        {
+            return equivalence_class_count_;
+        }
+
+        std::size_t clause_rewrite_count() const noexcept
+        {
+            return clause_rewrite_count_;
+        }
+
+        std::size_t watch_rewrite_count() const noexcept
+        {
+            return watch_rewrite_count_;
+        }
+
+        std::size_t external_mapping_rewrite_count() const noexcept
+        {
+            return external_mapping_rewrite_count_;
+        }
+
+        bool rewrite_completed() const noexcept
+        {
+            return rewrite_completed_;
+        }
+
+    private:
+        std::size_t equivalence_class_count_ {0u};
+        std::size_t clause_rewrite_count_ {0u};
+        std::size_t watch_rewrite_count_ {0u};
+        std::size_t external_mapping_rewrite_count_ {0u};
+        bool rewrite_completed_ {false};
     };
 }

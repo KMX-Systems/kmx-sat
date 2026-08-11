@@ -11,6 +11,7 @@ namespace kmx::sat
 {
     /// @brief Read-only view over the failed-assumptions core produced by an unsatisfiable incremental solve.
     ///
+    /// @details
     /// `failed_core_view` is a non-owning span wrapper returned by `solve_result::failed_core()`; it exposes the
     /// minimal subset of the active `solve_request::assumptions` that `failed_core_extractor::build_failed_core`
     /// determined to be jointly responsible for the unsatisfiable outcome, following analysis by `conflict_analyzer`

@@ -12,68 +12,60 @@
 namespace kmx::sat::cdcl::store
 {
     /// @brief Stores assumptions separately from the decision trail.
-    ///
-    /// Assumption literals pushed by `external_frontend::push_assumption` are staged here rather than merged into the
-    /// permanent clause database (`store::constraint`), so that clearing or replacing assumptions between episodes
-    /// never touches original or learned clauses. `trail_level_base` reports the decision-level offset at which
-    /// assumption-forced decisions begin on the CDCL `trail`, letting `backtrack_engine` distinguish assumption
-    /// decisions from ordinary search decisions. `capture_failed_assumptions` exposes the subset relevant to
-    /// `failed_core_extractor` after an assumptions-level conflict.
+    /// @details
+    /// `assumption` maintains per-episode assumptions independent of the permanent clause database.
+    /// It also tracks a failed-assumption subset after UNSAT under assumptions so the facade can expose a failed
+    /// core without mutating base problem clauses.
     class assumption final
     {
     public:
-        /// @brief Constructs an empty assumption store.
-        /// @throws None (noexcept).
         assumption() noexcept = default;
 
-        /// @brief Appends one assumption literal to the staged list for the next episode.
-        /// @param lit Assumption literal to stage.
-        /// @throws None (noexcept).
         void push(const literal lit) noexcept
         {
+            literals_.push_back(lit);
         }
 
-        /// @brief Clears all currently staged assumption literals.
-        /// @throws None (noexcept).
         void clear() noexcept
         {
+            literals_.clear();
+            failed_assumptions_.clear();
+            trail_level_base_ = 0;
         }
 
-        /// @brief Exposes the currently staged assumptions in push order.
-        /// @return Read-only span over the staged assumption literals.
-        /// @throws None (noexcept).
         std::span<const literal> iterate() const noexcept
         {
             return literals_;
         }
 
-        /// @brief Returns the number of currently staged assumptions.
-        /// @return Count of staged assumption literals.
-        /// @throws None (noexcept).
         std::size_t size() const noexcept
         {
             return literals_.size();
         }
 
-        /// @brief Returns the trail position at which assumption-forced decisions begin, letting the backtrack engine
-        /// distinguish assumption decisions from ordinary search decisions.
-        /// @return Base trail level reserved for assumptions.
-        /// @throws None (noexcept).
         std::uint32_t trail_level_base() const noexcept
         {
-            return {};
+            return trail_level_base_;
         }
 
-        /// @brief Returns the subset of staged assumptions determined to be part of the failed core after an
-        /// unsatisfiable episode.
-        /// @return Read-only span over the failed assumption literals.
-        /// @throws None (noexcept).
+        void set_trail_level_base(const std::uint32_t base) noexcept
+        {
+            trail_level_base_ = base;
+        }
+
         std::span<const literal> capture_failed_assumptions() const noexcept
         {
-            return literals_;
+            return failed_assumptions_;
+        }
+
+        void record_failed_assumptions(std::span<const literal> failures) noexcept
+        {
+            failed_assumptions_.assign(failures.begin(), failures.end());
         }
 
     private:
         std::vector<literal> literals_ {};
+        std::vector<literal> failed_assumptions_ {};
+        std::uint32_t trail_level_base_ {0};
     };
 }

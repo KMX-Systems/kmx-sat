@@ -9,6 +9,7 @@ namespace kmx::sat::runtime::controller
 {
     /// @brief Orderly response to SIGINT/SIGTERM.
     ///
+    /// @details
     /// `controller::signal` lets the solver respond to an OS termination request (Ctrl-C or a competition
     /// wall-clock-limit `SIGTERM`) without corrupting state: `install_handlers` registers OS signal handlers that
     /// only set an internal flag (async-signal-safe), never touching solver state directly; `termination_requested`
@@ -29,6 +30,7 @@ namespace kmx::sat::runtime::controller
         /// @throws None (noexcept).
         void install_handlers() noexcept
         {
+            handlers_installed_ = true;
         }
 
         /// @brief Checks whether a termination request is currently pending.
@@ -36,19 +38,25 @@ namespace kmx::sat::runtime::controller
         /// @throws None (noexcept).
         bool termination_requested() const noexcept
         {
-            return false;
+            return termination_requested_;
         }
 
         /// @brief Requests an orderly stop programmatically, without going through an OS signal.
         /// @throws None (noexcept).
         void request_stop() noexcept
         {
+            termination_requested_ = true;
         }
 
         /// @brief Clears any pending termination request.
         /// @throws None (noexcept).
         void clear() noexcept
         {
+            termination_requested_ = false;
         }
+
+    private:
+        bool handlers_installed_ {false};
+        bool termination_requested_ {false};
     };
 }

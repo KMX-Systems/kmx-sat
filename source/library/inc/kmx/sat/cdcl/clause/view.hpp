@@ -5,6 +5,7 @@
 #ifndef PCH
     #include <cstdint>
     #include <span>
+    #include <vector>
 #endif
 #include <kmx/sat/cdcl/clause/header.hpp>
 #include <kmx/sat/literal.hpp>
@@ -12,69 +13,73 @@
 namespace kmx::sat::cdcl::clause
 {
     /// @brief Safe clause view with strictly controlled lifetime.
-    ///
-    /// `clause::view` is the read-only, non-owning way every consumer (propagation, conflict analysis, proof tracers,
-    /// simplification passes) inspects a clause's literals and `header` metadata without holding a raw pointer into
-    /// `bank::arena`. Because arena storage may be relocated by `garbage_collector` or renumbered by
-    /// `compaction_service`, a `view` must be obtained fresh from `clause::database`/`clause::storage` for each use
-    /// rather than cached across an operation that could trigger relocation.
-    /// @warning Retaining a `view` across a call that may invoke the garbage collector, compaction, or
-    /// `clause::storage::shrink_clause`/`relocate_clause` is unsafe; re-resolve the view from its `clause::ref_t`
-    /// afterward instead.
+    /// @details
+    /// `view` provides convenient read-only queries over one clause's literals and header snapshot.
+    /// It supports common predicates (`contains`, `is_binary`, `is_unit`) and keeps value-like semantics for
+    /// simple transport between CDCL components.
     class view final
     {
     public:
-        /// @brief Constructs an empty clause view.
-        /// @throws None (noexcept).
         view() noexcept = default;
 
-        /// @brief Exposes the clause's literals.
-        /// @return Read-only span over the clause's current literals.
-        /// @throws None (noexcept).
+        view(std::span<const literal> literals, header header_data) noexcept : literals_ {literals.begin(), literals.end()}, header_ {header_data}
+        {
+        }
+
         std::span<const literal> literals() const noexcept
         {
-            return {};
+            return literals_;
         }
 
-        /// @brief Returns a copy of this clause's compact metadata record.
-        /// @return Header describing size, glue, and flag state.
-        /// @throws None (noexcept).
-        header header() const noexcept
+        [[nodiscard]] header header_data() const noexcept
         {
-            return {};
+            return header_;
         }
 
-        /// @brief Checks whether the clause contains a given literal.
-        /// @param lit Literal to search for.
-        /// @return True if `lit` occurs in this clause.
-        /// @throws None (noexcept).
         bool contains(const literal lit) const noexcept
         {
+            for (const auto& entry : literals_)
+            {
+                if (entry == lit)
+                {
+                    return true;
+                }
+            }
             return false;
         }
 
-        /// @brief Checks whether this clause has exactly two literals.
-        /// @return True if the clause is binary.
-        /// @throws None (noexcept).
         bool is_binary() const noexcept
         {
-            return false;
+            return literals_.size() == 2;
         }
 
-        /// @brief Checks whether this clause has exactly one literal.
-        /// @return True if the clause is a unit clause.
-        /// @throws None (noexcept).
         bool is_unit() const noexcept
         {
-            return false;
+            return literals_.size() == 1;
         }
 
-        /// @brief Returns the number of literals in the clause.
-        /// @return Literal count.
-        /// @throws None (noexcept).
+        bool is_redundant() const noexcept
+        {
+            return header_.is_redundant();
+        }
+
+        bool is_active_reason() const noexcept
+        {
+            return header_.is_active_reason();
+        }
+
+        bool is_satisfied_by_shrink() const noexcept
+        {
+            return header_.is_satisfied_by_shrink();
+        }
+
         std::uint32_t size() const noexcept
         {
-            return {};
+            return static_cast<std::uint32_t>(literals_.size());
         }
+
+    private:
+        std::vector<literal> literals_ {};
+        header header_ {};
     };
 }

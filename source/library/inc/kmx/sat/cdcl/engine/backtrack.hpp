@@ -4,12 +4,17 @@
 #pragma once
 #ifndef PCH
     #include <cstdint>
+    #include <vector>
 #endif
+#include <kmx/sat/cdcl/stack/decision_frame.hpp>
+#include <kmx/sat/cdcl/store/assignment.hpp>
+#include <kmx/sat/cdcl/trail.hpp>
 
 namespace kmx::sat::cdcl::engine
 {
     /// @brief Correct state unwind after conflict or restart.
     ///
+    /// @details
     /// `engine::backtrack` is the only subsystem allowed to unwind `trail`/`stack::decision_frame`/`store::assignment`
     /// state together, ensuring the three stay consistent. `backtrack_to_level` performs a standard non-chronological
     /// backjump to the level computed by `conflict_analyzer::compute_backjump_level`, truncating the trail via
@@ -27,29 +32,104 @@ namespace kmx::sat::cdcl::engine
         /// @throws None (noexcept).
         backtrack() noexcept = default;
 
+        /// @brief Binds this engine to the mutable CDCL state it should rewind.
+        /// @param trail_state Mutable trail that will be truncated.
+        /// @param assignment Mutable assignment store that will have assignments above the target level removed.
+        /// @param decision_frames Mutable decision-frame stack that will be truncated.
+        /// @throws None (noexcept).
+        void attach_state(trail& trail_state, store::assignment& assignment, stack::decision_frame& decision_frames) noexcept
+        {
+            trail_state_ = &trail_state;
+            assignment_ = &assignment;
+            decision_frames_ = &decision_frames;
+        }
+
         /// @brief Performs a non-chronological backjump to the given decision level.
         /// @param level Target decision level to unwind to.
         /// @throws None (noexcept).
         void backtrack_to_level(const std::uint32_t level) noexcept
         {
+            if (trail_state_ == nullptr || assignment_ == nullptr || decision_frames_ == nullptr)
+            {
+                return;
+            }
+
+            const auto current_level = decision_frames_->current_level();
+            const auto target_level = level < current_level ? level : current_level;
+            const auto trail_head = trail_state_->current_head();
+            const auto trail_base = decision_frames_->trail_base_of_level(target_level + 1u);
+            const auto preserved_head = trail_base < trail_head ? trail_base : trail_head;
+            trail_state_->pop_to(preserved_head < trail_head ? preserved_head : trail_head);
+
+            if (target_level == 0u)
+            {
+                decision_frames_->pop_to_level(0u);
+            }
+            else
+            {
+                decision_frames_->pop_to_level(target_level);
+            }
+
+            assignment_->unassign_above_level(target_level);
+            if (target_level == 0u)
+            {
+                assignment_->set_current_level(0u);
+            }
+            else
+            {
+                assignment_->set_current_level(target_level);
+            }
+            assignment_->set_current_trail_position(trail_state_->current_head());
+            last_backtracked_level_ = target_level;
         }
 
         /// @brief Performs a chronological backtrack of exactly one decision level.
         /// @throws None (noexcept).
         void chronological_backtrack() noexcept
         {
+            if (trail_state_ == nullptr || assignment_ == nullptr || decision_frames_ == nullptr)
+            {
+                return;
+            }
+            const auto current_level = decision_frames_->current_level();
+            if (current_level == 0u)
+            {
+                return;
+            }
+            backtrack_to_level(current_level - 1u);
         }
 
         /// @brief Reuses trail/frame metadata for a suffix of the trail that remains valid across the jump.
         /// @throws None (noexcept).
         void reuse_trail() noexcept
         {
+            if (decision_frames_ != nullptr)
+            {
+                decision_frames_->reuse_trail_metadata();
+            }
         }
 
         /// @brief Clears transient analysis marks left over from the conflict that triggered this backtrack.
         /// @throws None (noexcept).
         void clear_transient_marks() noexcept
         {
+            if (assignment_ != nullptr)
+            {
+                assignment_->clear_analysis_marks();
+            }
         }
+
+        /// @brief Returns the most recent decision level requested by this backtrack engine.
+        /// @return Last target level passed to `backtrack_to_level`.
+        std::uint32_t last_backtracked_level() const noexcept
+        {
+            return last_backtracked_level_;
+        }
+
+    private:
+        trail* trail_state_ {nullptr};
+        store::assignment* assignment_ {nullptr};
+        stack::decision_frame* decision_frames_ {nullptr};
+        std::uint32_t last_backtracked_level_ {0};
     };
 }

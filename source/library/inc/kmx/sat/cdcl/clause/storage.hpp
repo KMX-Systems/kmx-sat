@@ -3,17 +3,23 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstdint>
     #include <span>
+    #include <unordered_map>
+    #include <unordered_set>
+    #include <vector>
 #endif
 #include <kmx/sat/cdcl/bank/arena.hpp>
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
 #include <kmx/sat/literal.hpp>
 #include <kmx/sat/proof/clause/id.hpp>
+#include <kmx/sat/proof/clause/id_allocator.hpp>
 
 namespace kmx::sat::cdcl::clause
 {
     /// @brief The real owner of physical clauses and of their relation to proof ids.
     ///
+    /// @details
     /// `clause::storage` sits directly on top of `bank::arena` and is the only subsystem allowed to create, destroy,
     /// relocate, or shrink clauses at the byte level; `clause::database` (logical tiers/watch relationship) and every
     /// higher-level consumer go through this type rather than touching `bank::arena` directly. `assign_proof_id`
@@ -36,7 +42,7 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         ref_t create_original_clause(const std::span<const literal> literals) noexcept
         {
-            return {};
+            return create_clause(literals, false);
         }
 
         /// @brief Creates a new learned (redundant) clause derived from conflict analysis.
@@ -45,7 +51,7 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         ref_t create_learned_clause(const std::span<const literal> literals) noexcept
         {
-            return {};
+            return create_clause(literals, true);
         }
 
         /// @brief Physically destroys a clause, retiring its `proof::clause::id` if one was assigned.
@@ -53,6 +59,10 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         void destroy_clause(const ref_t ref) noexcept
         {
+            const auto resolved = resolve_ref(ref);
+            id_allocator_.retire_on_delete(resolved);
+            redundant_.erase(resolved.offset());
+            alive_.erase(resolved.offset());
         }
 
         /// @brief Relocates a clause to a new arena position, for example during garbage collection.
@@ -61,7 +71,28 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         ref_t relocate_clause(const ref_t ref) noexcept
         {
-            return ref;
+            const auto resolved = resolve_ref(ref);
+            if (!is_alive(resolved))
+            {
+                return {};
+            }
+
+            const auto literal_count = arena_.literal_count(resolved);
+            const auto literals = arena_.read_literals(resolved);
+            const auto relocated = arena_.allocate_clause(literal_count);
+            arena_.write_literals(relocated, literals);
+
+            if (is_redundant(resolved))
+            {
+                redundant_.erase(resolved.offset());
+                redundant_.insert(relocated.offset());
+            }
+
+            alive_.erase(resolved.offset());
+            alive_.insert(relocated.offset());
+            relocated_refs_[resolved.offset()] = relocated.offset();
+            id_allocator_.preserve_on_relocation(resolved, relocated);
+            return relocated;
         }
 
         /// @brief Shrinks a clause in place to a smaller literal count, for example after strengthening.
@@ -70,6 +101,7 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         void shrink_clause(const ref_t ref, const std::uint32_t new_size) noexcept
         {
+            arena_.truncate_literals(resolve_ref(ref), new_size);
         }
 
         /// @brief Re-validates a reference against the current arena generation, updating it if relocated.
@@ -78,7 +110,17 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         ref_t resolve_ref(const ref_t ref) const noexcept
         {
-            return ref;
+            auto resolved = ref;
+            while (resolved.valid())
+            {
+                const auto it = relocated_refs_.find(resolved.offset());
+                if (it == relocated_refs_.end() || it->second == resolved.offset())
+                {
+                    break;
+                }
+                resolved = ref_t {it->second};
+            }
+            return resolved;
         }
 
         /// @brief Allocates and binds a stable `proof::clause::id` to a clause for proof/checking purposes.
@@ -87,10 +129,65 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         proof::clause::id assign_proof_id(const ref_t ref) noexcept
         {
-            return {};
+            return id_allocator_.allocate_for_new_clause(ref);
+        }
+
+        /// @brief Returns the stable proof identity currently bound to a clause, if any.
+        /// @param ref Reference to the clause to query.
+        /// @return Bound proof identity, or invalid if none is assigned.
+        /// @throws None (noexcept).
+        [[nodiscard]] proof::clause::id proof_id_of(const ref_t ref) const noexcept
+        {
+            return id_allocator_.id_for_clause_ref(resolve_ref(ref));
+        }
+
+        /// @brief Reads back a clause's current literal payload.
+        /// @param ref Reference to the clause to query.
+        /// @return Literals currently stored for `ref`.
+        /// @throws None (noexcept).
+        [[nodiscard]] std::vector<literal> literals_of(const ref_t ref) const noexcept
+        {
+            return arena_.read_literals(resolve_ref(ref));
+        }
+
+        /// @brief Checks whether a clause was created as a learned (redundant) clause.
+        /// @param ref Reference to the clause to query.
+        /// @return True if `ref` was created via `create_learned_clause`.
+        /// @throws None (noexcept).
+        [[nodiscard]] bool is_redundant(const ref_t ref) const noexcept
+        {
+            const auto resolved = resolve_ref(ref);
+            return redundant_.find(resolved.offset()) != redundant_.end();
+        }
+
+        /// @brief Returns whether a clause is currently known to be alive in storage.
+        /// @param ref Reference to the clause to query.
+        /// @return True if the clause has been created and not yet destroyed.
+        [[nodiscard]] bool is_alive(const ref_t ref) const noexcept
+        {
+            const auto resolved = resolve_ref(ref);
+            return resolved.valid() && alive_.find(resolved.offset()) != alive_.end();
         }
 
     private:
+        ref_t create_clause(const std::span<const literal> literals, const bool redundant) noexcept
+        {
+            const auto ref = arena_.allocate_clause(literals.size());
+            arena_.write_literals(ref, literals);
+            if (redundant)
+            {
+                redundant_.insert(ref.offset());
+            }
+            alive_.insert(ref.offset());
+            assign_proof_id(ref);
+            return ref;
+        }
+
         bank::arena arena_ {};
+        proof::clause::id_allocator id_allocator_ {};
+        std::unordered_set<ref_t::offset_t> redundant_ {};
+        std::unordered_set<ref_t::offset_t> alive_ {};
+        std::unordered_map<ref_t::offset_t, ref_t::offset_t> relocated_refs_ {};
     };
 }
+

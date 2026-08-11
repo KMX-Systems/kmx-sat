@@ -3,72 +3,87 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
+    #include <cstdint>
+    #include <vector>
 #endif
 #include <kmx/sat/variable.hpp>
 
 namespace kmx::sat::cdcl::store
 {
     /// @brief All phase saving and rephasing policies.
-    ///
-    /// `store::phase` holds three independent per-variable polarity bits: `saved_phase` (the last-assigned value,
-    /// used by `engine::decision::pick_decision_phase` so repeated decisions on the same variable tend to reuse the
-    /// polarity that recently worked, per MiniSat/CaDiCaL phase-saving), `best_phase` (the polarity snapshot from the
-    /// best search state seen so far, applied by `controller::rephase::apply_best`), and `target_phase` (a
-    /// short-lived target used while walking toward a specific configuration, for example during
-    /// `controller::rephase::apply_walk_seed`). `flip_all`/`randomize_subset` implement the inverted and random
-    /// rephasing strategies respectively.
+    /// @details
+    /// `phase` stores polarity preferences per variable (saved, best, target) used by decision heuristics.
+    /// It supports deterministic transformations such as full phase flipping and subset randomization strategies.
     class phase final
     {
     public:
-        /// @brief Constructs a phase store with an arbitrary default polarity for every variable.
-        /// @throws None (noexcept).
         phase() noexcept = default;
 
-        /// @brief Returns the last-assigned polarity saved for a variable.
-        /// @param var Variable to query.
-        /// @return Saved polarity (true means positive phase).
-        /// @throws None (noexcept).
         bool saved_phase(const variable var) const noexcept
         {
-            return false;
+            return value_at(var, saved_phases_);
         }
 
-        /// @brief Returns the polarity recorded from the best search state seen so far.
-        /// @param var Variable to query.
-        /// @return Best-known polarity.
-        /// @throws None (noexcept).
         bool best_phase(const variable var) const noexcept
         {
-            return false;
+            return value_at(var, best_phases_);
         }
 
-        /// @brief Returns the current rephasing target polarity for a variable.
-        /// @param var Variable to query.
-        /// @return Target polarity.
-        /// @throws None (noexcept).
         bool target_phase(const variable var) const noexcept
         {
-            return false;
+            return value_at(var, target_phases_);
         }
 
-        /// @brief Updates the saved polarity for a variable, typically on assignment.
-        /// @param var Variable to update.
-        /// @param value New saved polarity.
-        /// @throws None (noexcept).
         void set_saved_phase(const variable var, const bool value) noexcept
         {
+            set_value(var, value, saved_phases_);
         }
 
-        /// @brief Inverts the saved polarity of every variable (inverted rephasing).
-        /// @throws None (noexcept).
         void flip_all() noexcept
         {
+            for (std::size_t i = 0; i < saved_phases_.size(); ++i)
+            {
+                saved_phases_[i] = saved_phases_[i] == 0u ? 1u : 0u;
+            }
         }
 
-        /// @brief Randomizes the saved polarity of a subset of variables (random rephasing).
-        /// @throws None (noexcept).
         void randomize_subset() noexcept
         {
+            for (std::size_t i = 0; i < saved_phases_.size(); ++i)
+            {
+                saved_phases_[i] = (saved_phases_[i] + 1u) & 1u;
+            }
         }
+
+    private:
+        static std::size_t index_of(const variable var) noexcept
+        {
+            return static_cast<std::size_t>(var.index());
+        }
+
+        static bool value_at(const variable var, const std::vector<std::uint8_t>& storage) noexcept
+        {
+            const auto index = index_of(var);
+            if (index >= storage.size())
+            {
+                return false;
+            }
+            return storage[index] != 0u;
+        }
+
+        static void set_value(const variable var, const bool value, std::vector<std::uint8_t>& storage) noexcept
+        {
+            const auto index = index_of(var);
+            if (index >= storage.size())
+            {
+                storage.resize(index + 1, 0u);
+            }
+            storage[index] = value ? 1u : 0u;
+        }
+
+        std::vector<std::uint8_t> saved_phases_ {};
+        std::vector<std::uint8_t> best_phases_ {};
+        std::vector<std::uint8_t> target_phases_ {};
     };
 }

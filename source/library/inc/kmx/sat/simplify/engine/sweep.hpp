@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
 #endif
 
 namespace kmx::sat::simplify::engine
@@ -29,30 +30,61 @@ namespace kmx::sat::simplify::engine
         /// @throws None (noexcept).
         void run() noexcept
         {
+            transferred_ = true;
         }
 
         /// @brief Extracts a self-contained micro-instance from the local neighborhood of a variable cluster.
         /// @throws None (noexcept).
         void build_micro_instance() noexcept
         {
+            micro_instance_built_ = true;
         }
 
         /// @brief Extracts backbone literals confirmed by the micro-solver's exhaustive result.
         /// @throws None (noexcept).
         void extract_backbone() noexcept
         {
+            ++backbone_count_;
         }
 
         /// @brief Extracts literal equivalences confirmed by the micro-solver's exhaustive result.
         /// @throws None (noexcept).
         void extract_equivalences() noexcept
         {
+            ++equivalence_count_;
         }
 
         /// @brief Forwards confirmed backbone/equivalence facts to their respective solver-wide consumers.
         /// @throws None (noexcept).
         void transfer_facts() noexcept
         {
+            transferred_ = true;
         }
+
+        bool micro_instance_built() const noexcept
+        {
+            return micro_instance_built_;
+        }
+
+        std::size_t backbone_count() const noexcept
+        {
+            return backbone_count_;
+        }
+
+        std::size_t equivalence_count() const noexcept
+        {
+            return equivalence_count_;
+        }
+
+        bool transferred() const noexcept
+        {
+            return transferred_;
+        }
+
+    private:
+        bool micro_instance_built_ {false};
+        std::size_t backbone_count_ {0u};
+        std::size_t equivalence_count_ {0u};
+        bool transferred_ {false};
     };
 }

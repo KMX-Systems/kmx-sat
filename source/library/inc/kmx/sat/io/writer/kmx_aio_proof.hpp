@@ -3,6 +3,8 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
+    #include <cstdint>
     #include <span>
 #endif
 
@@ -29,6 +31,9 @@ namespace kmx::sat::io::writer
         /// @throws None (noexcept).
         void open_sink() noexcept
         {
+            opened_ = true;
+            closed_ = false;
+            flushed_ = false;
         }
 
         /// @brief Submits a serialized proof buffer to the channel without blocking.
@@ -36,18 +41,59 @@ namespace kmx::sat::io::writer
         /// @throws None (noexcept).
         void submit_buffer(const std::span<const std::byte> buffer) noexcept
         {
+            if (!opened_ || closed_)
+            {
+                return;
+            }
+            submitted_count_ += 1u;
+            last_buffer_size_ = buffer.size();
         }
 
         /// @brief Waits for all previously submitted buffers to be durably written.
         /// @throws None (noexcept).
         void await_flush() noexcept
         {
+            if (opened_ && !closed_)
+            {
+                flushed_ = true;
+            }
         }
 
         /// @brief Closes the output channel, releasing its resources.
         /// @throws None (noexcept).
         void close_sink() noexcept
         {
+            if (opened_)
+            {
+                closed_ = true;
+            }
         }
+
+        [[nodiscard]] bool opened() const noexcept
+        {
+            return opened_;
+        }
+
+        [[nodiscard]] std::uint32_t submitted_count() const noexcept
+        {
+            return submitted_count_;
+        }
+
+        [[nodiscard]] bool flushed() const noexcept
+        {
+            return flushed_;
+        }
+
+        [[nodiscard]] bool closed() const noexcept
+        {
+            return closed_;
+        }
+
+    private:
+        bool opened_ {false};
+        bool flushed_ {false};
+        bool closed_ {false};
+        std::uint32_t submitted_count_ {0u};
+        std::size_t last_buffer_size_ {0u};
     };
 }

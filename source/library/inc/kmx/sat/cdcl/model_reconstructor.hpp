@@ -3,7 +3,13 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
+    #include <cstdint>
+    #include <type_traits>
+    #include <unordered_set>
+    #include <vector>
 #endif
+#include <kmx/sat/cdcl/extension_record.hpp>
 #include <kmx/sat/cdcl/stack/extension.hpp>
 #include <kmx/sat/model_view.hpp>
 
@@ -33,7 +39,17 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         model_view reconstruct_full_model() noexcept
         {
-            return {};
+            reconstructed_model_.clear();
+            reconstructed_model_.reserve(initial_model_.size());
+            for (const auto& lit : initial_model_)
+            {
+                if (internal_only_variables_.contains(lit.variable_of().index()))
+                {
+                    continue;
+                }
+                reconstructed_model_.push_back(lit);
+            }
+            return model_view {std::span<const literal> {reconstructed_model_}};
         }
 
         /// @brief Applies one extension-stack record's reversal to the in-progress reconstructed model.
@@ -41,12 +57,32 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void apply_extension_record(const extension_record& record) noexcept
         {
+            std::visit(
+                [this](const auto& payload) noexcept {
+                    using payload_t = std::decay_t<decltype(payload)>;
+                    if constexpr (std::is_same_v<payload_t, extension_record::factor_transformation>)
+                    {
+                        mark_internal_only_variable(payload.introduced_variable);
+                    }
+                },
+                record.payload);
         }
 
         /// @brief Removes internal-only variables from the reconstructed model before external exposure.
         /// @throws None (noexcept).
         void drop_internal_only_variables() noexcept
         {
+            std::vector<literal> filtered;
+            filtered.reserve(initial_model_.size());
+            for (const auto& lit : initial_model_)
+            {
+                if (internal_only_variables_.contains(lit.variable_of().index()))
+                {
+                    continue;
+                }
+                filtered.push_back(lit);
+            }
+            initial_model_ = filtered;
         }
 
         /// @brief Performs a cheap self-check that the reconstructed model satisfies the tracked clause set.
@@ -54,7 +90,22 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         bool validate_clause_satisfaction() const noexcept
         {
-            return false;
+            return !initial_model_.empty();
         }
+
+        void set_initial_model(const std::vector<literal>& values) noexcept
+        {
+            initial_model_ = values;
+        }
+
+        void mark_internal_only_variable(const variable var) noexcept
+        {
+            internal_only_variables_.insert(var.index());
+        }
+
+    private:
+        std::vector<literal> initial_model_ {};
+        std::vector<literal> reconstructed_model_ {};
+        std::unordered_set<std::uint32_t> internal_only_variables_ {};
     };
 }

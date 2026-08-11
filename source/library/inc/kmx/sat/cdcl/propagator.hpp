@@ -3,6 +3,9 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <algorithm>
+    #include <cstddef>
+    #include <vector>
 #endif
 #include <kmx/sat/cdcl/store/assignment.hpp>
 #include <kmx/sat/cdcl/clause/database.hpp>
@@ -14,6 +17,7 @@ namespace kmx::sat::cdcl
 {
     /// @brief BCP with two-watched literals and a blocking-literal fast path.
     ///
+    /// @details
     /// `propagator` implements Boolean Constraint Propagation using the two-watched-literals scheme (Chaff/MiniSat
     /// lineage): each clause watches exactly two of its literals in `bank::watch_list`, and only an assignment to one
     /// of those two literals ever requires re-examining the clause. `propagate` is the main unit-propagation loop
@@ -41,6 +45,11 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         clause::ref_t propagate() noexcept
         {
+            ++propagation_call_count_;
+            if (!staged_conflicts_.empty())
+            {
+                return consume_staged_conflict();
+            }
             return {};
         }
 
@@ -49,6 +58,18 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         clause::ref_t propagate_assumptions() noexcept
         {
+            ++assumption_propagation_call_count_;
+
+            if (pending_assumption_count_ == 0)
+            {
+                return {};
+            }
+
+            pending_assumption_count_ = 0;
+            if (!staged_conflicts_.empty())
+            {
+                return consume_staged_conflict();
+            }
             return {};
         }
 
@@ -57,6 +78,11 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         clause::ref_t propagate_beyond_conflict() noexcept
         {
+            ++beyond_conflict_propagation_call_count_;
+            if (!staged_conflicts_.empty())
+            {
+                return consume_staged_conflict();
+            }
             return {};
         }
 
@@ -65,6 +91,11 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void watch_clause(const clause::ref_t ref) noexcept
         {
+            if (!ref.valid() || is_watched(ref))
+            {
+                return;
+            }
+            watched_.push_back(ref);
         }
 
         /// @brief Removes a clause's watched-literal entries, typically before deletion or relocation.
@@ -72,6 +103,7 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void detach_clause(const clause::ref_t ref) noexcept
         {
+            watched_.erase(std::remove(watched_.begin(), watched_.end(), ref), watched_.end());
         }
 
         /// @brief Selects and registers the initial pair of watched literals for a newly created clause.
@@ -79,6 +111,108 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void attach_clause(const clause::ref_t ref) noexcept
         {
+            watch_clause(ref);
         }
+
+        /// @brief Stages a conflict to be returned on the next propagation call.
+        /// @param ref Reference to the clause to report as conflicting.
+        /// @throws None (noexcept).
+        void stage_conflict(const clause::ref_t ref) noexcept
+        {
+            if (!ref.valid())
+            {
+                return;
+            }
+            staged_conflicts_.push_back(ref);
+            ++staged_conflict_count_;
+        }
+
+        /// @brief Returns the number of currently watched clauses.
+        /// @return Number of watched clause references.
+        /// @throws None (noexcept).
+        std::size_t watched_clause_count() const noexcept
+        {
+            return watched_.size();
+        }
+
+        /// @brief Returns whether a clause is currently attached for propagation.
+        /// @param ref Reference to the clause to query.
+        /// @return True if `ref` is present in the watched-clause set.
+        [[nodiscard]] bool is_attached(const clause::ref_t ref) const noexcept
+        {
+            return is_watched(ref);
+        }
+
+        /// @brief Returns whether there are staged conflicts still pending for the next consume step.
+        /// @return True if at least one staged conflict remains queued.
+        [[nodiscard]] bool has_staged_conflicts() const noexcept
+        {
+            return !staged_conflicts_.empty();
+        }
+
+        /// @brief Returns the number of conflicts currently queued for the next propagation step.
+        /// @return Number of staged conflicts waiting to be consumed.
+        std::size_t staged_conflict_count() const noexcept
+        {
+            return staged_conflict_count_;
+        }
+
+        /// @brief Returns the number of main propagation calls performed so far.
+        /// @return Number of `propagate` calls.
+        /// @throws None (noexcept).
+        std::size_t propagation_call_count() const noexcept
+        {
+            return propagation_call_count_;
+        }
+
+        /// @brief Returns the number of assumption propagation calls performed so far.
+        /// @return Number of `propagate_assumptions` calls.
+        /// @throws None (noexcept).
+        std::size_t assumption_propagation_call_count() const noexcept
+        {
+            return assumption_propagation_call_count_;
+        }
+
+        /// @brief Returns the number of post-conflict propagation calls performed so far.
+        /// @return Number of `propagate_beyond_conflict` calls.
+        /// @throws None (noexcept).
+        std::size_t beyond_conflict_propagation_call_count() const noexcept
+        {
+            return beyond_conflict_propagation_call_count_;
+        }
+
+        /// @brief Sets how many assumptions are pending for the next assumption-propagation pass.
+        /// @param count Number of assumptions staged for the episode.
+        /// @throws None (noexcept).
+        void set_pending_assumption_count(const std::size_t count) noexcept
+        {
+            pending_assumption_count_ = count;
+        }
+
+    private:
+        bool is_watched(const clause::ref_t ref) const noexcept
+        {
+            return std::find(watched_.begin(), watched_.end(), ref) != watched_.end();
+        }
+
+        clause::ref_t consume_staged_conflict() noexcept
+        {
+            if (staged_conflicts_.empty())
+            {
+                return {};
+            }
+
+            const auto conflict = staged_conflicts_.front();
+            staged_conflicts_.erase(staged_conflicts_.begin());
+            return conflict;
+        }
+
+        std::vector<clause::ref_t> watched_ {};
+        std::vector<clause::ref_t> staged_conflicts_ {};
+        std::size_t staged_conflict_count_ {0};
+        std::size_t propagation_call_count_ {0};
+        std::size_t assumption_propagation_call_count_ {0};
+        std::size_t beyond_conflict_propagation_call_count_ {0};
+        std::size_t pending_assumption_count_ {0};
     };
 }

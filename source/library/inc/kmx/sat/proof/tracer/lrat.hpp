@@ -3,6 +3,8 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstdint>
+    #include <vector>
 #endif
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
 
@@ -31,6 +33,7 @@ namespace kmx::sat::proof::tracer
         /// @throws None (noexcept).
         void add_original(const cdcl::clause::ref_t ref) noexcept
         {
+            emitted_events_.push_back({event_kind::add_original, ref.offset()});
         }
 
         /// @brief Emits a derived-clause line together with its resolved antecedent id chain.
@@ -38,6 +41,7 @@ namespace kmx::sat::proof::tracer
         /// @throws None (noexcept).
         void add_derived(const cdcl::clause::ref_t ref) noexcept
         {
+            emitted_events_.push_back({event_kind::add_derived, ref.offset()});
         }
 
         /// @brief Emits a deletion line referencing the clause's stable id.
@@ -45,6 +49,7 @@ namespace kmx::sat::proof::tracer
         /// @throws None (noexcept).
         void delete_clause(const cdcl::clause::ref_t ref) noexcept
         {
+            emitted_events_.push_back({event_kind::delete_clause, ref.offset()});
         }
 
         /// @brief Emits the shrunk clause as a newly derived clause line with its antecedent chain.
@@ -52,12 +57,49 @@ namespace kmx::sat::proof::tracer
         /// @throws None (noexcept).
         void shrink_clause(const cdcl::clause::ref_t ref) noexcept
         {
+            emitted_events_.push_back({event_kind::shrink_clause, ref.offset()});
         }
 
         /// @brief Writes the proof's closing marker.
         /// @throws None (noexcept).
         void finalize() noexcept
         {
+            emitted_events_.push_back({event_kind::finalize, 0u});
+            finalized_ = true;
         }
+
+        enum class event_kind
+        {
+            add_original,
+            add_derived,
+            delete_clause,
+            shrink_clause,
+            finalize,
+        };
+
+        struct emitted_event
+        {
+            event_kind kind {};
+            std::uint64_t ref_offset {};
+        };
+
+        std::size_t emitted_count() const noexcept
+        {
+            return emitted_events_.size();
+        }
+
+        bool finalized() const noexcept
+        {
+            return finalized_;
+        }
+
+        const std::vector<emitted_event>& emitted_events() const noexcept
+        {
+            return emitted_events_;
+        }
+
+    private:
+        std::vector<emitted_event> emitted_events_ {};
+        bool finalized_ {false};
     };
 }

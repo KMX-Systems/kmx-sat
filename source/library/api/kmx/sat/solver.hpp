@@ -12,6 +12,7 @@
 #include <kmx/sat/literal.hpp>
 #include <kmx/sat/solve_request.hpp>
 #include <kmx/sat/solve_result.hpp>
+#include <kmx/sat/solver_state_machine.hpp>
 #include <kmx/sat/telemetry/solver_statistics.hpp>
 #include <kmx/sat/variable.hpp>
 
@@ -25,6 +26,7 @@ namespace kmx::sat
     /// @brief The single C++ API facade; coordinates solver state, validates boundaries, and routes operations to the
     /// internal subsystems.
     ///
+    /// @details
     /// `solver` is the sole public entry point of the library (namespace `kmx::sat`) and the composition root that a
     /// caller sees; internally it forwards to `solver_state_machine`, `external_frontend`, `search_coordinator`
     /// (through `solver_core`), `telemetry::solver_statistics`, and `proof::proof_manager`, none of which are exposed
@@ -140,6 +142,10 @@ namespace kmx::sat
         /// @brief Clears assumptions retained for incremental solving.
         /// @throws None (noexcept).
         void release_incremental_assumptions() noexcept;
+        /// @brief Returns the current lifecycle state of the facade.
+        /// @return Current solver state machine value.
+        /// @throws None (noexcept).
+        solver_state_machine::state current_state() const noexcept;
 
     private:
         class impl;

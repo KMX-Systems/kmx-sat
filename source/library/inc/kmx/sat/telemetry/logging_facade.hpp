@@ -3,7 +3,11 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
+    #include <cstdint>
+    #include <string>
     #include <string_view>
+    #include <vector>
 #endif
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
 #include <kmx/sat/literal.hpp>
@@ -12,6 +16,7 @@ namespace kmx::sat::telemetry
 {
     /// @brief Optionally compiled logging that does not contaminate the hot path in non-logging builds.
     ///
+    /// @details
     /// `logging_facade` is the structured-tracing counterpart to `kmx::logger`'s free-function logging: it exposes
     /// domain-specific log points (`log_clause`, `log_literal`, `log_gate`, `log_extension`, `log_phase_summary`) so
     /// call sites in `clause::database`, `extractor::gate`, `stack::extension`, and phase-boundary code can log
@@ -27,11 +32,30 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         logging_facade() noexcept = default;
 
+        enum class event_kind
+        {
+            clause,
+            literal,
+            gate,
+            extension,
+            phase_summary,
+        };
+
+        struct event
+        {
+            event_kind kind {};
+            std::uint64_t ref_offset {0};
+            std::string phase_name {};
+            literal literal_value {};
+        };
+
         /// @brief Logs a clause-related event (for example addition, deletion, or shrink).
         /// @param ref Reference to the clause being logged.
         /// @throws None (noexcept).
         void log_clause(const cdcl::clause::ref_t ref) noexcept
         {
+            last_ref_offset_ = ref.offset();
+            events_.push_back({event_kind::clause, last_ref_offset_});
         }
 
         /// @brief Logs a literal-related event (for example assignment or watch change).
@@ -39,18 +63,21 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         void log_literal(const literal lit) noexcept
         {
+            events_.push_back({event_kind::literal, last_ref_offset_, {}, lit});
         }
 
         /// @brief Logs a gate-extraction event from `extractor::gate`.
         /// @throws None (noexcept).
         void log_gate() noexcept
         {
+            events_.push_back({event_kind::gate, last_ref_offset_});
         }
 
         /// @brief Logs an extension-stack event from `stack::extension`.
         /// @throws None (noexcept).
         void log_extension() noexcept
         {
+            events_.push_back({event_kind::extension, last_ref_offset_});
         }
 
         /// @brief Logs a summary line for a completed phase.
@@ -58,6 +85,50 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         void log_phase_summary(const std::string_view phase_name) noexcept
         {
+            events_.push_back({event_kind::phase_summary, last_ref_offset_, std::string {phase_name}});
         }
+
+        std::size_t event_count() const noexcept
+        {
+            return events_.size();
+        }
+
+        const event& last_event() const noexcept
+        {
+            if (events_.empty())
+            {
+                static const event empty_event {};
+                return empty_event;
+            }
+            return events_.back();
+        }
+
+        const event& last_literal() const noexcept
+        {
+            for (auto it = events_.rbegin(); it != events_.rend(); ++it)
+            {
+                if (it->kind == event_kind::literal)
+                {
+                    return *it;
+                }
+            }
+            return last_event();
+        }
+
+        std::uint64_t last_clause_ref() const noexcept
+        {
+            for (auto it = events_.rbegin(); it != events_.rend(); ++it)
+            {
+                if (it->kind == event_kind::clause)
+                {
+                    return it->ref_offset;
+                }
+            }
+            return last_ref_offset_;
+        }
+
+    private:
+        std::vector<event> events_ {};
+        std::uint64_t last_ref_offset_ {0u};
     };
 }

@@ -3,14 +3,18 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <span>
 #endif
+#include <kmx/sat/cdcl/clause/database.hpp>
 #include <kmx/sat/cdcl/model_reconstructor.hpp>
+#include <kmx/sat/cdcl/store/constraint.hpp>
 #include <kmx/sat/model_view.hpp>
 
 namespace kmx::sat::cdcl
 {
     /// @brief Separate validator for the SAT path.
     ///
+    /// @details
     /// `witness_checker` is an independent double-check on a reconstructed model, deliberately kept separate from
     /// `model_reconstructor` so a bug in reconstruction cannot silently validate itself: `check_model_against_original`
     /// re-evaluates every literal of the model against the original, pre-simplification clause set (the strongest
@@ -26,13 +30,42 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         witness_checker() noexcept = default;
 
+        /// @brief Attaches the original clause database for validation.
+        /// @param clauses Clause database to validate against.
+        /// @throws None (noexcept).
+        void attach_clauses(const clause::database& clauses) noexcept
+        {
+            clauses_ = &clauses;
+        }
+
+        /// @brief Attaches a temporary constraint clause for validation.
+        /// @param constraint Constraint store to validate against.
+        /// @throws None (noexcept).
+        void attach_constraint(const store::constraint& constraint) noexcept
+        {
+            constraint_ = &constraint;
+        }
+
         /// @brief Validates a model against the original, pre-simplification clause set.
         /// @param model Model to validate.
         /// @return True if every original clause is satisfied by `model`.
         /// @throws None (noexcept).
         bool check_model_against_original(const model_view model) const noexcept
         {
-            return false;
+            if (clauses_ == nullptr)
+            {
+                return true;
+            }
+
+            bool satisfied = true;
+            clauses_->iterate_irredundant([&](const clause::ref_t ref) noexcept {
+                if (!satisfied)
+                {
+                    return;
+                }
+                satisfied = clause_satisfied(ref, model);
+            });
+            return satisfied;
         }
 
         /// @brief Validates a model against the currently tracked clause set.
@@ -41,7 +74,27 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         bool check_model_against_current(const model_view model) const noexcept
         {
-            return false;
+            if (clauses_ == nullptr)
+            {
+                return true;
+            }
+
+            bool satisfied = true;
+            clauses_->iterate_irredundant([&](const clause::ref_t ref) noexcept {
+                if (!satisfied)
+                {
+                    return;
+                }
+                satisfied = clause_satisfied(ref, model);
+            });
+            clauses_->iterate_redundant([&](const clause::ref_t ref) noexcept {
+                if (!satisfied)
+                {
+                    return;
+                }
+                satisfied = clause_satisfied(ref, model);
+            });
+            return satisfied;
         }
 
         /// @brief Validates that the active temporary constraint clause, if any, is satisfied by a model.
@@ -50,7 +103,61 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         bool check_constraint_satisfaction(const model_view model) const noexcept
         {
+            if (constraint_ == nullptr || !constraint_->has_constraint_clause())
+            {
+                return true;
+            }
+
+            const auto clause = constraint_->constraint_clause_ref();
+            if (!clause.has_value())
+            {
+                return true;
+            }
+
+            bool satisfied = false;
+            for (const auto lit : *clause)
+            {
+                if (literal_satisfied(lit, model))
+                {
+                    satisfied = true;
+                    break;
+                }
+            }
+            return satisfied;
+        }
+
+    private:
+        static bool literal_satisfied(const literal lit, const model_view model) noexcept
+        {
+            for (const auto value : model.values())
+            {
+                if (value.variable_of() == lit.variable_of())
+                {
+                    return value.is_negated() == lit.is_negated();
+                }
+            }
             return false;
         }
+
+        bool clause_satisfied(const clause::ref_t ref, const model_view model) const noexcept
+        {
+            if (!ref.valid())
+            {
+                return true;
+            }
+
+            const auto literals = clauses_->storage_of().literals_of(ref);
+            for (const auto lit : literals)
+            {
+                if (literal_satisfied(lit, model))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        const clause::database* clauses_ {nullptr};
+        const store::constraint* constraint_ {nullptr};
     };
 }

@@ -11,6 +11,7 @@ namespace kmx::sat
 {
     /// @brief Read-only view over the stable external model produced by a satisfiable solve.
     ///
+    /// @details
     /// `model_view` is a non-owning span wrapper returned by `solve_result::model()`; it exposes the model built by
     /// `external_frontend::build_model_view()` from `model_reconstructor::reconstruct_full_model`, after eliminated
     /// variables (BVE/BCE/factoring) have been reconstructed and strictly internal-only variables introduced by

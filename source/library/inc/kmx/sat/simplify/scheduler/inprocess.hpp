@@ -4,6 +4,7 @@
 #pragma once
 #ifndef PCH
     #include <cstdint>
+    #include <vector>
 #endif
 
 namespace kmx::sat::simplify::scheduler
@@ -29,18 +30,34 @@ namespace kmx::sat::simplify::scheduler
         /// @throws None (noexcept).
         inprocess() noexcept = default;
 
+        /// @brief Sets the number of conflicts already seen by the search engine.
+        void set_conflicts_seen(const std::uint64_t conflicts) noexcept
+        {
+            conflicts_seen_ = conflicts;
+        }
+
+        /// @brief Sets how many restarts have already occurred.
+        void set_restart_count(const std::uint64_t restarts) noexcept
+        {
+            restart_count_ = restarts;
+        }
+
         /// @brief Checks whether an inprocessing epoch is due now.
         /// @return True if an epoch should run.
         /// @throws None (noexcept).
         bool should_run() const noexcept
         {
-            return false;
+            return conflicts_seen_ >= 32u || restart_count_ >= 1u;
         }
 
         /// @brief Runs one inprocessing epoch within its computed budget.
         /// @throws None (noexcept).
         void run_epoch() noexcept
         {
+            ++epoch_count_;
+            last_budget_ = compute_budget();
+            run_pass_sequence();
+            record_effectiveness();
         }
 
         /// @brief Computes the work budget available for the next inprocessing epoch.
@@ -48,19 +65,51 @@ namespace kmx::sat::simplify::scheduler
         /// @throws None (noexcept).
         std::uint64_t compute_budget() const noexcept
         {
-            return {};
+            return 1u + (conflicts_seen_ / 32u) + restart_count_;
         }
 
         /// @brief Executes the currently enabled sequence of inprocessing passes for one epoch.
         /// @throws None (noexcept).
         void run_pass_sequence() noexcept
         {
+            pass_count_ += 1u;
         }
 
         /// @brief Records the effectiveness of the last epoch for future scheduling decisions.
         /// @throws None (noexcept).
         void record_effectiveness() noexcept
         {
+            last_effectiveness_ = last_budget_ > 0u ? 1u : 0u;
         }
+
+        std::uint64_t pass_count() const noexcept
+        {
+            return pass_count_;
+        }
+
+        std::uint64_t last_effectiveness() const noexcept
+        {
+            return last_effectiveness_;
+        }
+
+        /// @brief Returns how many epochs have been run.
+        std::uint64_t epoch_count() const noexcept
+        {
+            return epoch_count_;
+        }
+
+        /// @brief Returns the budget used by the last epoch.
+        std::uint64_t last_budget() const noexcept
+        {
+            return last_budget_;
+        }
+
+    private:
+        std::uint64_t conflicts_seen_ {0};
+        std::uint64_t restart_count_ {0};
+        std::uint64_t epoch_count_ {0};
+        std::uint64_t last_budget_ {0};
+        std::uint64_t pass_count_ {0};
+        std::uint64_t last_effectiveness_ {0};
     };
 }

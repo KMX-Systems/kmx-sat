@@ -3,7 +3,10 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <algorithm>
     #include <optional>
+    #include <utility>
+    #include <vector>
 #endif
 #include <kmx/sat/variable.hpp>
 
@@ -33,12 +36,28 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void increase_score(const variable var) noexcept
         {
+            const auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept {
+                return entry.first == var;
+            });
+            if (it != scores_.end())
+            {
+                it->second += bump_increment_;
+            }
+            else
+            {
+                scores_.emplace_back(var, bump_increment_);
+            }
         }
 
         /// @brief Renormalizes all activity scores and the shared bump increment to avoid floating-point overflow.
         /// @throws None (noexcept).
         void rescale() noexcept
         {
+            for (auto& entry : scores_)
+            {
+                entry.second *= 0.5;
+            }
+            bump_increment_ *= 0.5;
         }
 
         /// @brief Pops and returns the currently unassigned variable with the highest activity score.
@@ -46,7 +65,23 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         std::optional<variable> extract_best() noexcept
         {
-            return std::nullopt;
+            if (scores_.empty())
+            {
+                return std::nullopt;
+            }
+
+            auto best_it = scores_.begin();
+            for (auto it = std::next(scores_.begin()); it != scores_.end(); ++it)
+            {
+                if (it->second > best_it->second)
+                {
+                    best_it = it;
+                }
+            }
+
+            const variable best = best_it->first;
+            scores_.erase(best_it);
+            return best;
         }
 
         /// @brief Checks whether a variable is currently present in the heap.
@@ -55,7 +90,9 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         bool contains(const variable var) const noexcept
         {
-            return false;
+            return std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept {
+                return entry.first == var;
+            }) != scores_.end();
         }
 
         /// @brief Restores heap ordering invariants after bulk score or membership changes.
@@ -63,5 +100,8 @@ namespace kmx::sat::cdcl
         void rebuild() noexcept
         {
         }
+    private:
+        std::vector<std::pair<variable, double>> scores_ {};
+        double bump_increment_ {1.0};
     };
 }

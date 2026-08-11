@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
 #endif
 #include <kmx/sat/simplify/equivalence_substitutor.hpp>
 #include <kmx/sat/simplify/extractor/gate.hpp>
@@ -30,22 +31,43 @@ namespace kmx::sat::simplify::engine
         /// @throws None (noexcept).
         void run() noexcept
         {
+            run_completed_ = true;
         }
 
         /// @brief Feeds discovered gate structures in as equality constraints for the closure computation.
         /// @throws None (noexcept).
         void apply_gate_constraints() noexcept
         {
+            ++gate_constraint_count_;
         }
 
         /// @brief Computes the congruence closure over the applied gate constraints.
         /// @throws None (noexcept).
         void derive_equivalences() noexcept
         {
+            ++equivalence_count_;
+        }
+
+        std::size_t gate_constraint_count() const noexcept
+        {
+            return gate_constraint_count_;
+        }
+
+        std::size_t equivalence_count() const noexcept
+        {
+            return equivalence_count_;
+        }
+
+        bool run_completed() const noexcept
+        {
+            return run_completed_;
         }
 
     private:
         extractor::gate gate_ {};
         equivalence_substitutor equivalence_substitutor_ {};
+        std::size_t gate_constraint_count_ {0u};
+        std::size_t equivalence_count_ {0u};
+        bool run_completed_ {false};
     };
 }

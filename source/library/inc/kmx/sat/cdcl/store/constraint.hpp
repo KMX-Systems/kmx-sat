@@ -31,12 +31,16 @@ namespace kmx::sat::cdcl::store
         /// @throws None (noexcept).
         void set_constraint_clause(const std::span<const literal> clause) noexcept
         {
+            clause_ = clause;
+            has_clause_ = true;
         }
 
         /// @brief Clears the currently active constraint clause, for example at the end of a solve episode.
         /// @throws None (noexcept).
         void clear_constraint_clause() noexcept
         {
+            clause_ = std::span<const literal> {};
+            has_clause_ = false;
         }
 
         /// @brief Checks whether a constraint clause is currently active.
@@ -44,7 +48,7 @@ namespace kmx::sat::cdcl::store
         /// @throws None (noexcept).
         bool has_constraint_clause() const noexcept
         {
-            return false;
+            return has_clause_;
         }
 
         /// @brief Returns a read-only reference to the currently active constraint clause, if any.
@@ -52,7 +56,15 @@ namespace kmx::sat::cdcl::store
         /// @throws None (noexcept).
         std::optional<std::span<const literal>> constraint_clause_ref() const noexcept
         {
-            return std::nullopt;
+            if (!has_clause_)
+            {
+                return std::nullopt;
+            }
+            return clause_;
         }
+
+    private:
+        std::span<const literal> clause_ {};
+        bool has_clause_ {false};
     };
 }

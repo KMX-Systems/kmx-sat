@@ -3,8 +3,10 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
     #include <cstdint>
     #include <optional>
+    #include <vector>
 #endif
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
 #include <kmx/sat/literal.hpp>
@@ -13,86 +15,159 @@
 namespace kmx::sat::cdcl::store
 {
     /// @brief SoA storage for values, levels, reasons, trail positions, and auxiliary flags.
-    ///
-    /// `store::assignment` is the per-variable state table read on every propagation and conflict-analysis step:
-    /// current truth value (`value_of`), the clause that forced it (`reason_of`), the decision level it was assigned
-    /// at (`level_of`), and its position on `trail` (`trail_position_of`). It is deliberately laid out
-    /// structure-of-arrays (parallel arrays indexed by variable) rather than array-of-structures, following the
-    /// CaDiCaL/Kissat convention that keeps the hot fields (value, level) densely packed and cache-friendly
-    /// independent of the colder fields (reason, trail position). `mark_analyzed`/`clear_analysis_marks` maintain the
-    /// transient "seen" bits `conflict_analyzer` uses while walking the implication graph during 1-UIP derivation.
-    /// @note `unassign_from` is the counterpart used by `backtrack_engine` when unwinding the trail; it must clear
-    /// value, reason, and level together so no stale reason ever survives past its assigning decision level.
+    /// @details
+    /// `assignment` keeps variable state in parallel arrays to preserve compact, cache-friendly access patterns.
+    /// It records the current truth value, implication reason, decision level, and trail position for each variable,
+    /// and exposes transient analysis marks used by conflict analysis.
     class assignment final
     {
     public:
-        /// @brief Constructs an assignment store with every variable unassigned.
-        /// @throws None (noexcept).
         assignment() noexcept = default;
 
-        /// @brief Returns the current truth value of a variable, if assigned.
-        /// @param var Variable to query.
-        /// @return `std::nullopt` if unassigned, otherwise the assigned boolean value.
-        /// @throws None (noexcept).
         std::optional<bool> value_of(const variable var) const noexcept
         {
-            return std::nullopt;
+            const auto index = index_of(var);
+            if (index >= values_.size())
+            {
+                return std::nullopt;
+            }
+            return values_[index].has_value() ? std::optional<bool> {values_[index].value()} : std::nullopt;
         }
 
-        /// @brief Assigns a literal true at the current decision level, recording its propagation reason.
-        /// @param lit Literal being assigned true.
-        /// @param reason Reference to the clause that forced this assignment, or an invalid reference for a decision.
-        /// @throws None (noexcept).
         void assign(const literal lit, const clause::ref_t reason) noexcept
         {
+            const auto var = lit.variable_of();
+            const auto index = index_of(var);
+            ensure_capacity(index);
+            values_[index] = lit.is_negated() ? false : true;
+            reasons_[index] = reason;
+            levels_[index] = current_level_;
+            trail_positions_[index] = current_trail_position_;
+            analyzed_[index] = false;
         }
 
-        /// @brief Clears the value, reason, and level of a variable, typically during backtracking.
-        /// @param var Variable to unassign.
-        /// @throws None (noexcept).
         void unassign_from(const variable var) noexcept
         {
+            const auto index = index_of(var);
+            if (index >= values_.size())
+            {
+                return;
+            }
+            values_[index].reset();
+            reasons_[index] = {};
+            levels_[index] = 0;
+            trail_positions_[index] = 0;
+            analyzed_[index] = false;
         }
 
-        /// @brief Returns the clause reference that forced a variable's current assignment.
-        /// @param var Variable to query.
-        /// @return Reference to the reason clause, or an invalid reference if the variable was a decision or is
-        /// unassigned.
-        /// @throws None (noexcept).
+        void unassign_above_level(const std::uint32_t level) noexcept
+        {
+            for (std::size_t index = 0; index < values_.size(); ++index)
+            {
+                if (values_[index].has_value() && levels_[index] > level)
+                {
+                    unassign_from(variable {static_cast<std::uint32_t>(index)});
+                }
+            }
+        }
+
         clause::ref_t reason_of(const variable var) const noexcept
         {
-            return {};
+            const auto index = index_of(var);
+            if (index >= reasons_.size())
+            {
+                return {};
+            }
+            return reasons_[index];
         }
 
-        /// @brief Returns the decision level at which a variable was assigned.
-        /// @param var Variable to query.
-        /// @return Decision level, or an implementation-defined sentinel if unassigned.
-        /// @throws None (noexcept).
         std::uint32_t level_of(const variable var) const noexcept
         {
-            return {};
+            const auto index = index_of(var);
+            if (index >= levels_.size())
+            {
+                return 0;
+            }
+            return levels_[index];
         }
 
-        /// @brief Returns the position of a variable's assigning literal on the trail.
-        /// @param var Variable to query.
-        /// @return Trail position index.
-        /// @throws None (noexcept).
         std::uint32_t trail_position_of(const variable var) const noexcept
         {
-            return {};
+            const auto index = index_of(var);
+            if (index >= trail_positions_.size())
+            {
+                return 0;
+            }
+            return trail_positions_[index];
         }
 
-        /// @brief Marks a variable as visited during the current conflict-analysis walk.
-        /// @param var Variable to mark.
-        /// @throws None (noexcept).
         void mark_analyzed(const variable var) noexcept
         {
+            const auto index = index_of(var);
+            if (index < analyzed_.size())
+            {
+                analyzed_[index] = true;
+            }
         }
 
-        /// @brief Clears all transient analysis marks set since the last clear.
-        /// @throws None (noexcept).
+        void mark_analysis_seen(const variable var) noexcept
+        {
+            mark_analyzed(var);
+        }
+
+        bool analysis_seen(const variable var) const noexcept
+        {
+            const auto index = index_of(var);
+            if (index >= analyzed_.size())
+            {
+                return false;
+            }
+            return analyzed_[index];
+        }
+
         void clear_analysis_marks() noexcept
         {
+            for (std::size_t i = 0; i < analyzed_.size(); ++i)
+            {
+                analyzed_[i] = false;
+            }
         }
+
+        void set_current_level(const std::uint32_t level) noexcept
+        {
+            current_level_ = level;
+        }
+
+        void set_current_trail_position(const std::uint32_t position) noexcept
+        {
+            current_trail_position_ = position;
+        }
+
+    private:
+        static std::size_t index_of(const variable var) noexcept
+        {
+            return static_cast<std::size_t>(var.index());
+        }
+
+        void ensure_capacity(const std::size_t index) noexcept
+        {
+            if (index >= values_.size())
+            {
+                const auto new_size = index + 1;
+                values_.resize(new_size);
+                reasons_.resize(new_size);
+                levels_.resize(new_size);
+                trail_positions_.resize(new_size);
+                analyzed_.resize(new_size);
+            }
+        }
+
+        std::vector<std::optional<bool>> values_ {};
+        std::vector<clause::ref_t> reasons_ {};
+        std::vector<std::uint32_t> levels_ {};
+        std::vector<std::uint32_t> trail_positions_ {};
+        std::vector<bool> analyzed_ {};
+        std::uint32_t current_level_ {0};
+        std::uint32_t current_trail_position_ {0};
     };
 }

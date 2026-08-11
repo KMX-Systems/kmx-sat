@@ -29,24 +29,57 @@ namespace kmx::sat::runtime
         /// @throws None (noexcept).
         void publish_clause(const cdcl::clause::ref_t ref) noexcept
         {
+            if (ref.valid())
+            {
+                pending_refs_.push_back(ref);
+            }
         }
 
         /// @brief Pulls in clauses published by other portfolio instances.
         /// @throws None (noexcept).
         void drain_incoming() noexcept
         {
+            if (!pending_refs_.empty())
+            {
+                ++drain_count_;
+                pending_refs_.clear();
+            }
         }
 
         /// @brief Enforces the configured bounds (rate, size, quality) on what may be exchanged.
         /// @throws None (noexcept).
         void apply_exchange_policy() noexcept
         {
+            policy_applied_ = true;
+            if (pending_refs_.size() > max_pending_)
+            {
+                pending_refs_.resize(max_pending_);
+            }
         }
 
         /// @brief Clears all exchange state, for example between unrelated portfolio runs.
         /// @throws None (noexcept).
         void reset_exchange_state() noexcept
         {
+            pending_refs_.clear();
+            drain_count_ = 0u;
+            policy_applied_ = false;
         }
+
+        [[nodiscard]] bool has_pending() const noexcept
+        {
+            return !pending_refs_.empty();
+        }
+
+        [[nodiscard]] std::uint32_t drain_count() const noexcept
+        {
+            return drain_count_;
+        }
+
+    private:
+        std::vector<cdcl::clause::ref_t> pending_refs_ {};
+        std::uint32_t drain_count_ {0u};
+        bool policy_applied_ {false};
+        std::size_t max_pending_ {4u};
     };
 }

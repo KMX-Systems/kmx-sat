@@ -31,12 +31,18 @@ namespace kmx::sat::runtime
         /// @throws None (noexcept).
         void run_parallel_pass() noexcept
         {
+            ++runs_;
+            if (thread_budget_ < 1u)
+            {
+                thread_budget_ = 1u;
+            }
         }
 
         /// @brief Merges per-thread partial results into one schedule-independent, deterministic result.
         /// @throws None (noexcept).
         void merge_deterministic_result() noexcept
         {
+            ++merges_;
         }
 
         /// @brief Returns the number of worker threads currently budgeted for parallel sub-tasks.
@@ -44,7 +50,22 @@ namespace kmx::sat::runtime
         /// @throws None (noexcept).
         std::uint32_t thread_budget() const noexcept
         {
-            return {};
+            return thread_budget_;
         }
+
+        [[nodiscard]] std::uint32_t runs() const noexcept
+        {
+            return runs_;
+        }
+
+        [[nodiscard]] std::uint32_t merges() const noexcept
+        {
+            return merges_;
+        }
+
+    private:
+        std::uint32_t runs_ {0u};
+        std::uint32_t merges_ {0u};
+        std::uint32_t thread_budget_ {1u};
     };
 }

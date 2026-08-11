@@ -3,7 +3,10 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <algorithm>
     #include <optional>
+    #include <utility>
+    #include <vector>
 #endif
 #include <kmx/sat/variable.hpp>
 
@@ -32,6 +35,13 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void activate(const variable var) noexcept
         {
+            if (std::find_if(variables_.begin(), variables_.end(), [&](const auto& entry) noexcept {
+                    return entry == var;
+                }) != variables_.end())
+            {
+                return;
+            }
+            variables_.push_back(var);
         }
 
         /// @brief Moves a variable to the front of the queue after it participates in a conflict/learned clause.
@@ -39,6 +49,12 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void bump(const variable var) noexcept
         {
+            const auto it = std::find(variables_.begin(), variables_.end(), var);
+            if (it == variables_.end())
+            {
+                return;
+            }
+            std::rotate(variables_.begin(), it, it + 1);
         }
 
         /// @brief Returns the frontmost currently unassigned variable, the next branching candidate.
@@ -46,7 +62,11 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         std::optional<variable> front_candidate() const noexcept
         {
-            return std::nullopt;
+            if (variables_.empty())
+            {
+                return std::nullopt;
+            }
+            return variables_.front();
         }
 
         /// @brief Removes a variable from the queue, typically when eliminated by simplification.
@@ -54,6 +74,11 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void remove(const variable var) noexcept
         {
+            auto it = std::find(variables_.begin(), variables_.end(), var);
+            if (it != variables_.end())
+            {
+                variables_.erase(it);
+            }
         }
 
         /// @brief Reinserts a previously removed variable, typically when backtracking restores it.
@@ -61,6 +86,7 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void reinsert(const variable var) noexcept
         {
+            activate(var);
         }
 
         /// @brief Randomizes the queue order, used by randomized restart/rephase strategies.
@@ -68,5 +94,15 @@ namespace kmx::sat::cdcl
         void shuffle() noexcept
         {
         }
+
+        /// @brief Returns the number of currently tracked variables in the queue.
+        /// @return Number of active variables.
+        std::size_t size() const noexcept
+        {
+            return variables_.size();
+        }
+
+    private:
+        std::vector<variable> variables_ {};
     };
 }

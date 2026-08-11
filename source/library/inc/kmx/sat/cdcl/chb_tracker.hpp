@@ -3,6 +3,10 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <algorithm>
+    #include <cstddef>
+    #include <utility>
+    #include <vector>
 #endif
 #include <kmx/sat/variable.hpp>
 
@@ -33,6 +37,17 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void update_on_assignment(const variable var) noexcept
         {
+            auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept {
+                return entry.first == var;
+            });
+            if (it == scores_.end())
+            {
+                scores_.emplace_back(var, 0.25);
+            }
+            else
+            {
+                it->second += 0.25;
+            }
         }
 
         /// @brief Updates the reward signal for a variable involved in a conflict.
@@ -40,6 +55,17 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void update_on_conflict(const variable var) noexcept
         {
+            auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept {
+                return entry.first == var;
+            });
+            if (it == scores_.end())
+            {
+                scores_.emplace_back(var, 0.5);
+            }
+            else
+            {
+                it->second += 0.5;
+            }
         }
 
         /// @brief Returns the current CHB score for a variable.
@@ -48,13 +74,33 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         double score_of(const variable var) const noexcept
         {
-            return {};
+            const auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept {
+                return entry.first == var;
+            });
+            if (it == scores_.end())
+            {
+                return 0.0;
+            }
+            return it->second;
         }
 
         /// @brief Applies one decay step to all scores, reducing the weight of older conflict participation.
         /// @throws None (noexcept).
         void decay_step() noexcept
         {
+            for (auto& entry : scores_)
+            {
+                entry.second *= 0.5;
+            }
         }
+
+        /// @brief Returns the number of tracked variables with a non-zero CHB score.
+        /// @return Number of tracked variables.
+        std::size_t tracked_variable_count() const noexcept
+        {
+            return scores_.size();
+        }
+    private:
+        std::vector<std::pair<variable, double>> scores_ {};
     };
 }

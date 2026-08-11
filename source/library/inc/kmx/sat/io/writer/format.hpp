@@ -4,6 +4,7 @@
 #pragma once
 #ifndef PCH
     #include <span>
+    #include <string>
     #include <string_view>
 #endif
 #include <kmx/sat/literal.hpp>
@@ -12,6 +13,7 @@ namespace kmx::sat::io::writer
 {
     /// @brief Text/binary serialization for proof and reporting.
     ///
+    /// @details
     /// `writer::format` is the shared low-level text/binary serialization primitive used by both the proof output
     /// path and human-facing reporting: `write_clause` serializes a literal span in the encoding a given proof format
     /// tracer requires; `write_report_line` writes a formatted diagnostic/progress line (used by
@@ -30,12 +32,22 @@ namespace kmx::sat::io::writer
         /// @throws None (noexcept).
         void write_clause(const std::span<const literal> clause) noexcept
         {
+            for (const auto lit : clause)
+            {
+                const auto signed_value = lit.is_negated() ?
+                    -static_cast<int>(lit.variable_of().index()) :
+                    static_cast<int>(lit.variable_of().index());
+                buffer_.append(std::to_string(signed_value));
+                buffer_.push_back(' ');
+            }
+            buffer_.append("0\n");
         }
 
         /// @brief Serializes a statistics snapshot to the output target.
         /// @throws None (noexcept).
         void write_statistics() noexcept
         {
+            buffer_.append("statistics\n");
         }
 
         /// @brief Writes one formatted diagnostic/progress report line.
@@ -43,12 +55,36 @@ namespace kmx::sat::io::writer
         /// @throws None (noexcept).
         void write_report_line(const std::string_view line) noexcept
         {
+            buffer_.append(line.begin(), line.end());
+            if (buffer_.empty() || buffer_.back() != '\n')
+            {
+                buffer_.push_back('\n');
+            }
         }
 
         /// @brief Writes one already-assembled proof record (add/delete/shrink) to the output target.
         /// @throws None (noexcept).
         void write_proof_record() noexcept
         {
+            buffer_.append("proof-record\n");
         }
+
+        /// @brief Clears the currently accumulated serialized output.
+        /// @throws None (noexcept).
+        void clear() noexcept
+        {
+            buffer_.clear();
+        }
+
+        /// @brief Exposes the accumulated serialized output.
+        /// @return Current serialized output buffer.
+        /// @throws None (noexcept).
+        std::string_view buffer_view() const noexcept
+        {
+            return buffer_;
+        }
+
+    private:
+        std::string buffer_ {};
     };
 }

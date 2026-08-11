@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <sstream>
     #include <string>
 #endif
 #include <kmx/sat/telemetry/profile_clock.hpp>
@@ -12,6 +13,7 @@ namespace kmx::sat::telemetry
 {
     /// @brief Reporting output and benchmark harness compatibility.
     ///
+    /// @details
     /// `report_formatter` renders `solver_statistics::snapshot`/`profile_clock`/`memory_governor` data into the
     /// human- and tool-readable text lines expected by SAT competition/benchmark tooling and interactive use:
     /// `format_statistics_line` renders one statistics snapshot as a single reporting line;
@@ -32,7 +34,13 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         std::string format_statistics_line(const solver_statistics::snapshot& snapshot) const noexcept
         {
-            return {};
+            std::ostringstream stream;
+            stream << "conflicts=" << snapshot.conflicts
+                   << " decisions=" << snapshot.decisions
+                   << " propagations=" << snapshot.propagations
+                   << " restarts=" << snapshot.restarts
+                   << " learned_clauses=" << snapshot.learned_clauses;
+            return stream.str();
         }
 
         /// @brief Renders current resource usage (time, memory) as one formatted reporting line.
@@ -40,7 +48,10 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         std::string format_resource_line() const noexcept
         {
-            return {};
+            std::ostringstream stream;
+            stream << "time=" << profile_clock_.current_wall_time()
+                   << "ms cpu=" << profile_clock_.current_process_time() << "ms";
+            return stream.str();
         }
 
         /// @brief Renders a short progress indicator for interactive/CI consumption.
@@ -48,7 +59,18 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         std::string format_progress() const noexcept
         {
-            return {};
+            ++progress_steps_;
+            return "progress: step " + std::to_string(progress_steps_) + " of " + std::to_string(total_steps_);
         }
+
+        std::size_t progress_steps() const noexcept
+        {
+            return progress_steps_;
+        }
+
+    private:
+        mutable profile_clock profile_clock_ {};
+        mutable std::size_t progress_steps_ {0u};
+        mutable std::size_t total_steps_ {10u};
     };
 }

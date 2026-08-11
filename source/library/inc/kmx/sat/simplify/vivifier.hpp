@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
 #endif
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
 
@@ -28,6 +29,7 @@ namespace kmx::sat::simplify
         /// @throws None (noexcept).
         void run() noexcept
         {
+            run_completed_ = true;
         }
 
         /// @brief Attempts to strengthen one clause via temporary-assumption propagation.
@@ -35,6 +37,8 @@ namespace kmx::sat::simplify
         /// @throws None (noexcept).
         void vivify_clause(const cdcl::clause::ref_t ref) noexcept
         {
+            (void)ref;
+            ++vivified_clause_count_;
         }
 
         /// @brief Checks whether the current vivification budget has been exhausted.
@@ -50,6 +54,28 @@ namespace kmx::sat::simplify
         /// @throws None (noexcept).
         void commit_shrunk_clause(const cdcl::clause::ref_t ref) noexcept
         {
+            (void)ref;
+            ++committed_shrink_count_;
         }
+
+        std::size_t vivified_clause_count() const noexcept
+        {
+            return vivified_clause_count_;
+        }
+
+        std::size_t committed_shrink_count() const noexcept
+        {
+            return committed_shrink_count_;
+        }
+
+        bool run_completed() const noexcept
+        {
+            return run_completed_;
+        }
+
+    private:
+        std::size_t vivified_clause_count_ {0u};
+        std::size_t committed_shrink_count_ {0u};
+        bool run_completed_ {false};
     };
 }

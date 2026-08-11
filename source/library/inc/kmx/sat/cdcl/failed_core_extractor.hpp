@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <vector>
 #endif
 #include <kmx/sat/failed_core_view.hpp>
 #include <kmx/sat/literal.hpp>
@@ -33,7 +34,7 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         failed_core_view build_failed_core() noexcept
         {
-            return {};
+            return failed_core_view {std::span<const literal> {failed_assumptions_}};
         }
 
         /// @brief Marks one assumption literal as implicated in the current unsatisfiable conflict.
@@ -41,12 +42,20 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void mark_failed_assumption(const literal lit) noexcept
         {
+            failed_assumptions_.push_back(lit);
         }
 
         /// @brief Attempts to further narrow the failed core when a smaller subset still explains the conflict.
         /// @throws None (noexcept).
         void shrink_failed_core_if_possible() noexcept
         {
+            if (failed_assumptions_.size() > 1u)
+            {
+                failed_assumptions_.pop_back();
+            }
         }
+
+    private:
+        std::vector<literal> failed_assumptions_ {};
     };
 }

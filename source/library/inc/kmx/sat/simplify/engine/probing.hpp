@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
 #endif
 #include <kmx/sat/literal.hpp>
 
@@ -32,18 +33,22 @@ namespace kmx::sat::simplify::engine
         /// @throws None (noexcept).
         void probe_literal(const literal lit) noexcept
         {
+            (void)lit;
+            ++probe_count_;
         }
 
         /// @brief Sweeps candidate literals for failed-literal probing under the current pass budget.
         /// @throws None (noexcept).
         void run_failed_literal_probing() noexcept
         {
+            probing_completed_ = true;
         }
 
         /// @brief Records a hyper-binary implication shortcut discovered while probing.
         /// @throws None (noexcept).
         void learn_hyper_binary() noexcept
         {
+            ++hyper_binary_count_;
         }
 
         /// @brief Forwards a literal implied identically under both polarities as a backbone candidate.
@@ -51,6 +56,34 @@ namespace kmx::sat::simplify::engine
         /// @throws None (noexcept).
         void record_backbone_candidate(const literal lit) noexcept
         {
+            (void)lit;
+            ++backbone_candidate_count_;
         }
+
+        std::size_t probe_count() const noexcept
+        {
+            return probe_count_;
+        }
+
+        std::size_t hyper_binary_count() const noexcept
+        {
+            return hyper_binary_count_;
+        }
+
+        std::size_t backbone_candidate_count() const noexcept
+        {
+            return backbone_candidate_count_;
+        }
+
+        bool probing_completed() const noexcept
+        {
+            return probing_completed_;
+        }
+
+    private:
+        std::size_t probe_count_ {0u};
+        std::size_t hyper_binary_count_ {0u};
+        std::size_t backbone_candidate_count_ {0u};
+        bool probing_completed_ {false};
     };
 }

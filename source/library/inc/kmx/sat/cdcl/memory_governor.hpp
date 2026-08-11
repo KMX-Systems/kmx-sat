@@ -6,6 +6,8 @@
     #include <cstddef>
 #endif
 
+#include <limits>
+
 namespace kmx::sat::cdcl
 {
     /// @brief Single authority for tracking and enforcing memory ceilings across all clause, index, and
@@ -38,6 +40,13 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void register_budget(const std::size_t soft_ceiling_bytes, const std::size_t hard_ceiling_bytes) noexcept
         {
+            soft_ceiling_bytes_ = soft_ceiling_bytes;
+            hard_ceiling_bytes_ = hard_ceiling_bytes;
+            current_usage_ = 0u;
+            soft_limit_breached_ = false;
+            hard_limit_breached_ = false;
+            shrink_requests_ = 0u;
+            escalation_steps_ = 0u;
         }
 
         /// @brief Returns the current tracked memory usage across every registered category.
@@ -45,7 +54,7 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         std::size_t current_usage() const noexcept
         {
-            return {};
+            return current_usage_;
         }
 
         /// @brief Checks whether current usage has crossed the registered soft ceiling.
@@ -53,7 +62,7 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         bool soft_limit_breached() const noexcept
         {
-            return false;
+            return soft_limit_breached_;
         }
 
         /// @brief Checks whether current usage has crossed the registered hard ceiling.
@@ -61,25 +70,69 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         bool hard_limit_breached() const noexcept
         {
-            return false;
+            return hard_limit_breached_;
         }
 
         /// @brief Requests that dependent subsystems shed memory (reduce, flush, disable heavy passes).
         /// @throws None (noexcept).
         void request_shrink() noexcept
         {
+            ++shrink_requests_;
+            if (current_usage_ >= soft_ceiling_bytes_)
+            {
+                soft_limit_breached_ = true;
+            }
+            if (current_usage_ >= hard_ceiling_bytes_)
+            {
+                hard_limit_breached_ = true;
+            }
         }
 
         /// @brief Advances to the next stage of the soft/hard escalation ladder.
         /// @throws None (noexcept).
         void escalate_policy() noexcept
         {
+            ++escalation_steps_;
+            if (current_usage_ >= soft_ceiling_bytes_)
+            {
+                soft_limit_breached_ = true;
+            }
+            if (current_usage_ >= hard_ceiling_bytes_)
+            {
+                hard_limit_breached_ = true;
+            }
         }
 
         /// @brief Resets per-epoch usage accounting at the start of a new solve epoch.
         /// @throws None (noexcept).
         void reset_epoch_usage() noexcept
         {
+            current_usage_ = 0u;
+            soft_limit_breached_ = false;
+            hard_limit_breached_ = false;
         }
+
+        /// @brief Returns how many shrink requests were made.
+        /// @return Number of shrink requests.
+        std::size_t shrink_requests() const noexcept
+        {
+            return shrink_requests_;
+        }
+
+        /// @brief Returns how many escalation steps were recorded.
+        /// @return Number of escalation steps.
+        std::size_t escalation_steps() const noexcept
+        {
+            return escalation_steps_;
+        }
+
+    private:
+        std::size_t current_usage_ = 0u;
+        std::size_t soft_ceiling_bytes_ = std::numeric_limits<std::size_t>::max();
+        std::size_t hard_ceiling_bytes_ = std::numeric_limits<std::size_t>::max();
+        bool soft_limit_breached_ = false;
+        bool hard_limit_breached_ = false;
+        std::size_t shrink_requests_ = 0u;
+        std::size_t escalation_steps_ = 0u;
     };
 }

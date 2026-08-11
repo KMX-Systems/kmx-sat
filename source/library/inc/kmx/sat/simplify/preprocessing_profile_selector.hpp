@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
 #endif
 #include <kmx/sat/simplify/extractor/gate.hpp>
 #include <kmx/sat/simplify/scheduler/preprocess.hpp>
@@ -33,24 +34,54 @@ namespace kmx::sat::simplify
         /// @throws None (noexcept).
         void fingerprint_formula() noexcept
         {
+            ++fingerprint_count_;
         }
 
         /// @brief Selects and orders which preprocessing passes should run for this formula's fingerprint.
         /// @throws None (noexcept).
         void select_pass_plan() noexcept
         {
+            ++pass_plan_count_;
         }
 
         /// @brief Records the actual yield of a pass to refine future selection decisions.
         /// @throws None (noexcept).
         void record_pass_effectiveness() noexcept
         {
+            ++effectiveness_count_;
         }
 
         /// @brief Updates the underlying selection policy from accumulated pass-effectiveness history.
         /// @throws None (noexcept).
         void update_selection_policy() noexcept
         {
+            ++policy_update_count_;
         }
+
+        std::size_t fingerprint_count() const noexcept
+        {
+            return fingerprint_count_;
+        }
+
+        std::size_t pass_plan_count() const noexcept
+        {
+            return pass_plan_count_;
+        }
+
+        std::size_t effectiveness_count() const noexcept
+        {
+            return effectiveness_count_;
+        }
+
+        std::size_t policy_update_count() const noexcept
+        {
+            return policy_update_count_;
+        }
+
+    private:
+        std::size_t fingerprint_count_ {0u};
+        std::size_t pass_plan_count_ {0u};
+        std::size_t effectiveness_count_ {0u};
+        std::size_t policy_update_count_ {0u};
     };
 }

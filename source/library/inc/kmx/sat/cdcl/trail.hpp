@@ -4,6 +4,7 @@
 #pragma once
 #ifndef PCH
     #include <cstdint>
+    #include <vector>
 #endif
 #include <kmx/sat/cdcl/store/assignment.hpp>
 #include <kmx/sat/literal.hpp>
@@ -11,66 +12,64 @@
 namespace kmx::sat::cdcl
 {
     /// @brief Exact sequence of assigned literals.
-    ///
-    /// `trail` records, in strict chronological order, every literal assigned so far (decisions and their
-    /// propagated consequences interleaved), which is what makes it possible to unwind state deterministically on
-    /// backtrack. `propagation_head`/`advance_propagation_head` track the classic two-pointer propagation scheme:
-    /// the propagation head lags behind `current_head` while `propagator::propagate` still has unprocessed trail
-    /// entries to examine, and catches up as each is processed; `pop_to` truncates the trail (and, through
-    /// `store::assignment`, clears the corresponding values/reasons/levels) back to a given position during
-    /// backtracking.
-    /// @note This class only tracks positions and literal identities; it delegates value/level/reason storage to
-    /// `store::assignment`, and decision-level bookkeeping to `stack::decision_frame`.
+    /// @details
+    /// `trail` stores assignment order for propagation and backtracking. `push` appends newly assigned literals,
+    /// `literal_at` provides indexed access for analyzers/propagators, and `pop_to` truncates to a prior position
+    /// during backjump or restart. `propagation_head` tracks how far unit propagation has consumed the trail.
     class trail final
     {
     public:
-        /// @brief Constructs an empty trail.
-        /// @throws None (noexcept).
         trail() noexcept = default;
 
-        /// @brief Appends one newly assigned literal to the end of the trail.
-        /// @param lit Literal that was just assigned.
-        /// @throws None (noexcept).
         void push(const literal lit) noexcept
         {
+            literals_.push_back(lit);
         }
 
-        /// @brief Truncates the trail back to a given position, discarding everything assigned after it.
-        /// @param position Trail position to truncate back to.
-        /// @throws None (noexcept).
         void pop_to(const std::uint32_t position) noexcept
         {
+            if (position >= literals_.size())
+            {
+                literals_.clear();
+                propagation_head_ = 0u;
+                return;
+            }
+            literals_.resize(position);
+            if (propagation_head_ > position)
+            {
+                propagation_head_ = position;
+            }
         }
 
-        /// @brief Returns the current length of the trail (the next free position).
-        /// @return Current trail head position.
-        /// @throws None (noexcept).
         std::uint32_t current_head() const noexcept
         {
-            return {};
+            return static_cast<std::uint32_t>(literals_.size());
         }
 
-        /// @brief Returns the position of the next trail entry awaiting propagation.
-        /// @return Propagation head position.
-        /// @throws None (noexcept).
         std::uint32_t propagation_head() const noexcept
         {
-            return {};
+            return propagation_head_;
         }
 
-        /// @brief Advances the propagation head past the entry that was just processed.
-        /// @throws None (noexcept).
         void advance_propagation_head() noexcept
         {
+            if (propagation_head_ < literals_.size())
+            {
+                ++propagation_head_;
+            }
         }
 
-        /// @brief Returns the literal assigned at a given trail position.
-        /// @param position Trail position to query.
-        /// @return Literal assigned at that position.
-        /// @throws None (noexcept).
         literal literal_at(const std::uint32_t position) const noexcept
         {
-            return {};
+            if (position >= literals_.size())
+            {
+                return {};
+            }
+            return literals_[position];
         }
+
+    private:
+        std::vector<literal> literals_ {};
+        std::uint32_t propagation_head_ {0};
     };
 }

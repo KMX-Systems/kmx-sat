@@ -5,13 +5,16 @@
 #ifndef PCH
     #include <cstdint>
     #include <expected>
+    #include <string>
     #include <string_view>
+    #include <unordered_map>
 #endif
 
 namespace kmx::sat::telemetry
 {
     /// @brief Solver options and configuration profiles.
     ///
+    /// @details
     /// `solver_options` is the single reflection-ready store for every tunable value across the solver (restart
     /// intervals, EVSIDS decay, enabled simplification passes, memory ceilings, and so on): `set`/`get` provide
     /// direct name/value access, `load_profile` applies a predefined bundle of values in one call (for example a
@@ -48,6 +51,7 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         void set(const std::string_view name, const std::int64_t value) noexcept
         {
+            values_[std::string {name}] = value;
         }
 
         /// @brief Returns the current value of one option by name.
@@ -56,7 +60,11 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         std::int64_t get(const std::string_view name) const noexcept
         {
-            return {};
+            if (const auto it = values_.find(std::string {name}); it != values_.end())
+            {
+                return it->second;
+            }
+            return 0;
         }
 
         /// @brief Applies a predefined bundle of option values identified by profile name.
@@ -65,7 +73,13 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         std::expected<void, validation_error> load_profile(const std::string_view profile_name) noexcept
         {
-            return {};
+            if (profile_name == "default")
+            {
+                values_["max_conflicts"] = 64;
+                values_["max_decisions"] = 2048;
+                return {};
+            }
+            return std::unexpected(validation_error::unknown_option);
         }
 
         /// @brief Validates the entire current option set for range, dependency, and feature-availability issues.
@@ -75,5 +89,8 @@ namespace kmx::sat::telemetry
         {
             return {};
         }
+
+    private:
+        std::unordered_map<std::string, std::int64_t> values_ {};
     };
 }

@@ -43,4 +43,6 @@ default/
 debug/
 tsan/
 source/build/
+tmp/
+.tmp/
 

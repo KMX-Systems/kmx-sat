@@ -11,6 +11,7 @@ namespace kmx::sat
 {
     /// @brief Strong wrapper for a variable index; removes raw integer usage from the public hot path.
     ///
+    /// @details
     /// `variable` is a zero-cost, `constexpr`/`noexcept` strong index type used everywhere a raw integer variable
     /// number would otherwise be passed by value (clause construction, `literal` encoding, `variable_mapper`
     /// lookups, heuristic banks such as `vmtf_queue`/`evsids_heap`). Distinguishing it from `literal` at the type

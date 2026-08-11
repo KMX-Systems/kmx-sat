@@ -10,6 +10,7 @@ namespace kmx::sat::cdcl::controller
 {
     /// @brief Reluctant doubling, conflict intervals, and EMA-based triggers.
     ///
+    /// @details
     /// `controller::restart` decides when `search_coordinator::handle_restart` should unwind the trail back to
     /// decision level zero and let `engine::decision` branch afresh, a key CDCL technique for escaping
     /// heavy-tailed runtimes on hard instances. `tick_conflict`/`tick_decision` advance internal counters used by two
@@ -31,25 +32,55 @@ namespace kmx::sat::cdcl::controller
         /// @throws None (noexcept).
         bool should_restart() const noexcept
         {
-            return false;
+            return restart_pending_;
+        }
+
+        /// @brief Returns whether a restart is currently pending for the next coordination step.
+        /// @return True if a restart has been requested or a scheduled trigger fired.
+        [[nodiscard]] bool has_pending_restart() const noexcept
+        {
+            return restart_pending_;
         }
 
         /// @brief Advances restart bookkeeping by one conflict.
         /// @throws None (noexcept).
         void tick_conflict() noexcept
         {
+            ++conflict_count_;
+
+            if (restart_interval_ == 0)
+            {
+                return;
+            }
+
+            if (conflict_count_ >= next_scheduled_restart_at_)
+            {
+                restart_pending_ = true;
+                next_scheduled_restart_at_ = conflict_count_ + restart_interval_;
+            }
         }
 
         /// @brief Advances restart bookkeeping by one decision.
         /// @throws None (noexcept).
         void tick_decision() noexcept
         {
+            ++decision_count_;
         }
 
         /// @brief Resynchronizes restart counters after an inprocessing epoch changes the clause set.
         /// @throws None (noexcept).
         void reset_after_inprocess() noexcept
         {
+            if (restart_pending_)
+            {
+                ++restart_count_;
+            }
+            restart_pending_ = false;
+
+            if (restart_interval_ != 0)
+            {
+                next_scheduled_restart_at_ = conflict_count_ + restart_interval_;
+            }
         }
 
         /// @brief Returns the remaining conflict budget before the next scheduled restart.
@@ -57,7 +88,70 @@ namespace kmx::sat::cdcl::controller
         /// @throws None (noexcept).
         std::uint64_t current_restart_budget() const noexcept
         {
-            return {};
+            if (restart_interval_ == 0)
+            {
+                return 0;
+            }
+
+            if (restart_pending_)
+            {
+                return 0;
+            }
+
+            if (conflict_count_ >= next_scheduled_restart_at_)
+            {
+                return 0;
+            }
+
+            return next_scheduled_restart_at_ - conflict_count_;
         }
+
+        /// @brief Forces `should_restart` to fire until the next `reset_after_inprocess`.
+        /// @throws None (noexcept).
+        void request_restart() noexcept
+        {
+            restart_pending_ = true;
+        }
+
+        /// @brief Sets the periodic conflict interval used for scheduled restart triggers.
+        /// @param interval Number of conflicts between scheduled restart opportunities (zero disables schedule).
+        /// @throws None (noexcept).
+        void set_restart_interval(const std::uint64_t interval) noexcept
+        {
+            restart_interval_ = interval;
+            next_scheduled_restart_at_ = conflict_count_ + restart_interval_;
+        }
+
+        /// @brief Returns how many conflicts have been observed by this controller.
+        /// @return Total conflict count.
+        /// @throws None (noexcept).
+        std::uint64_t conflict_count() const noexcept
+        {
+            return conflict_count_;
+        }
+
+        /// @brief Returns how many decisions have been observed by this controller.
+        /// @return Total decision count.
+        /// @throws None (noexcept).
+        std::uint64_t decision_count() const noexcept
+        {
+            return decision_count_;
+        }
+
+        /// @brief Returns how many restarts have been performed.
+        /// @return Total restart count.
+        /// @throws None (noexcept).
+        std::uint64_t restart_count() const noexcept
+        {
+            return restart_count_;
+        }
+
+    private:
+        std::uint64_t conflict_count_ {0};
+        std::uint64_t decision_count_ {0};
+        std::uint64_t restart_count_ {0};
+        std::uint64_t restart_interval_ {0};
+        std::uint64_t next_scheduled_restart_at_ {0};
+        bool restart_pending_ {false};
     };
 }

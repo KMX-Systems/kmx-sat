@@ -33,12 +33,17 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void record_epoch_outcome() noexcept
         {
+            if (trail_reuse_depth_ < max_depth_)
+            {
+                ++trail_reuse_depth_;
+            }
         }
 
         /// @brief Proposes an assumption ordering for the next episode that favors trail-prefix reuse.
         /// @throws None (noexcept).
         void suggest_assumption_order() noexcept
         {
+            has_suggested_order_ = true;
         }
 
         /// @brief Suggests how many trail levels may safely be reused rather than unwound for the next episode.
@@ -46,13 +51,27 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         std::uint32_t suggest_trail_reuse_depth() const noexcept
         {
-            return {};
+            return trail_reuse_depth_;
+        }
+
+        /// @brief Returns whether the advisor has already suggested an assumption ordering for the current session.
+        /// @return True when a suggestion has been issued.
+        /// @throws None (noexcept).
+        bool has_suggested_order() const noexcept
+        {
+            return has_suggested_order_;
         }
 
         /// @brief Discards all learned ordering/reuse history, for example after a full session reset.
         /// @throws None (noexcept).
         void reset_history() noexcept
         {
+            trail_reuse_depth_ = 0u;
+            has_suggested_order_ = false;
         }
+    private:
+        std::uint32_t trail_reuse_depth_ {0u};
+        std::uint32_t max_depth_ {4u};
+        bool has_suggested_order_ {false};
     };
 }

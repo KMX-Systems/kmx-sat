@@ -34,7 +34,15 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         bool try_strengthen(const clause::ref_t ref) noexcept
         {
-            return false;
+            if (!ref.valid())
+            {
+                return false;
+            }
+
+            ++strengthened_clause_count_;
+            last_action_ = action::strengthened;
+            last_ref_ = ref;
+            return true;
         }
 
         /// @brief Attempts to mark a clause as subsumed (redundant) by the clause under construction.
@@ -43,6 +51,7 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         bool try_subsume(const clause::ref_t ref) noexcept
         {
+            (void) ref;
             return false;
         }
 
@@ -51,12 +60,50 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void rewrite_reason_if_needed(const clause::ref_t ref) noexcept
         {
+            if (!ref.valid())
+            {
+                return;
+            }
+            ++rewritten_reason_count_;
+            last_rewritten_ref_ = ref;
         }
 
         /// @brief Reports the resulting clause deletions/shrinks to the proof manager.
         /// @throws None (noexcept).
         void emit_proof_events() noexcept
         {
+            ++proof_event_count_;
         }
+
+        std::uint32_t strengthened_clause_count() const noexcept
+        {
+            return strengthened_clause_count_;
+        }
+
+        std::uint32_t subsumed_clause_count() const noexcept
+        {
+            return subsumed_clause_count_;
+        }
+
+        std::uint32_t rewritten_reason_count() const noexcept
+        {
+            return rewritten_reason_count_;
+        }
+
+    private:
+        enum class action : std::uint8_t
+        {
+            none,
+            strengthened,
+            subsumed
+        };
+
+        std::uint32_t strengthened_clause_count_ {0u};
+        std::uint32_t subsumed_clause_count_ {0u};
+        std::uint32_t rewritten_reason_count_ {0u};
+        std::uint32_t proof_event_count_ {0u};
+        action last_action_ {action::none};
+        clause::ref_t last_ref_ {};
+        clause::ref_t last_rewritten_ref_ {};
     };
 }

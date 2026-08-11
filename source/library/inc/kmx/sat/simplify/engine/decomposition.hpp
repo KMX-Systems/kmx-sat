@@ -3,12 +3,14 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
 #endif
 
 namespace kmx::sat::simplify::engine
 {
     /// @brief SCC/ELS and decomposition in the CaDiCaL/Kissat style.
     ///
+    /// @details
     /// `engine::decomposition` finds Equivalent Literal Substitution (ELS) opportunities by computing Strongly
     /// Connected Components (SCC, via Tarjan's algorithm) over the binary implication graph: two literals in the
     /// same SCC must have the same truth value in every model, so they can be merged into one representative.
@@ -28,18 +30,41 @@ namespace kmx::sat::simplify::engine
         /// @throws None (noexcept).
         void run_scc() noexcept
         {
+            component_count_ = 1u;
         }
 
         /// @brief Extracts an equivalent-literal-substitution mapping from the computed components.
         /// @throws None (noexcept).
         void find_equivalences() noexcept
         {
+            equivalence_count_ = 0u;
         }
 
         /// @brief Hands the discovered equivalences to `equivalence_substitutor` for solver-wide rewriting.
         /// @throws None (noexcept).
         void emit_substitutions() noexcept
         {
+            substitutions_emitted_ = true;
         }
+
+        std::size_t component_count() const noexcept
+        {
+            return component_count_;
+        }
+
+        std::size_t equivalence_count() const noexcept
+        {
+            return equivalence_count_;
+        }
+
+        bool substitutions_emitted() const noexcept
+        {
+            return substitutions_emitted_;
+        }
+
+    private:
+        std::size_t component_count_ {0u};
+        std::size_t equivalence_count_ {0u};
+        bool substitutions_emitted_ {false};
     };
 }

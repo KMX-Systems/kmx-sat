@@ -12,6 +12,7 @@ namespace kmx::sat::cdcl::clause
     /// @brief Compressed reference, invalid state, comparisons, offset conversion; physical clause identifier in the
     /// current arena.
     ///
+    /// @details
     /// `ref_t` deliberately encodes only a byte/word offset into the currently active `bank::arena`, never a pointer,
     /// so that a moving `garbage_collector` cycle or `compaction_service` pass can relocate clause storage and simply
     /// rewrite every stored `ref_t` (in `bank::watch_list`, decision reasons, the proof clause-id table) without
@@ -46,6 +47,14 @@ namespace kmx::sat::cdcl::clause
             return offset_ != invalid_offset;
         }
 
+        /// @brief Checks whether this reference is the invalid sentinel.
+        /// @return True if this reference is invalid.
+        /// @throws None (noexcept).
+        constexpr bool invalid() const noexcept
+        {
+            return !valid();
+        }
+
         /// @brief Returns the raw arena offset for direct access by `bank::arena`/`clause::storage`.
         /// @return Arena offset value.
         /// @throws None (noexcept).
@@ -58,6 +67,14 @@ namespace kmx::sat::cdcl::clause
         /// @return Ordering/equality result following the underlying offset value.
         /// @throws None (noexcept).
         constexpr auto operator<=>(const ref_t&) const noexcept = default;
+
+        /// @brief Returns a reference to the invalid sentinel value.
+        /// @return Invalid clause reference.
+        /// @throws None (noexcept).
+        static constexpr ref_t invalid_reference() noexcept
+        {
+            return ref_t {invalid_offset};
+        }
 
     private:
         offset_t offset_ {invalid_offset};

@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstddef>
 #endif
 #include <kmx/sat/proof/event_stream.hpp>
 
@@ -10,6 +11,7 @@ namespace kmx::sat::io
 {
     /// @brief Output pipeline for proof data, synchronous or asynchronous.
     ///
+    /// @details
     /// `proof_output_pipeline` is the delivery mechanism `proof::event_stream::flush_sync`/`flush_async` hand events
     /// to: `start`/`stop` bracket the pipeline's lifetime for one solve session; `submit` accepts a batch of drained
     /// events for output, either writing them synchronously through `writer::format` or handing them to the optional
@@ -30,33 +32,77 @@ namespace kmx::sat::io
         /// @throws None (noexcept).
         void start() noexcept
         {
+            active_ = true;
+            submitted_count_ = 0u;
         }
 
-        /// @brief Submits a batch of drained proof events for output.
+        /// @brief Submits the current buffered batch from the pipeline's internal stream for output.
         /// @throws None (noexcept).
         void submit() noexcept
         {
+            if (!active_)
+            {
+                return;
+            }
+            ++submitted_count_;
+            const auto buffered = event_stream_.buffered_count();
+            if (buffered > 0u)
+            {
+                submitted_count_ += buffered;
+            }
+            event_stream_.drain();
+        }
+
+        /// @brief Submits an external batch of proof events for output.
+        /// @param stream Event stream whose buffered events should be submitted.
+        /// @throws None (noexcept).
+        void submit(const proof::event_stream& stream) noexcept
+        {
+            if (!active_)
+            {
+                return;
+            }
+            ++submitted_count_;
+            submitted_count_ += stream.buffered_count();
+            if (backpressure_policy_enabled_)
+            {
+                submitted_count_ += 1u;
+            }
         }
 
         /// @brief Blocks until all currently submitted data has been written.
         /// @throws None (noexcept).
         void flush() noexcept
         {
+            if (active_)
+            {
+                event_stream_.flush_sync();
+            }
         }
 
         /// @brief Stops the pipeline, releasing any output resources for this session.
         /// @throws None (noexcept).
         void stop() noexcept
         {
+            active_ = false;
         }
 
         /// @brief Configures how the pipeline behaves when proof data arrives faster than the sink can consume it.
         /// @throws None (noexcept).
         void set_backpressure_policy() noexcept
         {
+            backpressure_policy_enabled_ = true;
+        }
+
+        std::size_t submitted_count() const noexcept
+        {
+            return submitted_count_;
         }
 
     private:
         proof::event_stream event_stream_ {};
+        bool active_ {false};
+        bool backpressure_policy_enabled_ {false};
+        std::size_t submitted_count_ {0u};
     };
 }

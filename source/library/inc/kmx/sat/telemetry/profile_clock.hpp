@@ -3,14 +3,20 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <chrono>
     #include <cstdint>
+    #include <ctime>
+    #include <string>
     #include <string_view>
+    #include <utility>
+    #include <vector>
 #endif
 
 namespace kmx::sat::telemetry
 {
     /// @brief Phase profiling and predictable accounting.
     ///
+    /// @details
     /// `profile_clock` measures wall-clock and process (CPU) time spent in named phases (parsing, preprocessing,
     /// search, proof checking) so `report_formatter`/`solver_statistics` can attribute time accurately and so the
     /// comparative benchmarking harness can compare phase-level timing against pinned CaDiCaL/Kissat releases.
@@ -29,6 +35,7 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         void start_phase(const std::string_view phase_name) noexcept
         {
+            active_phases_.push_back({std::string {phase_name}, std::chrono::steady_clock::now(), std::clock()});
         }
 
         /// @brief Stops timing a named phase, accumulating its elapsed time.
@@ -36,6 +43,23 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         void stop_phase(const std::string_view phase_name) noexcept
         {
+            for (auto it = active_phases_.rbegin(); it != active_phases_.rend(); ++it)
+            {
+                if (it->name == phase_name)
+                {
+                    const auto wall_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - it->wall_start);
+                    const auto process_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - it->wall_start);
+                    const auto wall_ticks = std::max<std::int64_t>(1, wall_elapsed_ms.count());
+                    const auto process_ticks = std::max<std::int64_t>(1, process_elapsed_ms.count());
+
+                    cumulative_wall_time_ += static_cast<std::uint64_t>(wall_ticks);
+                    cumulative_process_time_ += static_cast<std::uint64_t>(process_ticks);
+                    active_phases_.erase(std::next(it).base());
+                    break;
+                }
+            }
         }
 
         /// @brief Returns the cumulative process (CPU) time consumed so far.
@@ -43,7 +67,7 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         std::uint64_t current_process_time() const noexcept
         {
-            return {};
+            return cumulative_process_time_;
         }
 
         /// @brief Returns the cumulative wall-clock time elapsed so far.
@@ -51,7 +75,24 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         std::uint64_t current_wall_time() const noexcept
         {
-            return {};
+            return cumulative_wall_time_;
         }
+
+        std::size_t phase_count() const noexcept
+        {
+            return active_phases_.size();
+        }
+
+    private:
+        struct phase_entry
+        {
+            std::string name {};
+            std::chrono::steady_clock::time_point wall_start {};
+            std::clock_t process_start {};
+        };
+
+        std::vector<phase_entry> active_phases_ {};
+        std::uint64_t cumulative_wall_time_ {0u};
+        std::uint64_t cumulative_process_time_ {0u};
     };
 }
