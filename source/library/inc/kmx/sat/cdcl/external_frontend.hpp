@@ -5,6 +5,7 @@
 #ifndef PCH
     #include <cstddef>
     #include <cstdint>
+    #include <span>
     #include <vector>
 #endif
 #include <kmx/sat/cdcl/failed_core_extractor.hpp>
@@ -38,9 +39,7 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         external_frontend() noexcept = default;
 
-        explicit external_frontend(variable_mapper& mapper) noexcept : mapper_ {&mapper}
-        {
-        }
+        explicit external_frontend(variable_mapper& mapper) noexcept: mapper_ {&mapper} {}
 
         /// @brief Translates one caller-supplied (external) literal into its internal representation.
         /// @param lit External literal as supplied through the public `solver` surface.
@@ -95,25 +94,33 @@ namespace kmx::sat::cdcl
         /// @brief Stages one assumption literal for the next solve episode, kept separate from the clause database.
         /// @param lit Assumption literal supplied by the caller.
         /// @throws None (noexcept).
-        void push_assumption(const literal lit) noexcept
-        {
-            assumptions_.push_back(import_external_literal(lit));
-        }
+        void push_assumption(const literal lit) noexcept { assumptions_.push_back(import_external_literal(lit)); }
 
         /// @brief Clears all staged assumptions, for example between unrelated incremental solve calls.
         /// @throws None (noexcept).
-        void clear_assumptions() noexcept
+        void clear_assumptions() noexcept { assumptions_.clear(); }
+
+        /// @brief Stages one normalized clause for the next replay/materialization step.
+        /// @param clause Clause literals supplied by a fixture or other external source.
+        /// @throws None (noexcept).
+        void push_clause(const std::span<const literal> clause) noexcept
         {
-            assumptions_.clear();
+            auto& stored_clause = clauses_.emplace_back();
+            stored_clause.reserve(clause.size());
+            for (const auto lit: clause)
+            {
+                stored_clause.push_back(import_external_literal(lit));
+            }
         }
+
+        /// @brief Clears all staged clauses.
+        /// @throws None (noexcept).
+        void clear_clauses() noexcept { clauses_.clear(); }
 
         /// @brief Returns whether any assumptions are currently staged for the next episode.
         /// @return True when at least one assumption literal is pending.
         /// @throws None (noexcept).
-        bool has_pending_assumptions() const noexcept
-        {
-            return !assumptions_.empty();
-        }
+        bool has_pending_assumptions() const noexcept { return !assumptions_.empty(); }
 
         /// @brief Assembles the validated `solve_request` payload for the upcoming episode from the currently staged
         /// assumptions and mapping state.
@@ -140,10 +147,7 @@ namespace kmx::sat::cdcl
         /// @brief Retrieves the failed-assumptions core after an unsatisfiable episode, delegating to
         /// `failed_core_extractor`.
         /// @throws None (noexcept).
-        void capture_failed_core() noexcept
-        {
-            failed_core_ = failed_core_extractor_.build_failed_core();
-        }
+        void capture_failed_core() noexcept { failed_core_ = failed_core_extractor_.build_failed_core(); }
 
         /// @brief Builds the externally visible model after a satisfiable episode, delegating to
         /// `model_reconstructor` and filtering out internal-only variables.
@@ -165,28 +169,19 @@ namespace kmx::sat::cdcl
             }
         }
 
-        std::vector<literal> assumptions() const noexcept
-        {
-            return assumptions_;
-        }
+        std::vector<literal> assumptions() const noexcept { return assumptions_; }
 
-        solve_request const& prepared_request() const noexcept
-        {
-            return prepare_request_;
-        }
+        std::span<const std::vector<literal>> clauses() const noexcept { return clauses_; }
 
-        failed_core_view failed_core() const noexcept
-        {
-            return failed_core_;
-        }
+        solve_request const& prepared_request() const noexcept { return prepare_request_; }
 
-        model_view current_model_view() const noexcept
-        {
-            return model_view_;
-        }
+        failed_core_view failed_core() const noexcept { return failed_core_; }
+
+        model_view current_model_view() const noexcept { return model_view_; }
 
     private:
         variable_mapper* mapper_ {nullptr};
+        std::vector<std::vector<literal>> clauses_ {};
         std::vector<literal> assumptions_ {};
         solve_request prepare_request_ {};
         failed_core_view failed_core_ {};

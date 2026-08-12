@@ -31,17 +31,12 @@ namespace kmx::sat
         /// @brief Constructs a variable from a raw index value.
         /// @param value Variable index, interpreted relative to the caller's mapping context (external or internal).
         /// @throws None (noexcept).
-        explicit constexpr variable(const index_t value) noexcept : index_ {value}
-        {
-        }
+        explicit constexpr variable(const index_t value) noexcept: index_ {value} {}
 
         /// @brief Returns the underlying raw index.
         /// @return Variable index value.
         /// @throws None (noexcept).
-        constexpr index_t index() const noexcept
-        {
-            return index_;
-        }
+        constexpr index_t index() const noexcept { return index_; }
 
         /// @brief Compares two variables by their raw index.
         /// @return Ordering/equality result following the underlying index value.

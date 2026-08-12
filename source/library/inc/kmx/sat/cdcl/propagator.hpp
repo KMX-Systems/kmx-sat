@@ -7,11 +7,11 @@
     #include <cstddef>
     #include <vector>
 #endif
-#include <kmx/sat/cdcl/store/assignment.hpp>
+#include <kmx/sat/cdcl/bank/watch_list.hpp>
 #include <kmx/sat/cdcl/clause/database.hpp>
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
+#include <kmx/sat/cdcl/store/assignment.hpp>
 #include <kmx/sat/cdcl/trail.hpp>
-#include <kmx/sat/cdcl/bank/watch_list.hpp>
 
 namespace kmx::sat::cdcl
 {
@@ -109,10 +109,7 @@ namespace kmx::sat::cdcl
         /// @brief Selects and registers the initial pair of watched literals for a newly created clause.
         /// @param ref Reference to the clause being attached.
         /// @throws None (noexcept).
-        void attach_clause(const clause::ref_t ref) noexcept
-        {
-            watch_clause(ref);
-        }
+        void attach_clause(const clause::ref_t ref) noexcept { watch_clause(ref); }
 
         /// @brief Stages a conflict to be returned on the next propagation call.
         /// @param ref Reference to the clause to report as conflicting.
@@ -130,64 +127,40 @@ namespace kmx::sat::cdcl
         /// @brief Returns the number of currently watched clauses.
         /// @return Number of watched clause references.
         /// @throws None (noexcept).
-        std::size_t watched_clause_count() const noexcept
-        {
-            return watched_.size();
-        }
+        std::size_t watched_clause_count() const noexcept { return watched_.size(); }
 
         /// @brief Returns whether a clause is currently attached for propagation.
         /// @param ref Reference to the clause to query.
         /// @return True if `ref` is present in the watched-clause set.
-        [[nodiscard]] bool is_attached(const clause::ref_t ref) const noexcept
-        {
-            return is_watched(ref);
-        }
+        [[nodiscard]] bool is_attached(const clause::ref_t ref) const noexcept { return is_watched(ref); }
 
         /// @brief Returns whether there are staged conflicts still pending for the next consume step.
         /// @return True if at least one staged conflict remains queued.
-        [[nodiscard]] bool has_staged_conflicts() const noexcept
-        {
-            return !staged_conflicts_.empty();
-        }
+        [[nodiscard]] bool has_staged_conflicts() const noexcept { return !staged_conflicts_.empty(); }
 
         /// @brief Returns the number of conflicts currently queued for the next propagation step.
         /// @return Number of staged conflicts waiting to be consumed.
-        std::size_t staged_conflict_count() const noexcept
-        {
-            return staged_conflict_count_;
-        }
+        std::size_t staged_conflict_count() const noexcept { return staged_conflict_count_; }
 
         /// @brief Returns the number of main propagation calls performed so far.
         /// @return Number of `propagate` calls.
         /// @throws None (noexcept).
-        std::size_t propagation_call_count() const noexcept
-        {
-            return propagation_call_count_;
-        }
+        std::size_t propagation_call_count() const noexcept { return propagation_call_count_; }
 
         /// @brief Returns the number of assumption propagation calls performed so far.
         /// @return Number of `propagate_assumptions` calls.
         /// @throws None (noexcept).
-        std::size_t assumption_propagation_call_count() const noexcept
-        {
-            return assumption_propagation_call_count_;
-        }
+        std::size_t assumption_propagation_call_count() const noexcept { return assumption_propagation_call_count_; }
 
         /// @brief Returns the number of post-conflict propagation calls performed so far.
         /// @return Number of `propagate_beyond_conflict` calls.
         /// @throws None (noexcept).
-        std::size_t beyond_conflict_propagation_call_count() const noexcept
-        {
-            return beyond_conflict_propagation_call_count_;
-        }
+        std::size_t beyond_conflict_propagation_call_count() const noexcept { return beyond_conflict_propagation_call_count_; }
 
         /// @brief Sets how many assumptions are pending for the next assumption-propagation pass.
         /// @param count Number of assumptions staged for the episode.
         /// @throws None (noexcept).
-        void set_pending_assumption_count(const std::size_t count) noexcept
-        {
-            pending_assumption_count_ = count;
-        }
+        void set_pending_assumption_count(const std::size_t count) noexcept { pending_assumption_count_ = count; }
 
     private:
         bool is_watched(const clause::ref_t ref) const noexcept

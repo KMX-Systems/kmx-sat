@@ -28,17 +28,12 @@ namespace kmx::sat
         /// @brief Constructs a model view from an external-value span.
         /// @param values Read-only span of model literals exported by the solver.
         /// @throws None (noexcept).
-        explicit model_view(const std::span<const literal> values) noexcept : values_ {values}
-        {
-        }
+        explicit model_view(const std::span<const literal> values) noexcept: values_ {values} {}
 
         /// @brief Exposes the underlying model-literal span.
         /// @return Read-only span over model literals.
         /// @throws None (noexcept).
-        std::span<const literal> values() const noexcept
-        {
-            return values_;
-        }
+        std::span<const literal> values() const noexcept { return values_; }
 
     private:
         std::span<const literal> values_ {};

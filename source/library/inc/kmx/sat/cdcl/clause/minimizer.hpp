@@ -9,6 +9,7 @@
     #include <unordered_set>
     #include <vector>
 #endif
+#include <kmx/sat/cdcl/clause/database.hpp>
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
 #include <kmx/sat/cdcl/clause/storage.hpp>
 
@@ -30,10 +31,9 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         minimizer() noexcept = default;
 
-        void attach_storage(storage& storage) noexcept
-        {
-            storage_ = &storage;
-        }
+        void attach_storage(storage& storage) noexcept { storage_ = &storage; }
+
+        void attach_database(database& database) noexcept { database_ = &database; }
 
         /// @brief Removes literals from a learned clause that are implied by its other literals.
         /// @param ref Reference to the learned clause to minimize.
@@ -54,7 +54,7 @@ namespace kmx::sat::cdcl::clause
             std::vector<literal> deduplicated {};
             deduplicated.reserve(literals.size());
             std::unordered_set<literal::raw_t> seen {};
-            for (const auto lit : literals)
+            for (const auto lit: literals)
             {
                 if (seen.insert(lit.raw()).second)
                 {
@@ -113,31 +113,24 @@ namespace kmx::sat::cdcl::clause
             if (glue_.contains(ref.offset()) && glue_.at(ref.offset()) <= 2u)
             {
                 promoted_.insert(ref.offset());
+                if (database_ != nullptr)
+                {
+                    database_->promote_clause(ref);
+                }
             }
         }
 
-        [[nodiscard]] std::uint32_t minimized_clause_count() const noexcept
-        {
-            return static_cast<std::uint32_t>(minimized_.size());
-        }
+        [[nodiscard]] std::uint32_t minimized_clause_count() const noexcept { return static_cast<std::uint32_t>(minimized_.size()); }
 
-        [[nodiscard]] std::uint32_t shrunk_clause_count() const noexcept
-        {
-            return static_cast<std::uint32_t>(shrunk_.size());
-        }
+        [[nodiscard]] std::uint32_t shrunk_clause_count() const noexcept { return static_cast<std::uint32_t>(shrunk_.size()); }
 
-        [[nodiscard]] std::uint32_t promoted_clause_count() const noexcept
-        {
-            return static_cast<std::uint32_t>(promoted_.size());
-        }
+        [[nodiscard]] std::uint32_t promoted_clause_count() const noexcept { return static_cast<std::uint32_t>(promoted_.size()); }
 
-        [[nodiscard]] std::uint32_t last_glue() const noexcept
-        {
-            return last_glue_;
-        }
+        [[nodiscard]] std::uint32_t last_glue() const noexcept { return last_glue_; }
 
     private:
         storage* storage_ {nullptr};
+        database* database_ {nullptr};
         std::unordered_map<ref_t::offset_t, std::uint32_t> glue_ {};
         std::unordered_map<ref_t::offset_t, std::uint32_t> target_sizes_ {};
         std::unordered_set<ref_t::offset_t> minimized_ {};

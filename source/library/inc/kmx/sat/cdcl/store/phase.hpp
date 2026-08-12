@@ -20,25 +20,13 @@ namespace kmx::sat::cdcl::store
     public:
         phase() noexcept = default;
 
-        bool saved_phase(const variable var) const noexcept
-        {
-            return value_at(var, saved_phases_);
-        }
+        bool saved_phase(const variable var) const noexcept { return value_at(var, saved_phases_); }
 
-        bool best_phase(const variable var) const noexcept
-        {
-            return value_at(var, best_phases_);
-        }
+        bool best_phase(const variable var) const noexcept { return value_at(var, best_phases_); }
 
-        bool target_phase(const variable var) const noexcept
-        {
-            return value_at(var, target_phases_);
-        }
+        bool target_phase(const variable var) const noexcept { return value_at(var, target_phases_); }
 
-        void set_saved_phase(const variable var, const bool value) noexcept
-        {
-            set_value(var, value, saved_phases_);
-        }
+        void set_saved_phase(const variable var, const bool value) noexcept { set_value(var, value, saved_phases_); }
 
         void flip_all() noexcept
         {
@@ -56,11 +44,13 @@ namespace kmx::sat::cdcl::store
             }
         }
 
+        /// @brief Returns how many saved-phase slots are currently tracked.
+        /// @return Number of saved-phase entries (including index zero).
+        /// @throws None (noexcept).
+        std::size_t saved_phase_count() const noexcept { return saved_phases_.size(); }
+
     private:
-        static std::size_t index_of(const variable var) noexcept
-        {
-            return static_cast<std::size_t>(var.index());
-        }
+        static std::size_t index_of(const variable var) noexcept { return static_cast<std::size_t>(var.index()); }
 
         static bool value_at(const variable var, const std::vector<std::uint8_t>& storage) noexcept
         {

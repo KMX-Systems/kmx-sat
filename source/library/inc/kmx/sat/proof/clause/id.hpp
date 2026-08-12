@@ -32,34 +32,23 @@ namespace kmx::sat::proof::clause
         /// @brief Constructs a clause identity from a raw allocator-issued value.
         /// @param value Identity value issued by `proof::clause::id_allocator`.
         /// @throws None (noexcept).
-        explicit constexpr id(const value_t value) noexcept : value_ {value}
-        {
-        }
+        explicit constexpr id(const value_t value) noexcept: value_ {value} {}
 
         /// @brief Returns the raw identity value.
         /// @return Underlying 64-bit identity value.
         /// @throws None (noexcept).
-        constexpr value_t value() const noexcept
-        {
-            return value_;
-        }
+        constexpr value_t value() const noexcept { return value_; }
 
         /// @brief Checks whether this identity refers to a real, allocated clause rather than the invalid sentinel.
         /// @return True if this identity is valid.
         /// @throws None (noexcept).
-        constexpr bool valid() const noexcept
-        {
-            return value_ != invalid_value;
-        }
+        constexpr bool valid() const noexcept { return value_ != invalid_value; }
 
         /// @brief Compares this identity for equality against another.
         /// @param other Identity to compare against.
         /// @return True if both identities carry the same raw value.
         /// @throws None (noexcept).
-        constexpr bool equals(const id& other) const noexcept
-        {
-            return value_ == other.value_;
-        }
+        constexpr bool equals(const id& other) const noexcept { return value_ == other.value_; }
 
     private:
         value_t value_ {invalid_value};

@@ -62,12 +62,8 @@ namespace kmx::sat
         /// @param statistics_value Statistics snapshot captured for this episode.
         /// @param proof_value Proof-activity summary for this episode.
         /// @throws None (noexcept).
-        solve_result(
-            const status status_value,
-            const model_view model_value,
-            const failed_core_view failed_core_value,
-            const telemetry::solver_statistics::snapshot statistics_value,
-            const proof_summary proof_value) noexcept :
+        solve_result(const status status_value, const model_view model_value, const failed_core_view failed_core_value,
+                     const telemetry::solver_statistics::snapshot statistics_value, const proof_summary proof_value) noexcept:
             status_ {status_value},
             model_ {model_value},
             failed_core_ {failed_core_value},
@@ -79,42 +75,27 @@ namespace kmx::sat
         /// @brief Returns the terminal status produced by the last solve episode.
         /// @return Current solve status value.
         /// @throws None (noexcept).
-        status status_of() const noexcept
-        {
-            return status_;
-        }
+        status status_of() const noexcept { return status_; }
 
         /// @brief Returns the exported model view when satisfiable.
         /// @return Read-only model view object.
         /// @throws None (noexcept).
-        model_view model() const noexcept
-        {
-            return model_;
-        }
+        model_view model() const noexcept { return model_; }
 
         /// @brief Returns the failed-core view when unsatisfiable under assumptions.
         /// @return Read-only failed-core view object.
         /// @throws None (noexcept).
-        failed_core_view failed_core() const noexcept
-        {
-            return failed_core_;
-        }
+        failed_core_view failed_core() const noexcept { return failed_core_; }
 
         /// @brief Returns the statistics snapshot captured for this result.
         /// @return Immutable statistics snapshot.
         /// @throws None (noexcept).
-        telemetry::solver_statistics::snapshot statistics_snapshot() const noexcept
-        {
-            return statistics_snapshot_;
-        }
+        telemetry::solver_statistics::snapshot statistics_snapshot() const noexcept { return statistics_snapshot_; }
 
         /// @brief Returns a compact summary of proof generation/checking activity.
         /// @return Proof summary record for this solve result.
         /// @throws None (noexcept).
-        proof_summary proof_summary_of() const noexcept
-        {
-            return proof_summary_;
-        }
+        proof_summary proof_summary_of() const noexcept { return proof_summary_; }
 
     private:
         status status_ {status::unknown};

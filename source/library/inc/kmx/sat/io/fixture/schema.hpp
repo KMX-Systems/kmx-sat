@@ -40,83 +40,53 @@ namespace kmx::sat::io::fixture
         /// @brief Selects the payload kind associated with this schema instance.
         /// @param kind Payload kind to record.
         /// @throws None (noexcept).
-        void set_payload_kind(const payload_kind kind) noexcept
-        {
-            payload_kind_ = kind;
-        }
+        void set_payload_kind(const payload_kind kind) noexcept { payload_kind_ = kind; }
 
         /// @brief Records the feature-flag bitset associated with this schema instance.
         /// @param flags Feature flags to record.
         /// @throws None (noexcept).
-        void set_feature_flags(const std::uint64_t flags) noexcept
-        {
-            feature_flags_ = flags;
-        }
+        void set_feature_flags(const std::uint64_t flags) noexcept { feature_flags_ = flags; }
 
         /// @brief Records whether the fixture endianness is compatible with this build.
         /// @param compatible True if endianness is compatible or convertible.
         /// @throws None (noexcept).
-        void set_endian_compatible(const bool compatible) noexcept
-        {
-            endian_compatible_ = compatible;
-        }
+        void set_endian_compatible(const bool compatible) noexcept { endian_compatible_ = compatible; }
 
         /// @brief Records whether the fixture integer width is compatible with this build.
         /// @param compatible True if integer width is compatible or convertible.
         /// @throws None (noexcept).
-        void set_integer_width_compatible(const bool compatible) noexcept
-        {
-            integer_width_compatible_ = compatible;
-        }
+        void set_integer_width_compatible(const bool compatible) noexcept { integer_width_compatible_ = compatible; }
 
         /// @brief Returns the schema version this build writes for new fixtures.
         /// @return Current schema version number.
         /// @throws None (noexcept).
-        std::uint16_t current_version() const noexcept
-        {
-            return current_version_value;
-        }
+        std::uint16_t current_version() const noexcept { return current_version_value; }
 
         /// @brief Checks whether a given schema version can still be read by this build.
         /// @param version Schema version to check.
         /// @return True if `version` is supported for reading.
         /// @throws None (noexcept).
-        bool supported_versions(const std::uint16_t version) const noexcept
-        {
-            return version == current_version_value;
-        }
+        bool supported_versions(const std::uint16_t version) const noexcept { return version == current_version_value; }
 
         /// @brief Returns the payload kind currently associated with this schema instance.
         /// @return Payload kind value.
         /// @throws None (noexcept).
-        payload_kind payload_kind_of() const noexcept
-        {
-            return payload_kind_;
-        }
+        payload_kind payload_kind_of() const noexcept { return payload_kind_; }
 
         /// @brief Returns the feature-flags bitset gating optional payload features.
         /// @return Feature flags bitset.
         /// @throws None (noexcept).
-        std::uint64_t feature_flags() const noexcept
-        {
-            return feature_flags_;
-        }
+        std::uint64_t feature_flags() const noexcept { return feature_flags_; }
 
         /// @brief Checks whether the fixture's endianness is compatible with (or safely convertible to) this build.
         /// @return True if endianness is compatible or convertible.
         /// @throws None (noexcept).
-        bool endian_policy() const noexcept
-        {
-            return endian_compatible_;
-        }
+        bool endian_policy() const noexcept { return endian_compatible_; }
 
         /// @brief Checks whether the fixture's integer width is compatible with (or safely convertible to) this build.
         /// @return True if integer width is compatible or convertible.
         /// @throws None (noexcept).
-        bool integer_width_policy() const noexcept
-        {
-            return integer_width_compatible_;
-        }
+        bool integer_width_policy() const noexcept { return integer_width_compatible_; }
 
     private:
         payload_kind payload_kind_ {payload_kind::cnf_fixture};

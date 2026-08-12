@@ -106,6 +106,7 @@ namespace kmx::sat::cdcl::engine
             if (decision_frames_ != nullptr)
             {
                 decision_frames_->reuse_trail_metadata();
+                ++trail_reuse_count_;
             }
         }
 
@@ -121,15 +122,18 @@ namespace kmx::sat::cdcl::engine
 
         /// @brief Returns the most recent decision level requested by this backtrack engine.
         /// @return Last target level passed to `backtrack_to_level`.
-        std::uint32_t last_backtracked_level() const noexcept
-        {
-            return last_backtracked_level_;
-        }
+        std::uint32_t last_backtracked_level() const noexcept { return last_backtracked_level_; }
+
+        /// @brief Returns how many times the trail metadata reuse path was requested.
+        /// @return Number of reuse requests.
+        /// @throws None (noexcept).
+        std::uint32_t trail_reuse_count() const noexcept { return trail_reuse_count_; }
 
     private:
         trail* trail_state_ {nullptr};
         store::assignment* assignment_ {nullptr};
         stack::decision_frame* decision_frames_ {nullptr};
         std::uint32_t last_backtracked_level_ {0};
+        std::uint32_t trail_reuse_count_ {0};
     };
 }

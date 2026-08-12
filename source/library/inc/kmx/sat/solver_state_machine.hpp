@@ -54,92 +54,56 @@ namespace kmx::sat
         /// @brief Returns the current lifecycle state.
         /// @return Current machine state value.
         /// @throws None (noexcept).
-        state current_state() const noexcept
-        {
-            return state_;
-        }
+        state current_state() const noexcept { return state_; }
 
         /// @brief Checks whether the machine is in configuring state.
         /// @return True if the current state is configuring.
         /// @throws None (noexcept).
-        bool expect_configuring() const noexcept
-        {
-            return state_ == state::configuring;
-        }
+        bool expect_configuring() const noexcept { return state_ == state::configuring; }
 
         /// @brief Checks whether the machine is in adding state.
         /// @return True if the current state is adding.
         /// @throws None (noexcept).
-        bool expect_adding() const noexcept
-        {
-            return state_ == state::adding;
-        }
+        bool expect_adding() const noexcept { return state_ == state::adding; }
 
         /// @brief Checks whether the machine is in solving state.
         /// @return True if the current state is solving.
         /// @throws None (noexcept).
-        bool expect_solving() const noexcept
-        {
-            return state_ == state::solving;
-        }
+        bool expect_solving() const noexcept { return state_ == state::solving; }
 
         /// @brief Checks whether the machine is in a terminal error state.
         /// @return True if the current state is error.
         /// @throws None (noexcept).
-        bool expect_error() const noexcept
-        {
-            return state_ == state::error;
-        }
+        bool expect_error() const noexcept { return state_ == state::error; }
 
         /// @brief Transitions the machine to the requested state.
         /// @param state Target state to set.
         /// @throws None (noexcept).
-        void to(const state state) noexcept
-        {
-            state_ = state;
-        }
+        void to(const state state) noexcept { state_ = state; }
 
         /// @brief Transitions the machine into the adding phase for clause/assumption input.
         /// @throws None (noexcept).
-        void transition_to_adding() noexcept
-        {
-            state_ = state::adding;
-        }
+        void transition_to_adding() noexcept { state_ = state::adding; }
 
         /// @brief Transitions the machine into the solving phase for a fresh search episode.
         /// @throws None (noexcept).
-        void transition_to_solving() noexcept
-        {
-            state_ = state::solving;
-        }
+        void transition_to_solving() noexcept { state_ = state::solving; }
 
         /// @brief Transitions the machine into the satisfiable terminal state.
         /// @throws None (noexcept).
-        void transition_to_sat() noexcept
-        {
-            state_ = state::sat;
-        }
+        void transition_to_sat() noexcept { state_ = state::sat; }
 
         /// @brief Transitions the machine into the unsatisfiable terminal state.
         /// @throws None (noexcept).
-        void transition_to_unsat() noexcept
-        {
-            state_ = state::unsat;
-        }
+        void transition_to_unsat() noexcept { state_ = state::unsat; }
 
         /// @brief Transitions the machine into the steady/unknown terminal state.
         /// @throws None (noexcept).
-        void transition_to_steady() noexcept
-        {
-            state_ = state::steady;
-        }
+        void transition_to_steady() noexcept { state_ = state::steady; }
 
         /// @brief Transitions the machine into the terminal error state.
         /// @throws None (noexcept).
-        void transition_to_error() noexcept
-        {
-            state_ = state::error;
-        }
+        void transition_to_error() noexcept { state_ = state::error; }
 
     private:
         state state_ {state::configuring};

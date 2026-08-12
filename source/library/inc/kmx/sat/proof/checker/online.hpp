@@ -98,18 +98,12 @@ namespace kmx::sat::proof::checker
         /// @brief Validates current checker state against expected proof conclusion conditions.
         /// @return True if no structural inconsistency was observed across the episode.
         /// @throws None (noexcept).
-        [[nodiscard]] bool validate_conclusion() const noexcept
-        {
-            return coverage_.structural_errors == 0;
-        }
+        [[nodiscard]] bool validate_conclusion() const noexcept { return coverage_.structural_errors == 0; }
 
         /// @brief Returns a snapshot of checker overhead/coverage counters.
         /// @return Coverage counters accumulated so far.
         /// @throws None (noexcept).
-        [[nodiscard]] const coverage& coverage_snapshot() const noexcept
-        {
-            return coverage_;
-        }
+        [[nodiscard]] const coverage& coverage_snapshot() const noexcept { return coverage_; }
 
     private:
         std::unordered_set<cdcl::clause::ref_t::offset_t> active_ {};

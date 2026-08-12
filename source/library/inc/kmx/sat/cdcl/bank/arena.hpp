@@ -26,9 +26,7 @@ namespace kmx::sat::cdcl::bank
     public:
         arena() noexcept = default;
 
-        explicit arena(std::pmr::memory_resource* resource) noexcept : resource_ {resource}
-        {
-        }
+        explicit arena(std::pmr::memory_resource* resource) noexcept: resource_ {resource} {}
 
         clause::ref_t allocate_clause(const std::size_t literal_count) noexcept
         {
@@ -137,11 +135,18 @@ namespace kmx::sat::cdcl::bank
                 return;
             }
             const auto offset = static_cast<std::size_t>(ref.offset());
-            if (offset >= active_.size())
+            const auto byte_count = clause_byte_count(ref);
+            if (byte_count == 0u || offset + byte_count > active_.size())
             {
                 return;
             }
-            survivor_.insert(survivor_.end(), active_.begin() + offset, active_.begin() + offset + 32u);
+
+            if (survivor_.size() < offset + byte_count)
+            {
+                survivor_.resize(offset + byte_count, 0u);
+            }
+
+            std::memcpy(survivor_.data() + offset, active_.data() + offset, byte_count);
         }
 
         bool contains(const clause::ref_t ref) const noexcept
@@ -153,10 +158,7 @@ namespace kmx::sat::cdcl::bank
             return static_cast<std::size_t>(ref.offset()) < active_.size();
         }
 
-        void prepare_gc() noexcept
-        {
-            survivor_.clear();
-        }
+        void prepare_gc() noexcept { survivor_.clear(); }
 
         void swap_survivor() noexcept
         {
@@ -164,15 +166,17 @@ namespace kmx::sat::cdcl::bank
             survivor_.clear();
         }
 
-        void release_inactive() noexcept
-        {
-            survivor_.clear();
-        }
+        void release_inactive() noexcept { survivor_.clear(); }
 
     private:
+        [[nodiscard]] std::size_t clause_byte_count(const clause::ref_t ref) const noexcept
+        {
+            const auto count = literal_count(ref);
+            return count == 0u ? 0u : sizeof(std::uint32_t) + static_cast<std::size_t>(count) * sizeof(literal::raw_t);
+        }
+
         std::pmr::memory_resource* resource_ {std::pmr::get_default_resource()};
         std::pmr::vector<std::uint8_t> active_ {resource_};
         std::pmr::vector<std::uint8_t> survivor_ {resource_};
     };
 }
-

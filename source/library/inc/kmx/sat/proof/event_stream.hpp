@@ -5,6 +5,7 @@
 #ifndef PCH
     #include <cstddef>
     #include <functional>
+    #include <span>
     #include <utility>
     #include <vector>
 #endif
@@ -52,17 +53,11 @@ namespace kmx::sat::proof
         /// @brief Registers a sink that receives buffered proof events.
         /// @param sink Handler invoked for each buffered event during drain/flush.
         /// @throws None (noexcept).
-        void set_sink(sink_t sink) noexcept
-        {
-            sink_ = std::move(sink);
-        }
+        void set_sink(sink_t sink) noexcept { sink_ = std::move(sink); }
 
         /// @brief Appends one structural proof event to the internal buffer without blocking on I/O.
         /// @throws None (noexcept).
-        void push_event(proof_event event) noexcept
-        {
-            buffered_events_.push_back(std::move(event));
-        }
+        void push_event(proof_event event) noexcept { buffered_events_.push_back(std::move(event)); }
 
         /// @brief Hands buffered events to registered tracers/output sinks for processing.
         /// @throws None (noexcept).
@@ -71,7 +66,7 @@ namespace kmx::sat::proof
             const auto drained = buffered_events_.size();
             if (sink_)
             {
-                for (const auto& event : buffered_events_)
+                for (const auto& event: buffered_events_)
                 {
                     sink_(event);
                 }
@@ -99,24 +94,19 @@ namespace kmx::sat::proof
         /// @brief Returns the number of events waiting to be drained.
         /// @return Buffered event count.
         /// @throws None (noexcept).
-        [[nodiscard]] std::size_t buffered_count() const noexcept
-        {
-            return buffered_events_.size();
-        }
+        [[nodiscard]] std::size_t buffered_count() const noexcept { return buffered_events_.size(); }
+
+        /// @brief Returns a read-only view of the buffered proof events.
+        /// @return Span over currently buffered events.
+        [[nodiscard]] std::span<const proof_event> buffered_events() const noexcept { return buffered_events_; }
 
         /// @brief Returns how many events were delivered in the most recent drain.
         /// @return Last drain count.
-        [[nodiscard]] std::size_t last_drain_count() const noexcept
-        {
-            return last_drain_count_;
-        }
+        [[nodiscard]] std::size_t last_drain_count() const noexcept { return last_drain_count_; }
 
         /// @brief Returns how many events were delivered in the most recent flush call.
         /// @return Last flush count.
-        [[nodiscard]] std::size_t last_flush_count() const noexcept
-        {
-            return last_flush_count_;
-        }
+        [[nodiscard]] std::size_t last_flush_count() const noexcept { return last_flush_count_; }
 
     private:
         sink_t sink_ {};

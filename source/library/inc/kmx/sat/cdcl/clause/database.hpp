@@ -198,22 +198,24 @@ namespace kmx::sat::cdcl::clause
         /// @brief Returns the underlying physical clause storage.
         /// @return Reference to the owned `clause::storage` instance.
         /// @throws None (noexcept).
-        [[nodiscard]] storage& storage_of() noexcept
-        {
-            return storage_;
-        }
+        [[nodiscard]] storage& storage_of() noexcept { return storage_; }
 
         /// @copydoc storage_of
-        [[nodiscard]] const storage& storage_of() const noexcept
-        {
-            return storage_;
-        }
+        [[nodiscard]] const storage& storage_of() const noexcept { return storage_; }
+
+        /// @brief Exposes the raw irredundant reference set, including garbage-marked entries.
+        /// @return Snapshot view over irredundant references.
+        [[nodiscard]] std::span<const ref_t> irredundant_refs() const noexcept { return irredundant_refs_; }
+
+        /// @brief Exposes the raw redundant reference set, including garbage-marked entries.
+        /// @return Snapshot view over redundant references.
+        [[nodiscard]] std::span<const ref_t> redundant_refs() const noexcept { return redundant_refs_; }
 
     private:
         template <typename visitor_t>
         void iterate(const std::vector<ref_t>& refs, visitor_t&& visitor) const noexcept
         {
-            for (const auto ref : refs)
+            for (const auto ref: refs)
             {
                 if (!is_garbage(ref))
                 {
@@ -250,4 +252,3 @@ namespace kmx::sat::cdcl::clause
         std::unordered_map<ref_t::offset_t, tier_t> tiers_ {};
     };
 }
-

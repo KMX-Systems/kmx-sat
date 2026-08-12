@@ -35,11 +35,8 @@ namespace kmx::sat::telemetry
         std::string format_statistics_line(const solver_statistics::snapshot& snapshot) const noexcept
         {
             std::ostringstream stream;
-            stream << "conflicts=" << snapshot.conflicts
-                   << " decisions=" << snapshot.decisions
-                   << " propagations=" << snapshot.propagations
-                   << " restarts=" << snapshot.restarts
-                   << " learned_clauses=" << snapshot.learned_clauses;
+            stream << "conflicts=" << snapshot.conflicts << " decisions=" << snapshot.decisions << " propagations=" << snapshot.propagations
+                   << " restarts=" << snapshot.restarts << " learned_clauses=" << snapshot.learned_clauses;
             return stream.str();
         }
 
@@ -49,8 +46,7 @@ namespace kmx::sat::telemetry
         std::string format_resource_line() const noexcept
         {
             std::ostringstream stream;
-            stream << "time=" << profile_clock_.current_wall_time()
-                   << "ms cpu=" << profile_clock_.current_process_time() << "ms";
+            stream << "time=" << profile_clock_.current_wall_time() << "ms cpu=" << profile_clock_.current_process_time() << "ms";
             return stream.str();
         }
 
@@ -63,10 +59,7 @@ namespace kmx::sat::telemetry
             return "progress: step " + std::to_string(progress_steps_) + " of " + std::to_string(total_steps_);
         }
 
-        std::size_t progress_steps() const noexcept
-        {
-            return progress_steps_;
-        }
+        std::size_t progress_steps() const noexcept { return progress_steps_; }
 
     private:
         mutable profile_clock profile_clock_ {};

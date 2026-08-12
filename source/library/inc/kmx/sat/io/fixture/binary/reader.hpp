@@ -15,8 +15,8 @@
 #include <kmx/sat/io/file_source.hpp>
 #include <kmx/sat/io/fixture/schema.hpp>
 #include <kmx/sat/io/fixture/validator.hpp>
-#include <kmx/sat/telemetry/solver_options.hpp>
 #include <kmx/sat/solve_request.hpp>
+#include <kmx/sat/telemetry/solver_options.hpp>
 
 namespace kmx::sat::io::fixture::binary
 {
@@ -93,10 +93,7 @@ namespace kmx::sat::io::fixture::binary
         /// @brief Validates the header against the current build's supported schema/feature set.
         /// @return True if the header is structurally and semantically valid.
         /// @throws None (noexcept).
-        bool validate_header() const noexcept
-        {
-            return validator_.validate_magic() && validator_.validate_version();
-        }
+        bool validate_header() const noexcept { return validator_.validate_magic() && validator_.validate_version(); }
 
         /// @brief Loads the fixture payload described by the validated header.
         /// @return True if the payload was loaded successfully.
@@ -192,9 +189,8 @@ namespace kmx::sat::io::fixture::binary
         /// @throws None (noexcept).
         bool validate_payload() const noexcept
         {
-             return clauses_.size() == clause_count_ && assumptions_.size() == assumption_count_ &&
-                 validator_.validate_checksum() && validator_.validate_literal_domain() &&
-                   validator_.validate_clause_shapes() && validator_.validate_limits_payload();
+            return clauses_.size() == clause_count_ && assumptions_.size() == assumption_count_ && validator_.validate_checksum() &&
+                   validator_.validate_literal_domain() && validator_.validate_clause_shapes() && validator_.validate_limits_payload();
         }
 
         /// @brief Materializes the validated fixture data into the external frontend, applying normal solver checks.
@@ -202,13 +198,18 @@ namespace kmx::sat::io::fixture::binary
         /// @throws None (noexcept).
         void materialize_fixture_into_frontend(cdcl::external_frontend& frontend) noexcept
         {
+            frontend.clear_clauses();
+            frontend.clear_assumptions();
             if (schema_.payload_kind_of() != schema::payload_kind::solve_request_fixture)
             {
+                for (const auto& clause: clauses_)
+                {
+                    frontend.push_clause(clause);
+                }
                 return;
             }
 
-            frontend.clear_assumptions();
-            for (const auto lit : assumptions_)
+            for (const auto lit: assumptions_)
             {
                 frontend.push_assumption(lit);
             }
@@ -236,26 +237,17 @@ namespace kmx::sat::io::fixture::binary
         /// @brief Exposes the loaded clause payload after `load_payload`.
         /// @return Read-only view over loaded clause records.
         /// @throws None (noexcept).
-        std::span<const std::vector<literal>> clauses() const noexcept
-        {
-            return clauses_;
-        }
+        std::span<const std::vector<literal>> clauses() const noexcept { return clauses_; }
 
         /// @brief Exposes the loaded assumptions payload after `load_payload`.
         /// @return Read-only view over loaded assumption literals.
         /// @throws None (noexcept).
-        std::span<const literal> assumptions() const noexcept
-        {
-            return assumptions_;
-        }
+        std::span<const literal> assumptions() const noexcept { return assumptions_; }
 
         /// @brief Exposes the loaded solve-request limits payload after `load_payload`.
         /// @return Loaded solve-request payload.
         /// @throws None (noexcept).
-        const solve_request& request_payload() const noexcept
-        {
-            return request_;
-        }
+        const solve_request& request_payload() const noexcept { return request_; }
 
     private:
         static std::string_view trim(std::string_view input) noexcept
@@ -344,17 +336,11 @@ namespace kmx::sat::io::fixture::binary
             std::uint64_t parsed_strict_mode {0u};
             std::uint64_t parsed_checksum {0u};
 
-            if (tokens[0] != "SATB" ||
-                !parse_unsigned(tokens[1], parsed_version) ||
-                !parse_unsigned(tokens[2], kind_value) ||
-                !parse_unsigned(tokens[3], flags_value) ||
-                !parse_unsigned(tokens[4], declared_vars) ||
-                !parse_unsigned(tokens[5], parsed_clause_count) ||
-                !parse_unsigned(tokens[6], parsed_assumption_count) ||
-                !parse_unsigned(tokens[7], parsed_conflict_limit) ||
-                !parse_unsigned(tokens[8], parsed_decision_limit) ||
-                !parse_unsigned(tokens[9], parsed_pass_mask) ||
-                !parse_unsigned(tokens[10], parsed_strict_mode) ||
+            if (tokens[0] != "SATB" || !parse_unsigned(tokens[1], parsed_version) || !parse_unsigned(tokens[2], kind_value) ||
+                !parse_unsigned(tokens[3], flags_value) || !parse_unsigned(tokens[4], declared_vars) ||
+                !parse_unsigned(tokens[5], parsed_clause_count) || !parse_unsigned(tokens[6], parsed_assumption_count) ||
+                !parse_unsigned(tokens[7], parsed_conflict_limit) || !parse_unsigned(tokens[8], parsed_decision_limit) ||
+                !parse_unsigned(tokens[9], parsed_pass_mask) || !parse_unsigned(tokens[10], parsed_strict_mode) ||
                 !parse_unsigned(tokens[11], parsed_checksum))
             {
                 return false;

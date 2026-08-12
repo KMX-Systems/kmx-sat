@@ -32,18 +32,12 @@ namespace kmx::sat::cdcl
         /// @brief Assembles the failed-assumptions core from the currently marked assumption literals.
         /// @return Read-only view over the failed assumption literals.
         /// @throws None (noexcept).
-        failed_core_view build_failed_core() noexcept
-        {
-            return failed_core_view {std::span<const literal> {failed_assumptions_}};
-        }
+        failed_core_view build_failed_core() noexcept { return failed_core_view {std::span<const literal> {failed_assumptions_}}; }
 
         /// @brief Marks one assumption literal as implicated in the current unsatisfiable conflict.
         /// @param lit Assumption literal to mark.
         /// @throws None (noexcept).
-        void mark_failed_assumption(const literal lit) noexcept
-        {
-            failed_assumptions_.push_back(lit);
-        }
+        void mark_failed_assumption(const literal lit) noexcept { failed_assumptions_.push_back(lit); }
 
         /// @brief Attempts to further narrow the failed core when a smaller subset still explains the conflict.
         /// @throws None (noexcept).

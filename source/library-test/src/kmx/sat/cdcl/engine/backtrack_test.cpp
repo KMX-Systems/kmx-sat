@@ -59,5 +59,8 @@ namespace kmx::sat::cdcl
         REQUIRE(assignment.level_of(variable {4u}) == 0u);
         REQUIRE(assignment.value_of(variable {4u}).has_value() == false);
         REQUIRE(decision_frames.current_level() == 1u);
+
+        backtrack.reuse_trail();
+        REQUIRE(backtrack.trail_reuse_count() == 1u);
     }
 }

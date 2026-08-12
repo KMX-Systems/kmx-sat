@@ -40,28 +40,16 @@ namespace kmx::sat::runtime
 
         /// @brief Merges per-thread partial results into one schedule-independent, deterministic result.
         /// @throws None (noexcept).
-        void merge_deterministic_result() noexcept
-        {
-            ++merges_;
-        }
+        void merge_deterministic_result() noexcept { ++merges_; }
 
         /// @brief Returns the number of worker threads currently budgeted for parallel sub-tasks.
         /// @return Configured worker thread count.
         /// @throws None (noexcept).
-        std::uint32_t thread_budget() const noexcept
-        {
-            return thread_budget_;
-        }
+        std::uint32_t thread_budget() const noexcept { return thread_budget_; }
 
-        [[nodiscard]] std::uint32_t runs() const noexcept
-        {
-            return runs_;
-        }
+        [[nodiscard]] std::uint32_t runs() const noexcept { return runs_; }
 
-        [[nodiscard]] std::uint32_t merges() const noexcept
-        {
-            return merges_;
-        }
+        [[nodiscard]] std::uint32_t merges() const noexcept { return merges_; }
 
     private:
         std::uint32_t runs_ {0u};

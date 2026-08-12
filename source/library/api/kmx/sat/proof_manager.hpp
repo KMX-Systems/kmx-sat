@@ -52,27 +52,27 @@ namespace kmx::sat
             enabled_formats_.push_back(name);
             if (name == "drat")
             {
-                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::drat{}});
+                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::drat {}});
             }
             else if (name == "lrat")
             {
-                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::lrat{}});
+                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::lrat {}});
             }
             else if (name == "frat")
             {
-                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::frat{}});
+                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::frat {}});
             }
             else if (name == "idrup")
             {
-                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::idrup{}});
+                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::idrup {}});
             }
             else if (name == "lidrup")
             {
-                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::lidrup{}});
+                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::lidrup {}});
             }
             else if (name == "veripb")
             {
-                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::veripb{}});
+                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::veripb {}});
             }
         }
 
@@ -84,13 +84,22 @@ namespace kmx::sat
             enabled_tracers_.clear();
         }
 
+        /// @brief Returns whether any proof format is currently enabled.
+        /// @return True if at least one proof format is active.
+        [[nodiscard]] bool has_enabled_formats() const noexcept { return !enabled_formats_.empty(); }
+
+        /// @brief Returns whether a specific proof format is currently enabled.
+        /// @param format_name Identifier of the proof format to query.
+        /// @return True if `format_name` is active.
+        [[nodiscard]] bool has_enabled_format(const std::string_view format_name) const noexcept
+        {
+            return std::find(enabled_formats_.begin(), enabled_formats_.end(), format_name) != enabled_formats_.end();
+        }
+
         /// @brief Registers an external sink that receives buffered proof events from the event stream.
         /// @param sink Callback invoked for every buffered event during flush.
         /// @throws None (noexcept).
-        void set_event_sink(proof::event_stream::sink_t sink) noexcept
-        {
-            event_stream_.set_sink(std::move(sink));
-        }
+        void set_event_sink(proof::event_stream::sink_t sink) noexcept { event_stream_.set_sink(std::move(sink)); }
 
         /// @brief Enables an internal proof checker ("online" or "lrat") to run alongside the enabled tracers.
         /// @param checker_name Identifier of the internal checker to enable.
@@ -112,6 +121,11 @@ namespace kmx::sat
         /// @throws None (noexcept).
         void register_tracer(const proof::tracer::view& sink) noexcept
         {
+            const auto format_name = sink.format_name();
+            if (!format_name.empty() && !has_enabled_format(format_name))
+            {
+                enabled_formats_.emplace_back(format_name);
+            }
             registered_tracers_.push_back(sink);
         }
 
@@ -142,10 +156,7 @@ namespace kmx::sat
         /// @brief Reports that a clause was deleted.
         /// @param ref Reference to the deleted clause.
         /// @throws None (noexcept).
-        void on_delete_clause(const cdcl::clause::ref_t ref) noexcept
-        {
-            dispatch_event(proof::event_kind::delete_clause, ref);
-        }
+        void on_delete_clause(const cdcl::clause::ref_t ref) noexcept { dispatch_event(proof::event_kind::delete_clause, ref); }
 
         /// @brief Reports that a clause was shrunk in place.
         /// @param ref Reference to the shrunk clause.
@@ -171,30 +182,11 @@ namespace kmx::sat
 
         /// @brief Finalizes the proof with the episode's SAT/UNSAT conclusion.
         /// @throws None (noexcept).
-        void on_conclusion() noexcept
-        {
-            proof::proof_event event {};
-            event.kind = proof::event_kind::conclusion;
-            event.finalized = true;
-            last_event_ = event;
-            event_stream_.push_event(std::move(event));
-
-            for (auto& tracer : enabled_tracers_)
-            {
-                tracer.finalize();
-            }
-            for (auto& tracer : registered_tracers_)
-            {
-                tracer.finalize();
-            }
-        }
+        void on_conclusion() noexcept { dispatch_event(proof::event_kind::conclusion, {}); }
 
         /// @brief Drains any buffered proof events to their configured output sinks.
         /// @throws None (noexcept).
-        void flush() noexcept
-        {
-            event_stream_.flush_sync();
-        }
+        void flush() noexcept { event_stream_.flush_sync(); }
 
         /// @brief Returns the currently active proof id mapped to a clause reference.
         /// @param ref Clause reference to query.
@@ -208,18 +200,16 @@ namespace kmx::sat
         /// @brief Returns the most recently dispatched proof event.
         /// @return Last event emitted via `dispatch_event` or `on_conclusion`.
         /// @throws None (noexcept).
-        [[nodiscard]] const proof::proof_event& last_event() const noexcept
-        {
-            return last_event_;
-        }
+        [[nodiscard]] const proof::proof_event& last_event() const noexcept { return last_event_; }
 
         /// @brief Returns the number of proof events currently buffered in the stream.
         /// @return Buffered event count.
         /// @throws None (noexcept).
-        [[nodiscard]] std::size_t buffered_event_count() const noexcept
-        {
-            return event_stream_.buffered_count();
-        }
+        [[nodiscard]] std::size_t buffered_event_count() const noexcept { return event_stream_.buffered_count(); }
+
+        /// @brief Returns a read-only view of currently buffered proof events.
+        /// @return Span over buffered proof events.
+        [[nodiscard]] std::span<const proof::proof_event> buffered_events() const noexcept { return event_stream_.buffered_events(); }
 
         /// @brief Records a derived/original clause's literal content for the internal LRAT checker.
         /// @param clause_id Stable proof identity of the clause (typically from `stable_id_for_clause`).
@@ -237,8 +227,7 @@ namespace kmx::sat
         /// @param clause_id Stable proof identity of the derived clause.
         /// @param antecedents Ordered antecedent clause ids to replay during chain verification.
         /// @throws None (noexcept).
-        void record_checker_antecedents(const proof::clause::id clause_id,
-                                         const std::span<const proof::clause::id> antecedents) noexcept
+        void record_checker_antecedents(const proof::clause::id clause_id, const std::span<const proof::clause::id> antecedents) noexcept
         {
             if (lrat_checker_enabled_)
             {
@@ -295,20 +284,20 @@ namespace kmx::sat
             return lit.is_negated() ? -index : index;
         }
 
-        void dispatch_event(const proof::event_kind kind, const cdcl::clause::ref_t ref,
-                            const std::span<const literal> literals = {},
+        void dispatch_event(const proof::event_kind kind, const cdcl::clause::ref_t ref, const std::span<const literal> literals = {},
                             const std::span<const proof::clause::id> antecedents = {}) noexcept
         {
             proof::proof_event event {};
             event.kind = kind;
             event.clause_ref = ref;
             event.clause_id = resolve_clause_id(kind, ref);
+            event.finalized = kind == proof::event_kind::conclusion;
             const auto is_add_or_shrink = kind == proof::event_kind::add_original || kind == proof::event_kind::add_derived ||
-                                           kind == proof::event_kind::shrink_clause;
+                                          kind == proof::event_kind::shrink_clause;
             if (is_add_or_shrink)
             {
                 event.literals.reserve(literals.size());
-                for (const auto lit : literals)
+                for (const auto lit: literals)
                 {
                     event.literals.push_back(to_dimacs_int(lit));
                 }
@@ -320,7 +309,7 @@ namespace kmx::sat
             if (kind == proof::event_kind::add_derived && !antecedents.empty())
             {
                 event.antecedent_ids.reserve(antecedents.size());
-                for (const auto& antecedent : antecedents)
+                for (const auto& antecedent: antecedents)
                 {
                     event.antecedent_ids.push_back(antecedent);
                 }
@@ -356,47 +345,13 @@ namespace kmx::sat
                 id_allocator_.retire_on_delete(ref);
             }
 
-            for (auto& tracer : enabled_tracers_)
+            for (auto& tracer: enabled_tracers_)
             {
-                switch (kind)
-                {
-                    case proof::event_kind::add_original:
-                        tracer.add_original(ref);
-                        break;
-                    case proof::event_kind::add_derived:
-                        tracer.add_derived(ref);
-                        break;
-                    case proof::event_kind::delete_clause:
-                        tracer.delete_clause(ref);
-                        break;
-                    case proof::event_kind::shrink_clause:
-                        tracer.shrink_clause(ref);
-                        break;
-                    case proof::event_kind::conclusion:
-                        tracer.finalize();
-                        break;
-                }
+                tracer.on_event(last_event_);
             }
-            for (auto& tracer : registered_tracers_)
+            for (auto& tracer: registered_tracers_)
             {
-                switch (kind)
-                {
-                    case proof::event_kind::add_original:
-                        tracer.add_original(ref);
-                        break;
-                    case proof::event_kind::add_derived:
-                        tracer.add_derived(ref);
-                        break;
-                    case proof::event_kind::delete_clause:
-                        tracer.delete_clause(ref);
-                        break;
-                    case proof::event_kind::shrink_clause:
-                        tracer.shrink_clause(ref);
-                        break;
-                    case proof::event_kind::conclusion:
-                        tracer.finalize();
-                        break;
-                }
+                tracer.on_event(last_event_);
             }
         }
 

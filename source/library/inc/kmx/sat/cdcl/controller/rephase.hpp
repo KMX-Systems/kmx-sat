@@ -27,25 +27,16 @@ namespace kmx::sat::cdcl::controller
         /// @throws None (noexcept).
         rephase() noexcept = default;
 
-        void attach_phase_store(store::phase& phases) noexcept
-        {
-            phase_store_ = &phases;
-        }
+        void attach_phase_store(store::phase& phases) noexcept { phase_store_ = &phases; }
 
         /// @brief Checks whether a rephasing step should be performed now.
         /// @return True if the rephasing schedule has triggered.
         /// @throws None (noexcept).
-        bool should_rephase() const noexcept
-        {
-            return rephase_pending_;
-        }
+        bool should_rephase() const noexcept { return rephase_pending_; }
 
         /// @brief Returns whether a rephase action is pending for the next coordination step.
         /// @return True if a rephase trigger has fired.
-        [[nodiscard]] bool has_pending_rephase() const noexcept
-        {
-            return rephase_pending_;
-        }
+        [[nodiscard]] bool has_pending_rephase() const noexcept { return rephase_pending_; }
 
         /// @brief Restores saved phases from the best search state seen so far.
         /// @throws None (noexcept).
@@ -98,8 +89,15 @@ namespace kmx::sat::cdcl::controller
             {
                 return;
             }
-            phase_store_->set_saved_phase(variable {1u}, true);
-            phase_store_->set_saved_phase(variable {2u}, false);
+
+            const auto slot_count = phase_store_->saved_phase_count();
+            for (std::size_t index = 1; index < slot_count; ++index)
+            {
+                const auto var_index = static_cast<std::uint32_t>(index);
+                const auto seeded_value = ((index + observed_opportunity_count()) & 1u) == 0u;
+                phase_store_->set_saved_phase(variable {var_index}, seeded_value);
+            }
+
             current_snapshot_ = capture_snapshot();
             rephase_pending_ = false;
         }
@@ -124,10 +122,7 @@ namespace kmx::sat::cdcl::controller
 
         /// @brief Returns how many rephase opportunities have been observed by this controller.
         /// @return Number of recorded conflicts and decisions that have contributed to the schedule.
-        std::uint32_t observed_opportunity_count() const noexcept
-        {
-            return conflict_count_ + decision_count_;
-        }
+        std::uint32_t observed_opportunity_count() const noexcept { return conflict_count_ + decision_count_; }
 
     private:
         std::uint32_t conflict_count_ {0u};

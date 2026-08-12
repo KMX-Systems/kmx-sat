@@ -47,12 +47,31 @@ namespace kmx::sat::cdcl
         reduce.select_reduction_candidates(database, candidates);
         REQUIRE(reduce.last_selected_candidate_count() == 1u);
         REQUIRE(reduce.has_candidates());
+        REQUIRE(database.is_garbage(keep_ref) == false);
 
-        reduce.reduce_clauses();
-        reduce.flush_redundant();
+        reduce.reduce_clauses(database);
+        REQUIRE(database.is_garbage(keep_ref));
+        REQUIRE(database.is_garbage(reason_ref) == false);
+
+        reduce.flush_redundant(database);
         reduce.update_tiers();
 
         REQUIRE(reduce.reduced_candidates() == 1u);
         REQUIRE(reduce.flushed_candidates() == 1u);
+
+        std::size_t remaining_redundant_count {0u};
+        bool reason_survived {false};
+        database.iterate_redundant(
+            [&](const clause::ref_t ref) noexcept
+            {
+                ++remaining_redundant_count;
+                if (ref == reason_ref)
+                {
+                    reason_survived = true;
+                }
+            });
+
+        REQUIRE(remaining_redundant_count == 1u);
+        REQUIRE(reason_survived);
     }
 }

@@ -3,8 +3,8 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
-    #include <cstdio>
     #include <cstddef>
+    #include <cstdio>
     #include <string>
     #include <string_view>
     #include <utility>
@@ -82,25 +82,16 @@ namespace kmx::sat::io
         /// @brief Checks whether this source is being transparently decompressed.
         /// @return True if decompression is active for this source.
         /// @throws None (noexcept).
-        bool is_compressed() const noexcept
-        {
-            return compressed_;
-        }
+        bool is_compressed() const noexcept { return compressed_; }
 
         /// @brief Destroys the file source and closes any open handle.
         /// @throws None (noexcept).
-        ~file_source() noexcept
-        {
-            close();
-        }
+        ~file_source() noexcept { close(); }
 
         file_source(const file_source&) = delete;
         file_source& operator=(const file_source&) = delete;
 
-        file_source(file_source&& other) noexcept :
-            file_ {other.file_},
-            compressed_ {other.compressed_},
-            path_ {std::move(other.path_)}
+        file_source(file_source&& other) noexcept: file_ {other.file_}, compressed_ {other.compressed_}, path_ {std::move(other.path_)}
         {
             other.file_ = nullptr;
             other.compressed_ = false;

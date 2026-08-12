@@ -25,23 +25,14 @@ namespace kmx::sat::runtime
 
         /// @brief Activates the placeholder adapter.
         /// @throws None (noexcept).
-        void activate() noexcept
-        {
-            active_ = true;
-        }
+        void activate() noexcept { active_ = true; }
 
         /// @brief Deactivates the placeholder adapter.
         /// @throws None (noexcept).
-        void deactivate() noexcept
-        {
-            active_ = false;
-        }
+        void deactivate() noexcept { active_ = false; }
 
         /// @brief Returns whether the placeholder adapter is active.
-        [[nodiscard]] bool active() const noexcept
-        {
-            return active_;
-        }
+        [[nodiscard]] bool active() const noexcept { return active_; }
 
     private:
         bool active_ {false};

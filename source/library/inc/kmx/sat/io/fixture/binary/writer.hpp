@@ -52,10 +52,7 @@ namespace kmx::sat::io::fixture::binary
         /// @brief Appends one normalized clause's literals to the fixture payload.
         /// @param literals Literals composing the clause.
         /// @throws None (noexcept).
-        void append_clause(const literal_span literals) noexcept
-        {
-            clauses_.emplace_back(literals.begin(), literals.end());
-        }
+        void append_clause(const literal_span literals) noexcept { clauses_.emplace_back(literals.begin(), literals.end()); }
 
         /// @brief Appends assumption literals to a `solve_request_fixture` payload.
         /// @param assumption_literals Assumption literals to append.
@@ -85,20 +82,15 @@ namespace kmx::sat::io::fixture::binary
             }
 
             format_.clear();
-            format_.write_report_line(
-                "SATB " + std::to_string(schema_.current_version()) +
-                " " + std::to_string(static_cast<int>(schema_.payload_kind_of())) +
-                " " + std::to_string(schema_.feature_flags()) +
-                " " + std::to_string(max_variable_index()) +
-                " " + std::to_string(clauses_.size()) +
-                " " + std::to_string(assumptions_.size()) +
-                " " + std::to_string(request_.conflict_limit) +
-                " " + std::to_string(request_.decision_limit) +
-                " " + std::to_string(request_.enabled_pass_mask) +
-                " " + std::to_string(request_.strict_mode ? 1 : 0) +
-                " " + std::to_string(checksum_));
+            format_.write_report_line("SATB " + std::to_string(schema_.current_version()) + " " +
+                                      std::to_string(static_cast<int>(schema_.payload_kind_of())) + " " +
+                                      std::to_string(schema_.feature_flags()) + " " + std::to_string(max_variable_index()) + " " +
+                                      std::to_string(clauses_.size()) + " " + std::to_string(assumptions_.size()) + " " +
+                                      std::to_string(request_.conflict_limit) + " " + std::to_string(request_.decision_limit) + " " +
+                                      std::to_string(request_.enabled_pass_mask) + " " + std::to_string(request_.strict_mode ? 1 : 0) +
+                                      " " + std::to_string(checksum_));
 
-            for (const auto& clause : clauses_)
+            for (const auto& clause: clauses_)
             {
                 format_.write_report_line("c");
                 format_.write_clause(clause);
@@ -129,38 +121,33 @@ namespace kmx::sat::io::fixture::binary
         /// @brief Exposes the finalized serialized fixture bytes.
         /// @return Serialized fixture envelope and payload.
         /// @throws None (noexcept).
-        std::string_view serialized_fixture() const noexcept
-        {
-            return serialized_fixture_;
-        }
+        std::string_view serialized_fixture() const noexcept { return serialized_fixture_; }
 
         /// @brief Exposes the checksum computed for the current payload.
         /// @return Current payload checksum.
         /// @throws None (noexcept).
-        std::uint64_t checksum() const noexcept
-        {
-            return checksum_;
-        }
+        std::uint64_t checksum() const noexcept { return checksum_; }
 
     private:
         std::uint32_t max_variable_index() const noexcept
         {
             std::uint32_t max_index {0u};
-            const auto update = [&max_index](const literal lit) noexcept {
+            const auto update = [&max_index](const literal lit) noexcept
+            {
                 if (lit.variable_of().index() > max_index)
                 {
                     max_index = lit.variable_of().index();
                 }
             };
 
-            for (const auto& clause : clauses_)
+            for (const auto& clause: clauses_)
             {
-                for (const auto lit : clause)
+                for (const auto lit: clause)
                 {
                     update(lit);
                 }
             }
-            for (const auto lit : assumptions_)
+            for (const auto lit: assumptions_)
             {
                 update(lit);
             }

@@ -40,19 +40,13 @@ namespace kmx::sat::cdcl::clause
         /// @param literals Literals composing the clause, already validated and normalized.
         /// @return Reference to the newly created clause.
         /// @throws None (noexcept).
-        ref_t create_original_clause(const std::span<const literal> literals) noexcept
-        {
-            return create_clause(literals, false);
-        }
+        ref_t create_original_clause(const std::span<const literal> literals) noexcept { return create_clause(literals, false); }
 
         /// @brief Creates a new learned (redundant) clause derived from conflict analysis.
         /// @param literals Literals composing the learned clause.
         /// @return Reference to the newly created clause.
         /// @throws None (noexcept).
-        ref_t create_learned_clause(const std::span<const literal> literals) noexcept
-        {
-            return create_clause(literals, true);
-        }
+        ref_t create_learned_clause(const std::span<const literal> literals) noexcept { return create_clause(literals, true); }
 
         /// @brief Physically destroys a clause, retiring its `proof::clause::id` if one was assigned.
         /// @param ref Reference to the clause to destroy; must not currently be a reason clause.
@@ -99,10 +93,7 @@ namespace kmx::sat::cdcl::clause
         /// @param ref Reference to the clause to shrink.
         /// @param new_size New literal count, which must not exceed the clause's current size.
         /// @throws None (noexcept).
-        void shrink_clause(const ref_t ref, const std::uint32_t new_size) noexcept
-        {
-            arena_.truncate_literals(resolve_ref(ref), new_size);
-        }
+        void shrink_clause(const ref_t ref, const std::uint32_t new_size) noexcept { arena_.truncate_literals(resolve_ref(ref), new_size); }
 
         /// @brief Re-validates a reference against the current arena generation, updating it if relocated.
         /// @param ref Reference to resolve.
@@ -127,10 +118,7 @@ namespace kmx::sat::cdcl::clause
         /// @param ref Reference to the clause receiving a proof identity.
         /// @return Newly assigned proof clause identity.
         /// @throws None (noexcept).
-        proof::clause::id assign_proof_id(const ref_t ref) noexcept
-        {
-            return id_allocator_.allocate_for_new_clause(ref);
-        }
+        proof::clause::id assign_proof_id(const ref_t ref) noexcept { return id_allocator_.allocate_for_new_clause(ref); }
 
         /// @brief Returns the stable proof identity currently bound to a clause, if any.
         /// @param ref Reference to the clause to query.
@@ -145,9 +133,20 @@ namespace kmx::sat::cdcl::clause
         /// @param ref Reference to the clause to query.
         /// @return Literals currently stored for `ref`.
         /// @throws None (noexcept).
-        [[nodiscard]] std::vector<literal> literals_of(const ref_t ref) const noexcept
+        [[nodiscard]] std::vector<literal> literals_of(const ref_t ref) const noexcept { return arena_.read_literals(resolve_ref(ref)); }
+
+        /// @brief Rewrites a clause's stored literal payload in place after compaction or substitution.
+        /// @param ref Reference to the clause whose literal payload should be replaced.
+        /// @param literals New literals to store; must preserve the clause's current size.
+        /// @throws None (noexcept).
+        void rewrite_clause_literals(const ref_t ref, const std::span<const literal> literals) noexcept
         {
-            return arena_.read_literals(resolve_ref(ref));
+            const auto resolved = resolve_ref(ref);
+            if (!resolved.valid() || arena_.literal_count(resolved) != literals.size())
+            {
+                return;
+            }
+            arena_.write_literals(resolved, literals);
         }
 
         /// @brief Checks whether a clause was created as a learned (redundant) clause.
@@ -190,4 +189,3 @@ namespace kmx::sat::cdcl::clause
         std::unordered_map<ref_t::offset_t, ref_t::offset_t> relocated_refs_ {};
     };
 }
-

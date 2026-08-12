@@ -31,6 +31,7 @@
 *.user
 *.spv
 *.bg
+*.bin
 
 # IDEs, build and other folders
 .cmake/
@@ -45,4 +46,5 @@ tsan/
 source/build/
 tmp/
 .tmp/
-
+doc/
+reference/

@@ -52,40 +52,33 @@ namespace kmx::sat::cdcl
         /// @brief Returns the current tracked memory usage across every registered category.
         /// @return Current usage in bytes.
         /// @throws None (noexcept).
-        std::size_t current_usage() const noexcept
+        std::size_t current_usage() const noexcept { return current_usage_; }
+
+        /// @brief Sets the currently tracked aggregate memory usage.
+        /// @param usage_bytes Aggregate usage in bytes across tracked subsystems.
+        /// @throws None (noexcept).
+        void set_current_usage(const std::size_t usage_bytes) noexcept
         {
-            return current_usage_;
+            current_usage_ = usage_bytes;
+            refresh_breach_state();
         }
 
         /// @brief Checks whether current usage has crossed the registered soft ceiling.
         /// @return True if the soft ceiling is currently breached.
         /// @throws None (noexcept).
-        bool soft_limit_breached() const noexcept
-        {
-            return soft_limit_breached_;
-        }
+        bool soft_limit_breached() const noexcept { return soft_limit_breached_; }
 
         /// @brief Checks whether current usage has crossed the registered hard ceiling.
         /// @return True if the hard ceiling is currently breached.
         /// @throws None (noexcept).
-        bool hard_limit_breached() const noexcept
-        {
-            return hard_limit_breached_;
-        }
+        bool hard_limit_breached() const noexcept { return hard_limit_breached_; }
 
         /// @brief Requests that dependent subsystems shed memory (reduce, flush, disable heavy passes).
         /// @throws None (noexcept).
         void request_shrink() noexcept
         {
             ++shrink_requests_;
-            if (current_usage_ >= soft_ceiling_bytes_)
-            {
-                soft_limit_breached_ = true;
-            }
-            if (current_usage_ >= hard_ceiling_bytes_)
-            {
-                hard_limit_breached_ = true;
-            }
+            refresh_breach_state();
         }
 
         /// @brief Advances to the next stage of the soft/hard escalation ladder.
@@ -93,14 +86,7 @@ namespace kmx::sat::cdcl
         void escalate_policy() noexcept
         {
             ++escalation_steps_;
-            if (current_usage_ >= soft_ceiling_bytes_)
-            {
-                soft_limit_breached_ = true;
-            }
-            if (current_usage_ >= hard_ceiling_bytes_)
-            {
-                hard_limit_breached_ = true;
-            }
+            refresh_breach_state();
         }
 
         /// @brief Resets per-epoch usage accounting at the start of a new solve epoch.
@@ -114,19 +100,19 @@ namespace kmx::sat::cdcl
 
         /// @brief Returns how many shrink requests were made.
         /// @return Number of shrink requests.
-        std::size_t shrink_requests() const noexcept
-        {
-            return shrink_requests_;
-        }
+        std::size_t shrink_requests() const noexcept { return shrink_requests_; }
 
         /// @brief Returns how many escalation steps were recorded.
         /// @return Number of escalation steps.
-        std::size_t escalation_steps() const noexcept
-        {
-            return escalation_steps_;
-        }
+        std::size_t escalation_steps() const noexcept { return escalation_steps_; }
 
     private:
+        void refresh_breach_state() noexcept
+        {
+            soft_limit_breached_ = current_usage_ >= soft_ceiling_bytes_;
+            hard_limit_breached_ = current_usage_ >= hard_ceiling_bytes_;
+        }
+
         std::size_t current_usage_ = 0u;
         std::size_t soft_ceiling_bytes_ = std::numeric_limits<std::size_t>::max();
         std::size_t hard_ceiling_bytes_ = std::numeric_limits<std::size_t>::max();

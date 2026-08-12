@@ -82,22 +82,13 @@ namespace kmx::sat::io
 
         /// @brief Stops the pipeline, releasing any output resources for this session.
         /// @throws None (noexcept).
-        void stop() noexcept
-        {
-            active_ = false;
-        }
+        void stop() noexcept { active_ = false; }
 
         /// @brief Configures how the pipeline behaves when proof data arrives faster than the sink can consume it.
         /// @throws None (noexcept).
-        void set_backpressure_policy() noexcept
-        {
-            backpressure_policy_enabled_ = true;
-        }
+        void set_backpressure_policy() noexcept { backpressure_policy_enabled_ = true; }
 
-        std::size_t submitted_count() const noexcept
-        {
-            return submitted_count_;
-        }
+        std::size_t submitted_count() const noexcept { return submitted_count_; }
 
     private:
         proof::event_stream event_stream_ {};

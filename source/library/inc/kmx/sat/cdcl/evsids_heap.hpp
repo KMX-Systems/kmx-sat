@@ -36,9 +36,7 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void increase_score(const variable var) noexcept
         {
-            const auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept {
-                return entry.first == var;
-            });
+            const auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept { return entry.first == var; });
             if (it != scores_.end())
             {
                 it->second += bump_increment_;
@@ -53,7 +51,7 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void rescale() noexcept
         {
-            for (auto& entry : scores_)
+            for (auto& entry: scores_)
             {
                 entry.second *= 0.5;
             }
@@ -90,16 +88,25 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         bool contains(const variable var) const noexcept
         {
-            return std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept {
-                return entry.first == var;
-            }) != scores_.end();
+            return std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept { return entry.first == var; }) !=
+                   scores_.end();
         }
 
         /// @brief Restores heap ordering invariants after bulk score or membership changes.
         /// @throws None (noexcept).
         void rebuild() noexcept
         {
+            std::sort(scores_.begin(), scores_.end(),
+                      [](const auto& left, const auto& right) noexcept
+                      {
+                          if (left.second != right.second)
+                          {
+                              return left.second > right.second;
+                          }
+                          return left.first.index() < right.first.index();
+                      });
         }
+
     private:
         std::vector<std::pair<variable, double>> scores_ {};
         double bump_increment_ {1.0};

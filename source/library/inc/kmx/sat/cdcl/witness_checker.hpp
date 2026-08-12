@@ -33,18 +33,12 @@ namespace kmx::sat::cdcl
         /// @brief Attaches the original clause database for validation.
         /// @param clauses Clause database to validate against.
         /// @throws None (noexcept).
-        void attach_clauses(const clause::database& clauses) noexcept
-        {
-            clauses_ = &clauses;
-        }
+        void attach_clauses(const clause::database& clauses) noexcept { clauses_ = &clauses; }
 
         /// @brief Attaches a temporary constraint clause for validation.
         /// @param constraint Constraint store to validate against.
         /// @throws None (noexcept).
-        void attach_constraint(const store::constraint& constraint) noexcept
-        {
-            constraint_ = &constraint;
-        }
+        void attach_constraint(const store::constraint& constraint) noexcept { constraint_ = &constraint; }
 
         /// @brief Validates a model against the original, pre-simplification clause set.
         /// @param model Model to validate.
@@ -58,13 +52,15 @@ namespace kmx::sat::cdcl
             }
 
             bool satisfied = true;
-            clauses_->iterate_irredundant([&](const clause::ref_t ref) noexcept {
-                if (!satisfied)
+            clauses_->iterate_irredundant(
+                [&](const clause::ref_t ref) noexcept
                 {
-                    return;
-                }
-                satisfied = clause_satisfied(ref, model);
-            });
+                    if (!satisfied)
+                    {
+                        return;
+                    }
+                    satisfied = clause_satisfied(ref, model);
+                });
             return satisfied;
         }
 
@@ -80,20 +76,24 @@ namespace kmx::sat::cdcl
             }
 
             bool satisfied = true;
-            clauses_->iterate_irredundant([&](const clause::ref_t ref) noexcept {
-                if (!satisfied)
+            clauses_->iterate_irredundant(
+                [&](const clause::ref_t ref) noexcept
                 {
-                    return;
-                }
-                satisfied = clause_satisfied(ref, model);
-            });
-            clauses_->iterate_redundant([&](const clause::ref_t ref) noexcept {
-                if (!satisfied)
+                    if (!satisfied)
+                    {
+                        return;
+                    }
+                    satisfied = clause_satisfied(ref, model);
+                });
+            clauses_->iterate_redundant(
+                [&](const clause::ref_t ref) noexcept
                 {
-                    return;
-                }
-                satisfied = clause_satisfied(ref, model);
-            });
+                    if (!satisfied)
+                    {
+                        return;
+                    }
+                    satisfied = clause_satisfied(ref, model);
+                });
             return satisfied;
         }
 
@@ -115,7 +115,7 @@ namespace kmx::sat::cdcl
             }
 
             bool satisfied = false;
-            for (const auto lit : *clause)
+            for (const auto lit: *clause)
             {
                 if (literal_satisfied(lit, model))
                 {
@@ -129,7 +129,7 @@ namespace kmx::sat::cdcl
     private:
         static bool literal_satisfied(const literal lit, const model_view model) noexcept
         {
-            for (const auto value : model.values())
+            for (const auto value: model.values())
             {
                 if (value.variable_of() == lit.variable_of())
                 {
@@ -147,7 +147,7 @@ namespace kmx::sat::cdcl
             }
 
             const auto literals = clauses_->storage_of().literals_of(ref);
-            for (const auto lit : literals)
+            for (const auto lit: literals)
             {
                 if (literal_satisfied(lit, model))
                 {

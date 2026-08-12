@@ -61,24 +61,15 @@ namespace kmx::sat::telemetry
         /// @brief Logs a literal-related event (for example assignment or watch change).
         /// @param lit Literal being logged.
         /// @throws None (noexcept).
-        void log_literal(const literal lit) noexcept
-        {
-            events_.push_back({event_kind::literal, last_ref_offset_, {}, lit});
-        }
+        void log_literal(const literal lit) noexcept { events_.push_back({event_kind::literal, last_ref_offset_, {}, lit}); }
 
         /// @brief Logs a gate-extraction event from `extractor::gate`.
         /// @throws None (noexcept).
-        void log_gate() noexcept
-        {
-            events_.push_back({event_kind::gate, last_ref_offset_});
-        }
+        void log_gate() noexcept { events_.push_back({event_kind::gate, last_ref_offset_}); }
 
         /// @brief Logs an extension-stack event from `stack::extension`.
         /// @throws None (noexcept).
-        void log_extension() noexcept
-        {
-            events_.push_back({event_kind::extension, last_ref_offset_});
-        }
+        void log_extension() noexcept { events_.push_back({event_kind::extension, last_ref_offset_}); }
 
         /// @brief Logs a summary line for a completed phase.
         /// @param phase_name Identifier of the phase that just completed.
@@ -88,10 +79,7 @@ namespace kmx::sat::telemetry
             events_.push_back({event_kind::phase_summary, last_ref_offset_, std::string {phase_name}});
         }
 
-        std::size_t event_count() const noexcept
-        {
-            return events_.size();
-        }
+        std::size_t event_count() const noexcept { return events_.size(); }
 
         const event& last_event() const noexcept
         {

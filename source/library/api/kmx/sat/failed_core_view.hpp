@@ -30,17 +30,12 @@ namespace kmx::sat
         /// @brief Constructs a failed-core view from an assumption-literal span.
         /// @param assumptions Read-only span representing the extracted failed assumptions.
         /// @throws None (noexcept).
-        explicit failed_core_view(const std::span<const literal> assumptions) noexcept : assumptions_ {assumptions}
-        {
-        }
+        explicit failed_core_view(const std::span<const literal> assumptions) noexcept: assumptions_ {assumptions} {}
 
         /// @brief Exposes the underlying failed-assumption span.
         /// @return Read-only span over failed assumptions.
         /// @throws None (noexcept).
-        std::span<const literal> assumptions() const noexcept
-        {
-            return assumptions_;
-        }
+        std::span<const literal> assumptions() const noexcept { return assumptions_; }
 
     private:
         std::span<const literal> assumptions_ {};

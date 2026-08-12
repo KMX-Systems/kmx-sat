@@ -21,10 +21,7 @@ namespace kmx::sat::cdcl::store
     public:
         assumption() noexcept = default;
 
-        void push(const literal lit) noexcept
-        {
-            literals_.push_back(lit);
-        }
+        void push(const literal lit) noexcept { literals_.push_back(lit); }
 
         void clear() noexcept
         {
@@ -33,30 +30,15 @@ namespace kmx::sat::cdcl::store
             trail_level_base_ = 0;
         }
 
-        std::span<const literal> iterate() const noexcept
-        {
-            return literals_;
-        }
+        std::span<const literal> iterate() const noexcept { return literals_; }
 
-        std::size_t size() const noexcept
-        {
-            return literals_.size();
-        }
+        std::size_t size() const noexcept { return literals_.size(); }
 
-        std::uint32_t trail_level_base() const noexcept
-        {
-            return trail_level_base_;
-        }
+        std::uint32_t trail_level_base() const noexcept { return trail_level_base_; }
 
-        void set_trail_level_base(const std::uint32_t base) noexcept
-        {
-            trail_level_base_ = base;
-        }
+        void set_trail_level_base(const std::uint32_t base) noexcept { trail_level_base_ = base; }
 
-        std::span<const literal> capture_failed_assumptions() const noexcept
-        {
-            return failed_assumptions_;
-        }
+        std::span<const literal> capture_failed_assumptions() const noexcept { return failed_assumptions_; }
 
         void record_failed_assumptions(std::span<const literal> failures) noexcept
         {

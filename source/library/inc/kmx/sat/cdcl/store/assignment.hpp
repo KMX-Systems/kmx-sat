@@ -3,9 +3,11 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <algorithm>
     #include <cstddef>
     #include <cstdint>
     #include <optional>
+    #include <unordered_map>
     #include <vector>
 #endif
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
@@ -110,10 +112,7 @@ namespace kmx::sat::cdcl::store
             }
         }
 
-        void mark_analysis_seen(const variable var) noexcept
-        {
-            mark_analyzed(var);
-        }
+        void mark_analysis_seen(const variable var) noexcept { mark_analyzed(var); }
 
         bool analysis_seen(const variable var) const noexcept
         {
@@ -133,21 +132,51 @@ namespace kmx::sat::cdcl::store
             }
         }
 
-        void set_current_level(const std::uint32_t level) noexcept
+        void set_current_level(const std::uint32_t level) noexcept { current_level_ = level; }
+
+        void set_current_trail_position(const std::uint32_t position) noexcept { current_trail_position_ = position; }
+
+        /// @brief Rewrites every stored implication reason reference according to a relocation map.
+        /// @param relocation Mapping from old clause offsets to relocated clause offsets.
+        /// @throws None (noexcept).
+        void rewrite_reasons_after_compaction(
+            const std::unordered_map<clause::ref_t::offset_t, clause::ref_t::offset_t>& relocation) noexcept
         {
-            current_level_ = level;
+            if (relocation.empty())
+            {
+                return;
+            }
+
+            for (auto& reason: reasons_)
+            {
+                if (!reason.valid())
+                {
+                    continue;
+                }
+                if (const auto it = relocation.find(reason.offset()); it != relocation.end())
+                {
+                    reason = clause::ref_t {it->second};
+                }
+            }
         }
 
-        void set_current_trail_position(const std::uint32_t position) noexcept
+        /// @brief Visits every stored implication reason currently tracked by the assignment store.
+        /// @param visitor Callable invoked with each stored reason reference.
+        /// @throws None (noexcept).
+        template <typename visitor_t>
+        void iterate_reasons(visitor_t&& visitor) const noexcept
         {
-            current_trail_position_ = position;
+            for (const auto reason: reasons_)
+            {
+                if (reason.valid())
+                {
+                    visitor(reason);
+                }
+            }
         }
 
     private:
-        static std::size_t index_of(const variable var) noexcept
-        {
-            return static_cast<std::size_t>(var.index());
-        }
+        static std::size_t index_of(const variable var) noexcept { return static_cast<std::size_t>(var.index()); }
 
         void ensure_capacity(const std::size_t index) noexcept
         {

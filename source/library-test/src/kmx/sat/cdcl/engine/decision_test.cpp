@@ -28,4 +28,22 @@ namespace kmx::sat::cdcl
         REQUIRE(selected.has_value());
         REQUIRE(selected->index() == 7u);
     }
+
+    TEST_CASE("decision engine uses evsids fallback when blend is active", "[sat]")
+    {
+        engine::decision decision;
+        decision.set_next_variable(9u);
+
+        const auto first_branch = decision.pick_branch_literal();
+        REQUIRE(first_branch.has_value());
+        REQUIRE(first_branch->variable_of().index() == 9u);
+
+        decision.notify_conflict();
+        decision.set_next_variable(0u);
+        decision.select_heuristic_blend();
+
+        const auto candidate = decision.pick_decision_variable();
+        REQUIRE(candidate.has_value());
+        REQUIRE(candidate->variable_of().index() == 9u);
+    }
 }

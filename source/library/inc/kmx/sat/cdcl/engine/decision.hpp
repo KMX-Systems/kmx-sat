@@ -4,8 +4,8 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
-    #include <optional>
     #include <cstdint>
+    #include <optional>
 #endif
 #include <kmx/sat/cdcl/chb_tracker.hpp>
 #include <kmx/sat/cdcl/evsids_heap.hpp>
@@ -66,6 +66,13 @@ namespace kmx::sat::cdcl::engine
                     last_decision_variable_ = *vmtf_candidate;
                     return literal {*vmtf_candidate, false};
                 }
+
+                const auto evsids_candidate = evsids_.extract_best();
+                if (evsids_candidate.has_value())
+                {
+                    last_decision_variable_ = *evsids_candidate;
+                    return literal {*evsids_candidate, false};
+                }
             }
 
             if (next_variable_ == 0)
@@ -73,17 +80,13 @@ namespace kmx::sat::cdcl::engine
                 return std::nullopt;
             }
             last_decision_variable_ = variable {next_variable_};
-            const auto phase = pick_decision_phase();
-            return literal {variable {next_variable_}, !phase};
+            return literal {variable {next_variable_}, false};
         }
 
         /// @brief Selects the polarity to assign the chosen decision variable.
         /// @return True for positive phase, false for negative phase.
         /// @throws None (noexcept).
-        bool pick_decision_phase() const noexcept
-        {
-            return phase_bias_;
-        }
+        bool pick_decision_phase() const noexcept { return phase_bias_; }
 
         /// @brief Notifies the decision heuristics that a conflict just occurred.
         /// @throws None (noexcept).
@@ -91,6 +94,13 @@ namespace kmx::sat::cdcl::engine
         {
             ++conflict_count_;
             phase_bias_ = (conflict_count_ % 2u) == 0u;
+
+            if (last_decision_variable_.index() != 0u)
+            {
+                evsids_.increase_score(last_decision_variable_);
+                chb_.update_on_conflict(last_decision_variable_);
+                vmtf_.bump(last_decision_variable_);
+            }
         }
 
         /// @brief Notifies the decision heuristics that a restart just occurred.
@@ -99,6 +109,13 @@ namespace kmx::sat::cdcl::engine
         {
             ++restart_count_;
             phase_bias_ = !phase_bias_;
+
+            vmtf_.shuffle(restart_count_);
+
+            if (last_decision_variable_.index() != 0u)
+            {
+                chb_.update_on_assignment(last_decision_variable_);
+            }
         }
 
         /// @brief Notifies the decision heuristics that a rephase just occurred.
@@ -107,6 +124,7 @@ namespace kmx::sat::cdcl::engine
         {
             ++rephase_count_;
             phase_bias_ = (rephase_count_ % 2u) == 0u;
+            chb_.decay_step();
         }
 
         /// @brief Re-evaluates and applies the current VMTF/EVSIDS/CHB blending policy.
@@ -114,23 +132,20 @@ namespace kmx::sat::cdcl::engine
         void select_heuristic_blend() noexcept
         {
             selected_blend_ = 1u;
-            vmtf_.activate(variable {next_variable_});
+            if (next_variable_ != 0u)
+            {
+                vmtf_.activate(variable {next_variable_});
+            }
         }
 
         /// @brief Seeds the next-variable fallback used by the current lightweight branch picker.
         /// @param variable Variable index selected by an external coordinator.
         /// @throws None (noexcept).
-        void set_next_variable(const std::uint32_t variable) noexcept
-        {
-            next_variable_ = variable;
-        }
+        void set_next_variable(const std::uint32_t variable) noexcept { next_variable_ = variable; }
 
         /// @brief Returns whether a heuristic blend has been selected for the current decision cycle.
         /// @return True if `select_heuristic_blend` has run at least once.
-        [[nodiscard]] bool has_active_blend() const noexcept
-        {
-            return selected_blend_ != 0u;
-        }
+        [[nodiscard]] bool has_active_blend() const noexcept { return selected_blend_ != 0u; }
 
         /// @brief Returns the variable most recently chosen by the decision engine.
         /// @return Last selected decision variable.

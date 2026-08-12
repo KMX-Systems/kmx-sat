@@ -28,32 +28,20 @@ namespace kmx::sat::runtime::controller
 
         /// @brief Installs async-signal-safe OS handlers for SIGINT/SIGTERM.
         /// @throws None (noexcept).
-        void install_handlers() noexcept
-        {
-            handlers_installed_ = true;
-        }
+        void install_handlers() noexcept { handlers_installed_ = true; }
 
         /// @brief Checks whether a termination request is currently pending.
         /// @return True if termination has been requested and not yet cleared.
         /// @throws None (noexcept).
-        bool termination_requested() const noexcept
-        {
-            return termination_requested_;
-        }
+        bool termination_requested() const noexcept { return termination_requested_; }
 
         /// @brief Requests an orderly stop programmatically, without going through an OS signal.
         /// @throws None (noexcept).
-        void request_stop() noexcept
-        {
-            termination_requested_ = true;
-        }
+        void request_stop() noexcept { termination_requested_ = true; }
 
         /// @brief Clears any pending termination request.
         /// @throws None (noexcept).
-        void clear() noexcept
-        {
-            termination_requested_ = false;
-        }
+        void clear() noexcept { termination_requested_ = false; }
 
     private:
         bool handlers_installed_ {false};

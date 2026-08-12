@@ -87,18 +87,12 @@ namespace kmx::sat::cdcl::clause
         /// @brief Assigns the derived clause's asserting literal at the post-backjump decision level.
         /// @param lit Asserting literal to assign.
         /// @throws None (noexcept).
-        void assign_asserting_literal(const literal lit) noexcept
-        {
-            last_asserting_literal_ = lit;
-        }
+        void assign_asserting_literal(const literal lit) noexcept { last_asserting_literal_ = lit; }
 
         /// @brief Returns the number of clauses recorded by this learner.
         /// @return Number of learned clauses.
         /// @throws None (noexcept).
-        std::size_t learned_clause_count() const noexcept
-        {
-            return learned_clauses_.size();
-        }
+        std::size_t learned_clause_count() const noexcept { return learned_clauses_.size(); }
 
         /// @brief Returns the most recently recorded learned clause.
         /// @return Read-only span over the latest learned clause, or empty if none exists.
@@ -115,17 +109,11 @@ namespace kmx::sat::cdcl::clause
         /// @brief Returns the most recently assigned asserting literal.
         /// @return Last asserting literal assigned via `assign_asserting_literal`.
         /// @throws None (noexcept).
-        literal last_asserting_literal() const noexcept
-        {
-            return last_asserting_literal_;
-        }
+        literal last_asserting_literal() const noexcept { return last_asserting_literal_; }
 
         /// @brief Returns whether this learner has recorded at least one learned clause.
         /// @return True if `learn_clause` or a specialized registration path has created a clause.
-        [[nodiscard]] bool has_pending_clause() const noexcept
-        {
-            return !learned_clauses_.empty();
-        }
+        [[nodiscard]] bool has_pending_clause() const noexcept { return !learned_clauses_.empty(); }
 
         /// @brief Returns how many learned clauses of the requested size were registered.
         /// @param size Clause size to count.
@@ -133,7 +121,7 @@ namespace kmx::sat::cdcl::clause
         std::size_t clause_count_for_size(const std::size_t size) const noexcept
         {
             std::size_t count {0};
-            for (const auto& clause : learned_clauses_)
+            for (const auto& clause: learned_clauses_)
             {
                 if (clause.size() == size)
                 {

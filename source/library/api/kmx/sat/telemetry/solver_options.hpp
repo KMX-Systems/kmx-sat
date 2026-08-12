@@ -49,10 +49,7 @@ namespace kmx::sat::telemetry
         /// @param name Option identifier.
         /// @param value Option value to assign.
         /// @throws None (noexcept).
-        void set(const std::string_view name, const std::int64_t value) noexcept
-        {
-            values_[std::string {name}] = value;
-        }
+        void set(const std::string_view name, const std::int64_t value) noexcept { values_[std::string {name}] = value; }
 
         /// @brief Returns the current value of one option by name.
         /// @param name Option identifier.
@@ -85,10 +82,7 @@ namespace kmx::sat::telemetry
         /// @brief Validates the entire current option set for range, dependency, and feature-availability issues.
         /// @return Success, or the first `validation_error` encountered.
         /// @throws None (noexcept).
-        std::expected<void, validation_error> validate() const noexcept
-        {
-            return {};
-        }
+        std::expected<void, validation_error> validate() const noexcept { return {}; }
 
     private:
         std::unordered_map<std::string, std::int64_t> values_ {};

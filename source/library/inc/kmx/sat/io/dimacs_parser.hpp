@@ -232,34 +232,22 @@ namespace kmx::sat::io
         /// @brief Returns diagnostic context (location, failing token, violated rule) for the last parse failure.
         /// @return Human-readable error context string.
         /// @throws None (noexcept).
-        std::string_view report_error_context() const noexcept
-        {
-            return error_context_;
-        }
+        std::string_view report_error_context() const noexcept { return error_context_; }
 
         /// @brief Returns the variable count declared in the parsed DIMACS header.
         /// @return Declared variable count.
         /// @throws None (noexcept).
-        std::uint32_t declared_variable_count() const noexcept
-        {
-            return declared_variable_count_;
-        }
+        std::uint32_t declared_variable_count() const noexcept { return declared_variable_count_; }
 
         /// @brief Returns the clause count declared in the parsed DIMACS header.
         /// @return Declared clause count.
         /// @throws None (noexcept).
-        std::uint32_t declared_clause_count() const noexcept
-        {
-            return declared_clause_count_;
-        }
+        std::uint32_t declared_clause_count() const noexcept { return declared_clause_count_; }
 
         /// @brief Exposes parsed clauses as internal literals in input order.
         /// @return Read-only view of parsed clause vectors.
         /// @throws None (noexcept).
-        std::span<const std::vector<literal>> clauses() const noexcept
-        {
-            return clauses_;
-        }
+        std::span<const std::vector<literal>> clauses() const noexcept { return clauses_; }
 
     private:
         void reset_state() noexcept

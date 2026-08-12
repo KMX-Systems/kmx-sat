@@ -41,7 +41,7 @@ namespace kmx::sat::cdcl
         {
             reconstructed_model_.clear();
             reconstructed_model_.reserve(initial_model_.size());
-            for (const auto& lit : initial_model_)
+            for (const auto& lit: initial_model_)
             {
                 if (internal_only_variables_.contains(lit.variable_of().index()))
                 {
@@ -58,7 +58,8 @@ namespace kmx::sat::cdcl
         void apply_extension_record(const extension_record& record) noexcept
         {
             std::visit(
-                [this](const auto& payload) noexcept {
+                [this](const auto& payload) noexcept
+                {
                     using payload_t = std::decay_t<decltype(payload)>;
                     if constexpr (std::is_same_v<payload_t, extension_record::factor_transformation>)
                     {
@@ -74,7 +75,7 @@ namespace kmx::sat::cdcl
         {
             std::vector<literal> filtered;
             filtered.reserve(initial_model_.size());
-            for (const auto& lit : initial_model_)
+            for (const auto& lit: initial_model_)
             {
                 if (internal_only_variables_.contains(lit.variable_of().index()))
                 {
@@ -88,20 +89,11 @@ namespace kmx::sat::cdcl
         /// @brief Performs a cheap self-check that the reconstructed model satisfies the tracked clause set.
         /// @return True if the reconstructed model satisfies every checked clause.
         /// @throws None (noexcept).
-        bool validate_clause_satisfaction() const noexcept
-        {
-            return !initial_model_.empty();
-        }
+        bool validate_clause_satisfaction() const noexcept { return !initial_model_.empty(); }
 
-        void set_initial_model(const std::vector<literal>& values) noexcept
-        {
-            initial_model_ = values;
-        }
+        void set_initial_model(const std::vector<literal>& values) noexcept { initial_model_ = values; }
 
-        void mark_internal_only_variable(const variable var) noexcept
-        {
-            internal_only_variables_.insert(var.index());
-        }
+        void mark_internal_only_variable(const variable var) noexcept { internal_only_variables_.insert(var.index()); }
 
     private:
         std::vector<literal> initial_model_ {};

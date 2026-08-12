@@ -5,12 +5,12 @@
 #ifndef PCH
     #include <algorithm>
     #include <cstdint>
-    #include <utility>
     #include <span>
+    #include <utility>
     #include <vector>
 #endif
-#include <kmx/sat/cdcl/store/assignment.hpp>
 #include <kmx/sat/cdcl/stack/decision_frame.hpp>
+#include <kmx/sat/cdcl/store/assignment.hpp>
 #include <kmx/sat/cdcl/trail.hpp>
 #include <kmx/sat/literal.hpp>
 #include <kmx/sat/variable.hpp>
@@ -41,25 +41,26 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void analyze() noexcept
         {
+            resolution_chain_literals_.clear();
+            resolution_chain_step_count_ = 0u;
+
             if (pending_conflict_literals_.empty())
             {
-                learned_literals_.assign(1, literal {variable {1}, false});
+                learned_literals_.clear();
             }
             else
             {
-                learned_literals_ = pending_conflict_literals_;
+                learned_literals_ = std::move(pending_conflict_literals_);
+                pending_conflict_literals_.clear();
             }
 
             // Keep first-occurrence order while removing duplicates by raw literal encoding.
             std::vector<literal> unique_literals;
             unique_literals.reserve(learned_literals_.size());
-            for (const auto lit : learned_literals_)
+            for (const auto lit: learned_literals_)
             {
-                const auto duplicate_it = std::find_if(
-                    unique_literals.begin(),
-                    unique_literals.end(),
-                    [lit](const literal existing) noexcept { return existing.raw() == lit.raw(); }
-                );
+                const auto duplicate_it = std::find_if(unique_literals.begin(), unique_literals.end(),
+                                                       [lit](const literal existing) noexcept { return existing.raw() == lit.raw(); });
                 if (duplicate_it == unique_literals.end())
                 {
                     unique_literals.push_back(lit);
@@ -69,14 +70,11 @@ namespace kmx::sat::cdcl
 
             bump_candidates_.clear();
             bump_candidates_.reserve(learned_literals_.size());
-            for (const auto lit : learned_literals_)
+            for (const auto lit: learned_literals_)
             {
                 const auto var = lit.variable_of();
-                const auto seen_it = std::find_if(
-                    bump_candidates_.begin(),
-                    bump_candidates_.end(),
-                    [var](const variable existing) noexcept { return existing.index() == var.index(); }
-                );
+                const auto seen_it = std::find_if(bump_candidates_.begin(), bump_candidates_.end(),
+                                                  [var](const variable existing) noexcept { return existing.index() == var.index(); });
                 if (seen_it == bump_candidates_.end())
                 {
                     bump_candidates_.push_back(var);
@@ -101,48 +99,50 @@ namespace kmx::sat::cdcl
         /// @brief Computes the decision level `engine::backtrack` should unwind to for the derived clause.
         /// @return Backjump target decision level.
         /// @throws None (noexcept).
-        std::uint32_t compute_backjump_level() const noexcept
-        {
-            return backjump_level_;
-        }
+        std::uint32_t compute_backjump_level() const noexcept { return backjump_level_; }
 
         /// @brief Returns the variables touched during resolution, to be bumped in the active branching heuristics.
         /// @return Read-only span over bump-candidate variables.
         /// @throws None (noexcept).
-        std::span<const variable> collect_bump_candidates() const noexcept
-        {
-            return bump_candidates_;
-        }
+        std::span<const variable> collect_bump_candidates() const noexcept { return bump_candidates_; }
 
         /// @brief Returns the learned clause produced by the most recent `analyze` call.
         /// @return Read-only span over learned literals.
         /// @throws None (noexcept).
-        std::span<const literal> learned_clause() const noexcept
-        {
-            return learned_literals_;
-        }
+        std::span<const literal> learned_clause() const noexcept { return learned_literals_; }
 
         /// @brief Returns whether the most recent analysis run produced a learned clause.
         /// @return True if `analyze` has produced at least one learned literal.
-        [[nodiscard]] bool has_learned_clause() const noexcept
-        {
-            return !learned_literals_.empty();
-        }
+        [[nodiscard]] bool has_learned_clause() const noexcept { return !learned_literals_.empty(); }
 
         /// @brief Records the antecedent resolution chain needed to justify the derived clause under LRAT/FRAT.
         /// @throws None (noexcept).
         void build_resolution_chain() noexcept
         {
-            resolution_chain_step_count_ = learned_literals_.empty()
-                ? 0
-                : static_cast<std::uint32_t>(learned_literals_.size() - 1);
+            resolution_chain_step_count_ = learned_literals_.empty() ? 0 : static_cast<std::uint32_t>(learned_literals_.size() - 1);
+            resolution_chain_literals_.clear();
+            if (learned_literals_.size() <= 1u)
+            {
+                return;
+            }
+
+            resolution_chain_literals_.reserve(learned_literals_.size() - 1u);
+            for (std::size_t index = 1u; index < learned_literals_.size(); ++index)
+            {
+                resolution_chain_literals_.push_back(learned_literals_[index]);
+            }
         }
+
+        /// @brief Returns the literal sequence used to build the current resolution chain.
+        /// @return Read-only span over chain literals used as antecedent hints.
+        std::span<const literal> resolution_chain_literals() const noexcept { return resolution_chain_literals_; }
 
         /// @brief Seeds the conflict clause that the next `analyze` call should process.
         /// @param literals Literals from the conflicting clause in analysis order.
         /// @throws None (noexcept).
         void seed_conflict_clause(const std::span<const literal> literals) noexcept
         {
+            decision_levels_.clear();
             pending_conflict_literals_.assign(literals.begin(), literals.end());
         }
 
@@ -152,11 +152,8 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void set_decision_level(const variable var, const std::uint32_t level) noexcept
         {
-            const auto it = std::find_if(
-                decision_levels_.begin(),
-                decision_levels_.end(),
-                [var](const auto& pair) noexcept { return pair.first.index() == var.index(); }
-            );
+            const auto it = std::find_if(decision_levels_.begin(), decision_levels_.end(),
+                                         [var](const auto& pair) noexcept { return pair.first.index() == var.index(); });
 
             if (it != decision_levels_.end())
             {
@@ -170,26 +167,17 @@ namespace kmx::sat::cdcl
         /// @brief Returns the number of resolution steps generated by `build_resolution_chain`.
         /// @return Number of recorded resolution steps.
         /// @throws None (noexcept).
-        std::uint32_t resolution_chain_step_count() const noexcept
-        {
-            return resolution_chain_step_count_;
-        }
+        std::uint32_t resolution_chain_step_count() const noexcept { return resolution_chain_step_count_; }
 
         /// @brief Returns how many variables were collected as bump candidates by the most recent analysis run.
         /// @return Number of candidate variables for heuristic activity bumps.
-        std::size_t bump_candidate_count() const noexcept
-        {
-            return bump_candidates_.size();
-        }
+        std::size_t bump_candidate_count() const noexcept { return bump_candidates_.size(); }
 
     private:
         std::uint32_t level_of_variable(const variable var) const noexcept
         {
-            const auto it = std::find_if(
-                decision_levels_.begin(),
-                decision_levels_.end(),
-                [var](const auto& pair) noexcept { return pair.first.index() == var.index(); }
-            );
+            const auto it = std::find_if(decision_levels_.begin(), decision_levels_.end(),
+                                         [var](const auto& pair) noexcept { return pair.first.index() == var.index(); });
             if (it == decision_levels_.end())
             {
                 return 0;
@@ -206,7 +194,7 @@ namespace kmx::sat::cdcl
 
             std::uint32_t highest {0};
             std::uint32_t second_highest {0};
-            for (const auto lit : learned_literals_)
+            for (const auto lit: learned_literals_)
             {
                 const auto level = level_of_variable(lit.variable_of());
                 if (level >= highest)
@@ -225,6 +213,7 @@ namespace kmx::sat::cdcl
 
         std::vector<literal> pending_conflict_literals_ {};
         std::vector<literal> learned_literals_ {};
+        std::vector<literal> resolution_chain_literals_ {};
         std::vector<variable> bump_candidates_ {};
         std::vector<std::pair<variable, std::uint32_t>> decision_levels_ {};
         std::uint32_t backjump_level_ {0};

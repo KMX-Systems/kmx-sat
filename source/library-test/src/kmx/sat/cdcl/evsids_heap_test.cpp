@@ -43,4 +43,20 @@ namespace kmx::sat::cdcl
 
         REQUIRE(!heap.extract_best().has_value());
     }
+
+    TEST_CASE("evsids heap rebuild restores deterministic tie ordering", "[sat]")
+    {
+        evsids_heap heap;
+        const variable larger_index {7u};
+        const variable smaller_index {3u};
+
+        heap.increase_score(larger_index);
+        heap.increase_score(smaller_index);
+
+        heap.rebuild();
+
+        const auto best = heap.extract_best();
+        REQUIRE(best.has_value());
+        REQUIRE(best->index() == smaller_index.index());
+    }
 }

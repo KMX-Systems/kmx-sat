@@ -3,9 +3,11 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <algorithm>
     #include <cstdint>
     #include <unordered_map>
     #include <unordered_set>
+    #include <vector>
 #endif
 #include <kmx/sat/literal.hpp>
 #include <kmx/sat/variable.hpp>
@@ -91,7 +93,7 @@ namespace kmx::sat::cdcl
 
             std::unordered_map<std::uint32_t, variable> rebuilt_external_to_internal = external_to_internal_;
             std::unordered_map<std::uint32_t, variable> rebuilt_internal_to_external;
-            for (const auto& [external_index, internal_var] : rebuilt_external_to_internal)
+            for (const auto& [external_index, internal_var]: rebuilt_external_to_internal)
             {
                 rebuilt_internal_to_external[internal_var.index()] = variable {external_index};
             }
@@ -100,43 +102,71 @@ namespace kmx::sat::cdcl
             internal_to_external_ = std::move(rebuilt_internal_to_external);
         }
 
+        /// @brief Recomputes the e2i/i2e tables after applying an explicit internal-variable permutation.
+        /// @param permutation Mapping from old internal variable indices to their new compacted identifiers.
+        /// @throws None (noexcept).
+        void rebuild_after_compaction(const std::unordered_map<std::uint32_t, variable>& permutation) noexcept
+        {
+            if (external_to_internal_.empty())
+            {
+                return;
+            }
+
+            std::unordered_map<std::uint32_t, variable> rebuilt_external_to_internal = external_to_internal_;
+            std::unordered_map<std::uint32_t, variable> rebuilt_internal_to_external;
+            std::uint32_t highest_internal_index {internal_variable_base_};
+
+            for (auto& [external_index, internal_var]: rebuilt_external_to_internal)
+            {
+                if (const auto it = permutation.find(internal_var.index()); it != permutation.end())
+                {
+                    internal_var = it->second;
+                }
+
+                rebuilt_internal_to_external[internal_var.index()] = variable {external_index};
+                highest_internal_index = std::max(highest_internal_index, internal_var.index());
+            }
+
+            external_to_internal_ = std::move(rebuilt_external_to_internal);
+            internal_to_external_ = std::move(rebuilt_internal_to_external);
+            next_internal_index_ = highest_internal_index + 1u;
+        }
+
+        /// @brief Returns the currently known external-to-internal mapping entries.
+        /// @return Snapshot of external variables paired with their internal identifiers.
+        std::vector<std::pair<variable, variable>> mapping_entries() const noexcept
+        {
+            std::vector<std::pair<variable, variable>> entries {};
+            entries.reserve(external_to_internal_.size());
+            for (const auto& [external_index, internal_var]: external_to_internal_)
+            {
+                entries.emplace_back(variable {external_index}, internal_var);
+            }
+            return entries;
+        }
+
         /// @brief Marks a variable inactive (for example melted or otherwise no longer part of the live problem)
         /// without discarding its identity mapping.
         /// @param var Variable to mark inactive.
         /// @throws None (noexcept).
-        void mark_inactive(const variable var) noexcept
-        {
-            inactive_variables_.insert(var.index());
-        }
+        void mark_inactive(const variable var) noexcept { inactive_variables_.insert(var.index()); }
 
         /// @brief Marks a variable as eliminated by a simplification pass so it is excluded from future model
         /// exposure until reconstructed by `model_reconstructor`.
         /// @param var Variable to mark eliminated.
         /// @throws None (noexcept).
-        void mark_eliminated(const variable var) noexcept
-        {
-            eliminated_variables_.insert(var.index());
-        }
+        void mark_eliminated(const variable var) noexcept { eliminated_variables_.insert(var.index()); }
 
         /// @brief Clears the inactive flag for a variable after it is melted or otherwise re-enabled.
         /// @param var Variable to reactivate.
         /// @throws None (noexcept).
-        void mark_active(const variable var) noexcept
-        {
-            inactive_variables_.erase(var.index());
-        }
+        void mark_active(const variable var) noexcept { inactive_variables_.erase(var.index()); }
 
         /// @brief Returns whether a variable has been marked eliminated.
-        bool is_eliminated(const variable var) const noexcept
-        {
-            return eliminated_variables_.contains(var.index());
-        }
+        bool is_eliminated(const variable var) const noexcept { return eliminated_variables_.contains(var.index()); }
 
         /// @brief Returns whether a variable has been marked inactive.
-        bool is_inactive(const variable var) const noexcept
-        {
-            return inactive_variables_.contains(var.index());
-        }
+        bool is_inactive(const variable var) const noexcept { return inactive_variables_.contains(var.index()); }
 
     private:
         static constexpr std::uint32_t internal_variable_base_ {1u << 30};

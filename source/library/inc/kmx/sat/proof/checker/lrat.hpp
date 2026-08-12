@@ -60,7 +60,7 @@ namespace kmx::sat::proof::checker
             auto& chain = antecedents_[clause_id.value()];
             chain.clear();
             chain.reserve(antecedents.size());
-            for (const auto& antecedent : antecedents)
+            for (const auto& antecedent: antecedents)
             {
                 chain.push_back(antecedent.value());
             }
@@ -82,10 +82,7 @@ namespace kmx::sat::proof::checker
         /// @brief Checks whether any antecedent chain has been recorded yet.
         /// @return True if at least one derived clause has a recorded antecedent chain.
         /// @throws None (noexcept).
-        [[nodiscard]] bool has_recorded() const noexcept
-        {
-            return !antecedents_.empty();
-        }
+        [[nodiscard]] bool has_recorded() const noexcept { return !antecedents_.empty(); }
 
         /// @brief Verifies that every recorded derived clause's antecedent chain actually resolves to that clause.
         /// @return True if every recorded antecedent chain is valid; false if none are recorded or any fails.
@@ -96,7 +93,7 @@ namespace kmx::sat::proof::checker
             {
                 return false;
             }
-            for (const auto& [clause_key, chain] : antecedents_)
+            for (const auto& [clause_key, chain]: antecedents_)
             {
                 const auto clause_it = clauses_.find(clause_key);
                 if (clause_it == clauses_.end() || !verify_chain(clause_it->second, chain))
@@ -131,7 +128,7 @@ namespace kmx::sat::proof::checker
         /// @throws None (noexcept).
         [[nodiscard]] bool finalize_unsat() const noexcept
         {
-            for (const auto& [clause_key, literals] : clauses_)
+            for (const auto& [clause_key, literals]: clauses_)
             {
                 if (!literals.empty())
                 {
@@ -156,16 +153,15 @@ namespace kmx::sat::proof::checker
 
         /// @brief Performs reverse unit propagation: assumes `derived` false and replays `chain` looking for a
         /// conflict, exactly as an LRAT replay checker would.
-        [[nodiscard]] bool verify_chain(const std::vector<literal>& derived,
-                                         const std::vector<clause::id::value_t>& chain) const noexcept
+        [[nodiscard]] bool verify_chain(const std::vector<literal>& derived, const std::vector<clause::id::value_t>& chain) const noexcept
         {
             std::unordered_map<variable::index_t, bool> assigned {};
-            for (const auto lit : derived)
+            for (const auto lit: derived)
             {
                 assigned[lit.variable_of().index()] = lit.is_negated();
             }
 
-            for (const auto antecedent_key : chain)
+            for (const auto antecedent_key: chain)
             {
                 const auto it = clauses_.find(antecedent_key);
                 if (it == clauses_.end())
@@ -176,7 +172,7 @@ namespace kmx::sat::proof::checker
                 bool satisfied {false};
                 std::size_t unassigned_count {0};
                 literal pending {};
-                for (const auto lit : it->second)
+                for (const auto lit: it->second)
                 {
                     const auto entry = assigned.find(lit.variable_of().index());
                     if (entry == assigned.end())

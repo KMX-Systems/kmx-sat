@@ -30,13 +30,20 @@ namespace kmx::sat::cdcl
         void begin_solve_epoch() noexcept
         {
             in_epoch_ = true;
-            retained_learned_clauses_ = 0u;
+            current_epoch_retained_learned_clauses_ = 0u;
+            transient_state_reset_ = false;
         }
 
         /// @brief Closes the current solve epoch, finalizing which state is retained versus discarded.
         /// @throws None (noexcept).
         void end_solve_epoch() noexcept
         {
+            if (in_epoch_)
+            {
+                retained_learned_clauses_ += current_epoch_retained_learned_clauses_;
+                last_epoch_retained_learned_clauses_ = current_epoch_retained_learned_clauses_;
+                current_epoch_retained_learned_clauses_ = 0u;
+            }
             in_epoch_ = false;
         }
 
@@ -46,7 +53,7 @@ namespace kmx::sat::cdcl
         {
             if (in_epoch_)
             {
-                retained_learned_clauses_ += 1u;
+                current_epoch_retained_learned_clauses_ += 1u;
             }
         }
 
@@ -55,29 +62,36 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void reset_transient_state() noexcept
         {
-            retained_learned_clauses_ = 0u;
+            transient_state_reset_ = true;
+            ++transient_reset_count_;
         }
 
         /// @brief Carries forward only the subset of options explicitly designated as persistent across episodes.
         /// @throws None (noexcept).
-        void persist_option_subset() noexcept
-        {
-            persisted_option_subset_ = true;
-        }
+        void persist_option_subset() noexcept { persisted_option_subset_ = true; }
 
-        bool in_epoch() const noexcept
-        {
-            return in_epoch_;
-        }
+        bool in_epoch() const noexcept { return in_epoch_; }
 
         std::uint32_t retained_learned_clauses() const noexcept
         {
-            return retained_learned_clauses_;
+            return retained_learned_clauses_ + current_epoch_retained_learned_clauses_;
         }
+
+        std::uint32_t last_epoch_retained_learned_clauses() const noexcept { return last_epoch_retained_learned_clauses_; }
+
+        bool transient_state_reset() const noexcept { return transient_state_reset_; }
+
+        std::uint32_t transient_reset_count() const noexcept { return transient_reset_count_; }
+
+        bool persisted_option_subset() const noexcept { return persisted_option_subset_; }
 
     private:
         bool in_epoch_ {false};
         bool persisted_option_subset_ {false};
+        bool transient_state_reset_ {false};
         std::uint32_t retained_learned_clauses_ {0u};
+        std::uint32_t current_epoch_retained_learned_clauses_ {0u};
+        std::uint32_t last_epoch_retained_learned_clauses_ {0u};
+        std::uint32_t transient_reset_count_ {0u};
     };
 }

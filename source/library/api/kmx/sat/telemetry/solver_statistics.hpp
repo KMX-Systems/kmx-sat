@@ -49,10 +49,7 @@ namespace kmx::sat::telemetry
         /// @brief Increments a named counter by one.
         /// @param counter_name Identifier of the counter to increment.
         /// @throws None (noexcept).
-        void inc(const std::string_view counter_name) noexcept
-        {
-            add(counter_name, 1u);
-        }
+        void inc(const std::string_view counter_name) noexcept { add(counter_name, 1u); }
 
         /// @brief Adds a given amount to a named counter.
         /// @param counter_name Identifier of the counter to update.
@@ -70,10 +67,7 @@ namespace kmx::sat::telemetry
         /// @brief Captures an immutable snapshot of the currently tracked counters.
         /// @return Point-in-time copy of every tracked counter.
         /// @throws None (noexcept).
-        snapshot snapshot_of() const noexcept
-        {
-            return snapshot_;
-        }
+        snapshot snapshot_of() const noexcept { return snapshot_; }
 
         /// @brief Merges counters accumulated by a sub-phase (portfolio worker, parallel sub-task) into this instance.
         /// @param other Statistics accumulator whose counters should be merged in.

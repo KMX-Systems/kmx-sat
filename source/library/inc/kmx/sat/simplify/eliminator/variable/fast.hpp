@@ -55,12 +55,10 @@ namespace kmx::sat::simplify::eliminator::variable
         std::int64_t cheap_score_variable(const kmx::sat::variable var) const noexcept
         {
             std::int64_t score {0};
-            for (const auto& clause : clauses_)
+            for (const auto& clause: clauses_)
             {
-                const auto occurrences = std::count_if(
-                    clause.begin(),
-                    clause.end(),
-                    [var](const literal lit) noexcept { return lit.variable_of().index() == var.index(); });
+                const auto occurrences = std::count_if(clause.begin(), clause.end(), [var](const literal lit) noexcept
+                                                       { return lit.variable_of().index() == var.index(); });
                 if (occurrences > 0)
                 {
                     ++score;
@@ -73,22 +71,13 @@ namespace kmx::sat::simplify::eliminator::variable
         /// @param var Variable to check.
         /// @return True if the cheap check accepts the variable for elimination.
         /// @throws None (noexcept).
-        bool cheap_can_eliminate(const kmx::sat::variable var) const noexcept
-        {
-            return cheap_score_variable(var) <= 0;
-        }
+        bool cheap_can_eliminate(const kmx::sat::variable var) const noexcept { return cheap_score_variable(var) <= 0; }
 
         /// @brief Returns how many fast rounds have been executed.
-        std::uint64_t fast_round_count() const noexcept
-        {
-            return fast_round_count_;
-        }
+        std::uint64_t fast_round_count() const noexcept { return fast_round_count_; }
 
         /// @brief Returns how many eliminations were committed by the fast pass.
-        std::uint64_t elimination_count() const noexcept
-        {
-            return elimination_count_;
-        }
+        std::uint64_t elimination_count() const noexcept { return elimination_count_; }
 
     private:
         bounded bounded_ {};

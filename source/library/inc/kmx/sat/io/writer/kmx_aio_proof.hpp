@@ -69,25 +69,13 @@ namespace kmx::sat::io::writer
             }
         }
 
-        [[nodiscard]] bool opened() const noexcept
-        {
-            return opened_;
-        }
+        [[nodiscard]] bool opened() const noexcept { return opened_; }
 
-        [[nodiscard]] std::uint32_t submitted_count() const noexcept
-        {
-            return submitted_count_;
-        }
+        [[nodiscard]] std::uint32_t submitted_count() const noexcept { return submitted_count_; }
 
-        [[nodiscard]] bool flushed() const noexcept
-        {
-            return flushed_;
-        }
+        [[nodiscard]] bool flushed() const noexcept { return flushed_; }
 
-        [[nodiscard]] bool closed() const noexcept
-        {
-            return closed_;
-        }
+        [[nodiscard]] bool closed() const noexcept { return closed_; }
 
     private:
         bool opened_ {false};

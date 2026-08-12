@@ -44,8 +44,8 @@ namespace kmx::sat::simplify::eliminator::clause
         /// @throws None (noexcept).
         bool is_blocked_on(const cdcl::clause::ref_t ref, const literal lit) const noexcept
         {
-            (void)ref;
-            (void)lit;
+            (void) ref;
+            (void) lit;
             return true;
         }
 
@@ -54,26 +54,18 @@ namespace kmx::sat::simplify::eliminator::clause
         /// @throws None (noexcept).
         void mark_blocked(const cdcl::clause::ref_t ref) noexcept
         {
-            (void)ref;
+            (void) ref;
             ++blocked_count_;
         }
 
         /// @brief Records the blocking literal on the extension stack so the removal can be reversed at model
         /// reconstruction time.
         /// @throws None (noexcept).
-        void emit_extension_record() noexcept
-        {
-        }
+        void emit_extension_record() noexcept {}
 
-        std::size_t blocked_count() const noexcept
-        {
-            return blocked_count_;
-        }
+        std::size_t blocked_count() const noexcept { return blocked_count_; }
 
-        literal last_blocked_literal() const noexcept
-        {
-            return last_blocked_literal_;
-        }
+        literal last_blocked_literal() const noexcept { return last_blocked_literal_; }
 
     private:
         std::size_t blocked_count_ {0u};

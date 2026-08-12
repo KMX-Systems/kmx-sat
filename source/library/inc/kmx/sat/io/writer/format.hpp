@@ -32,11 +32,10 @@ namespace kmx::sat::io::writer
         /// @throws None (noexcept).
         void write_clause(const std::span<const literal> clause) noexcept
         {
-            for (const auto lit : clause)
+            for (const auto lit: clause)
             {
-                const auto signed_value = lit.is_negated() ?
-                    -static_cast<int>(lit.variable_of().index()) :
-                    static_cast<int>(lit.variable_of().index());
+                const auto signed_value =
+                    lit.is_negated() ? -static_cast<int>(lit.variable_of().index()) : static_cast<int>(lit.variable_of().index());
                 buffer_.append(std::to_string(signed_value));
                 buffer_.push_back(' ');
             }
@@ -45,10 +44,7 @@ namespace kmx::sat::io::writer
 
         /// @brief Serializes a statistics snapshot to the output target.
         /// @throws None (noexcept).
-        void write_statistics() noexcept
-        {
-            buffer_.append("statistics\n");
-        }
+        void write_statistics() noexcept { buffer_.append("statistics\n"); }
 
         /// @brief Writes one formatted diagnostic/progress report line.
         /// @param line Line content to write.
@@ -64,25 +60,16 @@ namespace kmx::sat::io::writer
 
         /// @brief Writes one already-assembled proof record (add/delete/shrink) to the output target.
         /// @throws None (noexcept).
-        void write_proof_record() noexcept
-        {
-            buffer_.append("proof-record\n");
-        }
+        void write_proof_record() noexcept { buffer_.append("proof-record\n"); }
 
         /// @brief Clears the currently accumulated serialized output.
         /// @throws None (noexcept).
-        void clear() noexcept
-        {
-            buffer_.clear();
-        }
+        void clear() noexcept { buffer_.clear(); }
 
         /// @brief Exposes the accumulated serialized output.
         /// @return Current serialized output buffer.
         /// @throws None (noexcept).
-        std::string_view buffer_view() const noexcept
-        {
-            return buffer_;
-        }
+        std::string_view buffer_view() const noexcept { return buffer_; }
 
     private:
         std::string buffer_ {};

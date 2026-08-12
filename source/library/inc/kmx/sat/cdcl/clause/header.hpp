@@ -17,97 +17,52 @@ namespace kmx::sat::cdcl::clause
     public:
         header() noexcept = default;
 
-        header(const std::uint32_t size, const std::uint32_t glue, const bool redundant, const bool garbage,
-               const bool reason, const bool shrunken, const std::uint32_t tier, const std::uint32_t used_count) noexcept :
-            size_ {size}, glue_ {glue}, redundant_ {redundant}, garbage_ {garbage}, reason_ {reason},
-            shrunken_ {shrunken}, tier_ {tier}, used_count_ {used_count}
+        header(const std::uint32_t size, const std::uint32_t glue, const bool redundant, const bool garbage, const bool reason,
+               const bool shrunken, const std::uint32_t tier, const std::uint32_t used_count) noexcept:
+            size_ {size},
+            glue_ {glue},
+            redundant_ {redundant},
+            garbage_ {garbage},
+            reason_ {reason},
+            shrunken_ {shrunken},
+            tier_ {tier},
+            used_count_ {used_count}
         {
         }
 
-        std::uint32_t size() const noexcept
-        {
-            return size_;
-        }
+        std::uint32_t size() const noexcept { return size_; }
 
-        std::uint32_t glue() const noexcept
-        {
-            return glue_;
-        }
+        std::uint32_t glue() const noexcept { return glue_; }
 
-        bool redundant() const noexcept
-        {
-            return redundant_;
-        }
+        bool redundant() const noexcept { return redundant_; }
 
-        bool garbage() const noexcept
-        {
-            return garbage_;
-        }
+        bool garbage() const noexcept { return garbage_; }
 
-        bool reason() const noexcept
-        {
-            return reason_;
-        }
+        bool reason() const noexcept { return reason_; }
 
-        bool shrunken() const noexcept
-        {
-            return shrunken_;
-        }
+        bool shrunken() const noexcept { return shrunken_; }
 
-        std::uint32_t tier() const noexcept
-        {
-            return tier_;
-        }
+        std::uint32_t tier() const noexcept { return tier_; }
 
-        std::uint32_t used_count() const noexcept
-        {
-            return used_count_;
-        }
+        std::uint32_t used_count() const noexcept { return used_count_; }
 
-        bool is_redundant() const noexcept
-        {
-            return redundant_;
-        }
+        bool is_redundant() const noexcept { return redundant_; }
 
-        bool is_active_reason() const noexcept
-        {
-            return reason_;
-        }
+        bool is_active_reason() const noexcept { return reason_; }
 
-        bool is_satisfied_by_shrink() const noexcept
-        {
-            return shrunken_;
-        }
+        bool is_satisfied_by_shrink() const noexcept { return shrunken_; }
 
-        void set_redundant(const bool redundant) noexcept
-        {
-            redundant_ = redundant;
-        }
+        void set_redundant(const bool redundant) noexcept { redundant_ = redundant; }
 
-        void set_garbage(const bool garbage) noexcept
-        {
-            garbage_ = garbage;
-        }
+        void set_garbage(const bool garbage) noexcept { garbage_ = garbage; }
 
-        void set_reason(const bool reason) noexcept
-        {
-            reason_ = reason;
-        }
+        void set_reason(const bool reason) noexcept { reason_ = reason; }
 
-        void set_shrunken(const bool shrunken) noexcept
-        {
-            shrunken_ = shrunken;
-        }
+        void set_shrunken(const bool shrunken) noexcept { shrunken_ = shrunken; }
 
-        void set_tier(const std::uint32_t tier) noexcept
-        {
-            tier_ = tier;
-        }
+        void set_tier(const std::uint32_t tier) noexcept { tier_ = tier; }
 
-        void increment_used_count() noexcept
-        {
-            ++used_count_;
-        }
+        void increment_used_count() noexcept { ++used_count_; }
 
     private:
         std::uint32_t size_ {0};

@@ -7,6 +7,7 @@
     #include <vector>
 #endif
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
+#include <kmx/sat/proof/event_stream.hpp>
 
 namespace kmx::sat::proof::tracer
 {
@@ -31,33 +32,59 @@ namespace kmx::sat::proof::tracer
         /// @brief Emits an original-clause line with its assigned clause id.
         /// @param ref Reference to the original clause.
         /// @throws None (noexcept).
-        void add_original(const cdcl::clause::ref_t ref) noexcept
-        {
-            emitted_events_.push_back({event_kind::add_original, ref.offset()});
-        }
+        void add_original(const cdcl::clause::ref_t ref) noexcept { emitted_events_.push_back({event_kind::add_original, ref.offset()}); }
 
         /// @brief Emits a derived-clause line together with its resolved antecedent id chain.
         /// @param ref Reference to the derived clause.
         /// @throws None (noexcept).
-        void add_derived(const cdcl::clause::ref_t ref) noexcept
-        {
-            emitted_events_.push_back({event_kind::add_derived, ref.offset()});
-        }
+        void add_derived(const cdcl::clause::ref_t ref) noexcept { emitted_events_.push_back({event_kind::add_derived, ref.offset()}); }
 
         /// @brief Emits a deletion line referencing the clause's stable id.
         /// @param ref Reference to the deleted clause.
         /// @throws None (noexcept).
-        void delete_clause(const cdcl::clause::ref_t ref) noexcept
-        {
-            emitted_events_.push_back({event_kind::delete_clause, ref.offset()});
-        }
+        void delete_clause(const cdcl::clause::ref_t ref) noexcept { emitted_events_.push_back({event_kind::delete_clause, ref.offset()}); }
 
         /// @brief Emits the shrunk clause as a newly derived clause line with its antecedent chain.
         /// @param ref Reference to the shrunk clause.
         /// @throws None (noexcept).
-        void shrink_clause(const cdcl::clause::ref_t ref) noexcept
+        void shrink_clause(const cdcl::clause::ref_t ref) noexcept { emitted_events_.push_back({event_kind::shrink_clause, ref.offset()}); }
+
+        /// @brief Emits one tracer record from a fully-populated proof event.
+        /// @param event Proof event payload.
+        /// @throws None (noexcept).
+        void on_event(const proof::proof_event& event) noexcept
         {
-            emitted_events_.push_back({event_kind::shrink_clause, ref.offset()});
+            event_kind kind {};
+            switch (event.kind)
+            {
+                case proof::event_kind::add_original:
+                    kind = event_kind::add_original;
+                    break;
+                case proof::event_kind::add_derived:
+                    kind = event_kind::add_derived;
+                    break;
+                case proof::event_kind::delete_clause:
+                    kind = event_kind::delete_clause;
+                    break;
+                case proof::event_kind::shrink_clause:
+                    kind = event_kind::shrink_clause;
+                    break;
+                case proof::event_kind::conclusion:
+                    finalize();
+                    return;
+            }
+
+            emitted_event record {};
+            record.kind = kind;
+            record.ref_offset = event.clause_ref.offset();
+            record.clause_id_value = event.clause_id.value();
+            record.literals = event.literals;
+            record.antecedent_id_values.reserve(event.antecedent_ids.size());
+            for (const auto antecedent: event.antecedent_ids)
+            {
+                record.antecedent_id_values.push_back(antecedent.value());
+            }
+            emitted_events_.push_back(record);
         }
 
         /// @brief Writes the proof's closing marker.
@@ -81,22 +108,16 @@ namespace kmx::sat::proof::tracer
         {
             event_kind kind {};
             std::uint64_t ref_offset {};
+            std::uint64_t clause_id_value {};
+            std::vector<int32_t> literals {};
+            std::vector<std::uint64_t> antecedent_id_values {};
         };
 
-        std::size_t emitted_count() const noexcept
-        {
-            return emitted_events_.size();
-        }
+        std::size_t emitted_count() const noexcept { return emitted_events_.size(); }
 
-        bool finalized() const noexcept
-        {
-            return finalized_;
-        }
+        bool finalized() const noexcept { return finalized_; }
 
-        const std::vector<emitted_event>& emitted_events() const noexcept
-        {
-            return emitted_events_;
-        }
+        const std::vector<emitted_event>& emitted_events() const noexcept { return emitted_events_; }
 
     private:
         std::vector<emitted_event> emitted_events_ {};

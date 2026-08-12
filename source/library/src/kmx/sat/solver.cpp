@@ -2,11 +2,11 @@
 /// @brief File-level API declarations and implementation details.
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #include <algorithm>
-#include <utility>
-#include <vector>
 #include <kmx/sat/cdcl/solver_core.hpp>
 #include <kmx/sat/proof/tracer/view.hpp>
 #include <kmx/sat/solver.hpp>
+#include <utility>
+#include <vector>
 
 namespace kmx::sat
 {
@@ -54,7 +54,7 @@ namespace kmx::sat
         }
     };
 
-    solver::solver() noexcept : impl_ {new impl {}}
+    solver::solver() noexcept: impl_ {new impl {}}
     {
     }
 
@@ -65,7 +65,7 @@ namespace kmx::sat
         delete impl_;
     }
 
-    solver::solver(solver&& other) noexcept : impl_ {other.impl_}
+    solver::solver(solver&& other) noexcept: impl_ {other.impl_}
     {
         other.impl_ = nullptr;
     }
@@ -139,29 +139,20 @@ namespace kmx::sat
         impl_->state_machine_.transition_to_solving();
 
         solve_request effective_request {request};
-        effective_request.assumptions.insert(
-            effective_request.assumptions.end(),
-            impl_->assumptions_.begin(),
-            impl_->assumptions_.end());
+        effective_request.assumptions.insert(effective_request.assumptions.end(), impl_->assumptions_.begin(), impl_->assumptions_.end());
 
         if (impl_->terminate_callback_ && impl_->terminate_callback_())
-        {            impl_->state_machine_.transition_to_steady();            return solve_result {
-                solve_result::status::terminated,
-                model_view {},
-                failed_core_view {},
-                impl_->statistics_.snapshot_of(),
-                solve_result::proof_summary {}};
+        {
+            impl_->state_machine_.transition_to_steady();
+            return solve_result {solve_result::status::terminated, model_view {}, failed_core_view {}, impl_->statistics_.snapshot_of(),
+                                 solve_result::proof_summary {}};
         }
 
         const auto core_status = impl_->core_.solve(effective_request);
         const auto mapped_status = impl_->map_status(core_status);
 
-        impl_->last_model_.assign(
-            impl_->core_.extract_internal_model().begin(),
-            impl_->core_.extract_internal_model().end());
-        impl_->last_failed_core_.assign(
-            impl_->core_.extract_failed_core().begin(),
-            impl_->core_.extract_failed_core().end());
+        impl_->last_model_.assign(impl_->core_.extract_internal_model().begin(), impl_->core_.extract_internal_model().end());
+        impl_->last_failed_core_.assign(impl_->core_.extract_failed_core().begin(), impl_->core_.extract_failed_core().end());
 
         if (mapped_status == solve_result::status::satisfiable)
         {
@@ -189,16 +180,9 @@ namespace kmx::sat
 
         const model_view model {std::span<const literal> {impl_->last_model_}};
         const failed_core_view failed_core {std::span<const literal> {impl_->last_failed_core_}};
-        const solve_result::proof_summary proof_summary {
-            impl_->proof_sink_ != nullptr,
-            false};
+        const solve_result::proof_summary proof_summary {impl_->core_.proof_enabled(), impl_->core_.proof_checkers_valid()};
 
-        return solve_result {
-            mapped_status,
-            model,
-            failed_core,
-            impl_->statistics_.snapshot_of(),
-            proof_summary};
+        return solve_result {mapped_status, model, failed_core, impl_->statistics_.snapshot_of(), proof_summary};
     }
 
     /// @brief Returns a computed or stored value from this subsystem.
@@ -207,7 +191,7 @@ namespace kmx::sat
     /// @throws None (noexcept).
     std::optional<bool> solver::value_of(const variable var) const noexcept
     {
-        for (const auto lit : impl_->last_model_)
+        for (const auto lit: impl_->last_model_)
         {
             if (lit.variable_of().index() == var.index())
             {
@@ -223,10 +207,8 @@ namespace kmx::sat
     /// @throws None (noexcept).
     bool solver::failed(const literal lit) const noexcept
     {
-        return std::any_of(
-            impl_->last_failed_core_.begin(),
-            impl_->last_failed_core_.end(),
-            [&](const literal failed_lit) noexcept { return failed_lit.raw() == lit.raw(); });
+        return std::any_of(impl_->last_failed_core_.begin(), impl_->last_failed_core_.end(),
+                           [&](const literal failed_lit) noexcept { return failed_lit.raw() == lit.raw(); });
     }
 
     /// @brief Sets or updates subsystem configuration/state.
@@ -235,8 +217,9 @@ namespace kmx::sat
     /// @throws None (noexcept).
     void solver::set_option(const std::string_view name, const std::int64_t value) noexcept
     {
-        (void)name;
-        (void)value;
+        (void) name;
+        (void) value;
+        impl_->core_.persist_option_subset();
     }
 
     /// @brief Sets or updates subsystem configuration/state.
@@ -244,7 +227,8 @@ namespace kmx::sat
     /// @throws None (noexcept).
     void solver::set_configuration(const std::string_view profile_name) noexcept
     {
-        (void)profile_name;
+        (void) profile_name;
+        impl_->core_.persist_option_subset();
     }
 
     /// @brief Adds or registers data in the subsystem.
@@ -253,6 +237,7 @@ namespace kmx::sat
     void solver::attach_proof_sink(proof::tracer::view& sink) noexcept
     {
         impl_->proof_sink_ = &sink;
+        impl_->core_.attach_proof_tracer(sink);
     }
 
     /// @brief Sets or updates subsystem configuration/state.
@@ -291,7 +276,11 @@ namespace kmx::sat
     /// @throws None (noexcept).
     void solver::reset_session() noexcept
     {
-        impl_->core_ = cdcl::solver_core {};
+        impl_->core_.reset();
+        if (impl_->proof_sink_ != nullptr)
+        {
+            impl_->core_.attach_proof_tracer(*impl_->proof_sink_);
+        }
         impl_->pending_clause_.clear();
         impl_->assumptions_.clear();
         impl_->last_model_.clear();

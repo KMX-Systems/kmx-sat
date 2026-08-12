@@ -32,10 +32,7 @@ namespace kmx::sat::simplify
         factorizer() noexcept = default;
 
         /// @brief Supplies the clause set to evaluate for factoring.
-        void set_clauses(const std::vector<std::vector<literal>>& clauses) noexcept
-        {
-            clauses_ = clauses;
-        }
+        void set_clauses(const std::vector<std::vector<literal>>& clauses) noexcept { clauses_ = clauses; }
 
         /// @brief Runs a full factoring pass: find patterns, introduce variables, rewrite the formula.
         /// @throws None (noexcept).
@@ -45,7 +42,7 @@ namespace kmx::sat::simplify
             if (have_pattern_)
             {
                 const auto introduced = introduce_extension_variable();
-                (void)introduced;
+                (void) introduced;
                 rewrite_formula();
             }
         }
@@ -55,7 +52,7 @@ namespace kmx::sat::simplify
         void find_common_patterns() noexcept
         {
             have_pattern_ = false;
-            for (const auto& clause : clauses_)
+            for (const auto& clause: clauses_)
             {
                 if (clause.size() >= 2u)
                 {
@@ -87,16 +84,10 @@ namespace kmx::sat::simplify
         }
 
         /// @brief Returns how many variables have been introduced by the factorizer.
-        std::uint64_t introduced_variable_count() const noexcept
-        {
-            return introduced_variable_count_;
-        }
+        std::uint64_t introduced_variable_count() const noexcept { return introduced_variable_count_; }
 
         /// @brief Returns the literal that triggered the last pattern match.
-        literal last_pattern_literal() const noexcept
-        {
-            return pattern_literal_;
-        }
+        literal last_pattern_literal() const noexcept { return pattern_literal_; }
 
     private:
         std::vector<std::vector<literal>> clauses_ {};

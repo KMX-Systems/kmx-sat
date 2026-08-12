@@ -32,14 +32,12 @@ namespace kmx::sat
         /// @brief Constructs a literal directly from its packed representation.
         /// @param value Pre-encoded `raw_t` value using the `(index << 1) | negated` scheme.
         /// @throws None (noexcept).
-        explicit constexpr literal(const raw_t value) noexcept : raw_ {value}
-        {
-        }
+        explicit constexpr literal(const raw_t value) noexcept: raw_ {value} {}
         /// @brief Constructs a literal from a variable and an explicit polarity.
         /// @param var Variable this literal refers to.
         /// @param negated True to construct the negative literal (`-var`), false for the positive literal.
         /// @throws None (noexcept).
-        constexpr literal(const variable var, const bool negated) noexcept :
+        constexpr literal(const variable var, const bool negated) noexcept:
             raw_ {static_cast<raw_t>((var.index() << 1u) | (negated ? 1u : 0u))}
         {
         }
@@ -47,42 +45,27 @@ namespace kmx::sat
         /// @brief Returns the packed representation combining the variable index and polarity bit.
         /// @return Raw encoded literal value.
         /// @throws None (noexcept).
-        constexpr raw_t raw() const noexcept
-        {
-            return raw_;
-        }
+        constexpr raw_t raw() const noexcept { return raw_; }
 
         /// @brief Extracts the underlying variable, discarding polarity.
         /// @return Variable this literal refers to.
         /// @throws None (noexcept).
-        constexpr variable variable_of() const noexcept
-        {
-            return variable {raw_ >> 1u};
-        }
+        constexpr variable variable_of() const noexcept { return variable {raw_ >> 1u}; }
 
         /// @brief Checks whether this literal is the negative occurrence of its variable.
         /// @return True if negated, false if positive.
         /// @throws None (noexcept).
-        constexpr bool is_negated() const noexcept
-        {
-            return (raw_ & 1u) != 0u;
-        }
+        constexpr bool is_negated() const noexcept { return (raw_ & 1u) != 0u; }
 
         /// @brief Returns the complementary literal for the same variable.
         /// @return Literal with the same variable and inverted polarity.
         /// @throws None (noexcept).
-        constexpr literal negated() const noexcept
-        {
-            return literal {raw_ ^ 1u};
-        }
+        constexpr literal negated() const noexcept { return literal {raw_ ^ 1u}; }
 
         /// @brief Returns the dense index used to address per-literal arrays such as `bank::watch_list` slots.
         /// @return Index suitable for direct array indexing, distinct per literal polarity.
         /// @throws None (noexcept).
-        constexpr raw_t index_in_watch_bank() const noexcept
-        {
-            return raw_;
-        }
+        constexpr raw_t index_in_watch_bank() const noexcept { return raw_; }
 
         /// @brief Compares two literals by their packed representation.
         /// @return Ordering/equality result following the packed `raw_t` value.

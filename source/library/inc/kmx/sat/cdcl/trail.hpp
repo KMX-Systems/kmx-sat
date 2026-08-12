@@ -21,10 +21,7 @@ namespace kmx::sat::cdcl
     public:
         trail() noexcept = default;
 
-        void push(const literal lit) noexcept
-        {
-            literals_.push_back(lit);
-        }
+        void push(const literal lit) noexcept { literals_.push_back(lit); }
 
         void pop_to(const std::uint32_t position) noexcept
         {
@@ -41,15 +38,9 @@ namespace kmx::sat::cdcl
             }
         }
 
-        std::uint32_t current_head() const noexcept
-        {
-            return static_cast<std::uint32_t>(literals_.size());
-        }
+        std::uint32_t current_head() const noexcept { return static_cast<std::uint32_t>(literals_.size()); }
 
-        std::uint32_t propagation_head() const noexcept
-        {
-            return propagation_head_;
-        }
+        std::uint32_t propagation_head() const noexcept { return propagation_head_; }
 
         void advance_propagation_head() noexcept
         {

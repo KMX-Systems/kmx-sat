@@ -61,25 +61,13 @@ namespace kmx::sat::runtime::controller
             }
         }
 
-        [[nodiscard]] bool launched() const noexcept
-        {
-            return launched_;
-        }
+        [[nodiscard]] bool launched() const noexcept { return launched_; }
 
-        [[nodiscard]] bool cancelled() const noexcept
-        {
-            return cancelled_;
-        }
+        [[nodiscard]] bool cancelled() const noexcept { return cancelled_; }
 
-        [[nodiscard]] bool collected() const noexcept
-        {
-            return collected_;
-        }
+        [[nodiscard]] bool collected() const noexcept { return collected_; }
 
-        [[nodiscard]] std::uint32_t launch_count() const noexcept
-        {
-            return launch_count_;
-        }
+        [[nodiscard]] std::uint32_t launch_count() const noexcept { return launch_count_; }
 
     private:
         signal signal_ {};

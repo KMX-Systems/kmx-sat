@@ -5,6 +5,8 @@
 #ifndef PCH
     #include <cstddef>
 #endif
+
+#include <kmx/sat/cdcl/clause/database.hpp>
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
 
 namespace kmx::sat::simplify
@@ -25,10 +27,43 @@ namespace kmx::sat::simplify
         /// @throws None (noexcept).
         vivifier() noexcept = default;
 
+        /// @brief Attaches the clause database to be vivified.
+        /// @param database Clause database whose clauses may be strengthened.
+        /// @throws None (noexcept).
+        void attach_database(cdcl::clause::database& database) noexcept { database_ = &database; }
+
+        /// @brief Sets the maximum number of clauses to process in one vivification pass.
+        /// @param clause_budget Maximum clauses to process during `run`.
+        /// @throws None (noexcept).
+        void set_budget(const std::size_t clause_budget) noexcept { clause_budget_ = clause_budget; }
+
         /// @brief Runs a full vivification pass over eligible clauses under the pass budget.
         /// @throws None (noexcept).
         void run() noexcept
         {
+            run_completed_ = false;
+            processed_in_current_run_ = 0u;
+
+            if (database_ != nullptr)
+            {
+                bool stopped {false};
+                auto process_ref = [&](const cdcl::clause::ref_t ref) noexcept
+                {
+                    if (stopped || abort_on_budget())
+                    {
+                        stopped = true;
+                        return;
+                    }
+
+                    vivify_clause(ref);
+                    commit_shrunk_clause(ref);
+                    ++processed_in_current_run_;
+                };
+
+                database_->iterate_irredundant(process_ref);
+                database_->iterate_redundant(process_ref);
+            }
+
             run_completed_ = true;
         }
 
@@ -37,45 +72,62 @@ namespace kmx::sat::simplify
         /// @throws None (noexcept).
         void vivify_clause(const cdcl::clause::ref_t ref) noexcept
         {
-            (void)ref;
             ++vivified_clause_count_;
+
+            pending_shrink_ref_ = {};
+            pending_target_size_ = 0u;
+
+            if (database_ == nullptr || !ref.valid() || !database_->storage_of().is_alive(ref))
+            {
+                return;
+            }
+
+            const auto current_size = database_->storage_of().literals_of(ref).size();
+            if (current_size <= 1u)
+            {
+                return;
+            }
         }
 
         /// @brief Checks whether the current vivification budget has been exhausted.
         /// @return True if the pass should stop before processing further clauses.
         /// @throws None (noexcept).
-        bool abort_on_budget() const noexcept
-        {
-            return false;
-        }
+        bool abort_on_budget() const noexcept { return processed_in_current_run_ >= clause_budget_; }
 
         /// @brief Commits a clause's reduced literal set once a beneficial vivification result is confirmed.
         /// @param ref Reference to the clause to shrink.
         /// @throws None (noexcept).
         void commit_shrunk_clause(const cdcl::clause::ref_t ref) noexcept
         {
-            (void)ref;
+            if (database_ == nullptr || !ref.valid() || ref != pending_shrink_ref_ || pending_target_size_ == 0u)
+            {
+                return;
+            }
+
+            database_->storage_of().shrink_clause(ref, pending_target_size_);
+            pending_shrink_ref_ = {};
+            pending_target_size_ = 0u;
             ++committed_shrink_count_;
         }
 
-        std::size_t vivified_clause_count() const noexcept
-        {
-            return vivified_clause_count_;
-        }
+        std::size_t clause_budget() const noexcept { return clause_budget_; }
 
-        std::size_t committed_shrink_count() const noexcept
-        {
-            return committed_shrink_count_;
-        }
+        std::size_t processed_in_current_run() const noexcept { return processed_in_current_run_; }
 
-        bool run_completed() const noexcept
-        {
-            return run_completed_;
-        }
+        std::size_t vivified_clause_count() const noexcept { return vivified_clause_count_; }
+
+        std::size_t committed_shrink_count() const noexcept { return committed_shrink_count_; }
+
+        bool run_completed() const noexcept { return run_completed_; }
 
     private:
+        cdcl::clause::database* database_ {nullptr};
+        std::size_t clause_budget_ {1u};
+        std::size_t processed_in_current_run_ {0u};
         std::size_t vivified_clause_count_ {0u};
         std::size_t committed_shrink_count_ {0u};
+        cdcl::clause::ref_t pending_shrink_ref_ {};
+        std::uint32_t pending_target_size_ {0u};
         bool run_completed_ {false};
     };
 }

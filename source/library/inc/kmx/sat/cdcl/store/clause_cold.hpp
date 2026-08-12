@@ -32,32 +32,22 @@ namespace kmx::sat::cdcl::store
         /// @brief Compresses a redundant clause and moves it out of the hot arena into cold storage.
         /// @param ref Reference to the clause to demote.
         /// @throws None (noexcept).
-        void demote_to_cold(const clause::ref_t ref) noexcept
-        {
-        }
+        void demote_to_cold(const clause::ref_t ref) noexcept {}
 
         /// @brief Decompresses a cold clause and reinstates it in ordinary arena storage.
         /// @param ref Reference to the cold clause to promote.
         /// @return Reference to the clause's new location in ordinary arena storage.
         /// @throws None (noexcept).
-        clause::ref_t promote_from_cold(const clause::ref_t ref) noexcept
-        {
-            return ref;
-        }
+        clause::ref_t promote_from_cold(const clause::ref_t ref) noexcept { return ref; }
 
         /// @brief Decompresses a cold clause transparently for one-off access without permanently promoting it.
         /// @param ref Reference to the cold clause being accessed.
         /// @throws None (noexcept).
-        void decode_on_access(const clause::ref_t ref) noexcept
-        {
-        }
+        void decode_on_access(const clause::ref_t ref) noexcept {}
 
         /// @brief Returns the total compressed footprint of all clauses currently held in cold storage.
         /// @return Footprint in bytes.
         /// @throws None (noexcept).
-        std::size_t cold_footprint_bytes() const noexcept
-        {
-            return {};
-        }
+        std::size_t cold_footprint_bytes() const noexcept { return {}; }
     };
 }

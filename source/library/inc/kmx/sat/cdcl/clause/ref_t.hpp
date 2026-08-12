@@ -35,33 +35,22 @@ namespace kmx::sat::cdcl::clause
         /// @brief Constructs a clause reference from a raw arena offset.
         /// @param offset Byte/word offset into the currently active arena.
         /// @throws None (noexcept).
-        explicit constexpr ref_t(const offset_t offset) noexcept : offset_ {offset}
-        {
-        }
+        explicit constexpr ref_t(const offset_t offset) noexcept: offset_ {offset} {}
 
         /// @brief Checks whether this reference points to a real arena offset rather than the invalid sentinel.
         /// @return True if this reference is valid.
         /// @throws None (noexcept).
-        constexpr bool valid() const noexcept
-        {
-            return offset_ != invalid_offset;
-        }
+        constexpr bool valid() const noexcept { return offset_ != invalid_offset; }
 
         /// @brief Checks whether this reference is the invalid sentinel.
         /// @return True if this reference is invalid.
         /// @throws None (noexcept).
-        constexpr bool invalid() const noexcept
-        {
-            return !valid();
-        }
+        constexpr bool invalid() const noexcept { return !valid(); }
 
         /// @brief Returns the raw arena offset for direct access by `bank::arena`/`clause::storage`.
         /// @return Arena offset value.
         /// @throws None (noexcept).
-        constexpr offset_t offset() const noexcept
-        {
-            return offset_;
-        }
+        constexpr offset_t offset() const noexcept { return offset_; }
 
         /// @brief Compares two clause references by their raw offset.
         /// @return Ordering/equality result following the underlying offset value.
@@ -71,10 +60,7 @@ namespace kmx::sat::cdcl::clause
         /// @brief Returns a reference to the invalid sentinel value.
         /// @return Invalid clause reference.
         /// @throws None (noexcept).
-        static constexpr ref_t invalid_reference() noexcept
-        {
-            return ref_t {invalid_offset};
-        }
+        static constexpr ref_t invalid_reference() noexcept { return ref_t {invalid_offset}; }
 
     private:
         offset_t offset_ {invalid_offset};

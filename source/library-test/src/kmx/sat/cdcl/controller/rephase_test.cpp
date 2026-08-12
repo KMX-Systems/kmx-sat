@@ -56,4 +56,28 @@ namespace kmx::sat::cdcl
 
         REQUIRE(phases.saved_phase(var_a) == true);
     }
+
+    TEST_CASE("rephase walk seed touches all tracked saved phases", "[sat]")
+    {
+        using namespace kmx::sat;
+
+        controller::rephase controller;
+        store::phase phases;
+        const auto var_a = variable {1u};
+        const auto var_b = variable {2u};
+        const auto var_c = variable {3u};
+
+        phases.set_saved_phase(var_a, false);
+        phases.set_saved_phase(var_b, false);
+        phases.set_saved_phase(var_c, false);
+        controller.attach_phase_store(phases);
+
+        controller.record_conflict();
+        controller.record_decision();
+        controller.apply_walk_seed();
+
+        REQUIRE(phases.saved_phase(var_a) == false);
+        REQUIRE(phases.saved_phase(var_b) == true);
+        REQUIRE(phases.saved_phase(var_c) == false);
+    }
 }

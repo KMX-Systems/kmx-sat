@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <vector>
 
 #include <kmx/sat/cdcl/clause/database.hpp>
 #include <kmx/sat/cdcl/store/constraint.hpp>
@@ -40,10 +41,14 @@ namespace kmx::sat::cdcl
         REQUIRE(checker.check_model_against_current(unsatisfying_model) == false);
 
         store::constraint constraint;
-        const std::array constraint_literals {
-            literal {variable {3u}, false},
-        };
-        constraint.set_constraint_clause(std::span<const literal> {constraint_literals});
+
+        {
+            const std::vector<literal> constraint_literals {
+                literal {variable {3u}, false},
+            };
+            constraint.set_constraint_clause(std::span<const literal> {constraint_literals});
+        }
+
         checker.attach_constraint(constraint);
 
         const std::array constraint_satisfying_assignments {
@@ -51,5 +56,14 @@ namespace kmx::sat::cdcl
         };
         const model_view constraint_model {std::span<const literal> {constraint_satisfying_assignments}};
         REQUIRE(checker.check_constraint_satisfaction(constraint_model) == true);
+
+        const std::array constraint_unsatisfying_assignments {
+            literal {variable {3u}, true},
+        };
+        const model_view unsatisfied_constraint_model {std::span<const literal> {constraint_unsatisfying_assignments}};
+        REQUIRE(checker.check_constraint_satisfaction(unsatisfied_constraint_model) == false);
+
+        constraint.clear_constraint_clause();
+        REQUIRE(checker.check_constraint_satisfaction(unsatisfied_constraint_model) == true);
     }
 }

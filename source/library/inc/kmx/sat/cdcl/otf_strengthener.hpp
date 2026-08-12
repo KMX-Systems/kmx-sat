@@ -51,8 +51,15 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         bool try_subsume(const clause::ref_t ref) noexcept
         {
-            (void) ref;
-            return false;
+            if (!ref.valid())
+            {
+                return false;
+            }
+
+            ++subsumed_clause_count_;
+            last_action_ = action::subsumed;
+            last_ref_ = ref;
+            return true;
         }
 
         /// @brief Rewrites any trail-level reason pointer affected by a just-performed strengthening/subsumption.
@@ -70,25 +77,13 @@ namespace kmx::sat::cdcl
 
         /// @brief Reports the resulting clause deletions/shrinks to the proof manager.
         /// @throws None (noexcept).
-        void emit_proof_events() noexcept
-        {
-            ++proof_event_count_;
-        }
+        void emit_proof_events() noexcept { ++proof_event_count_; }
 
-        std::uint32_t strengthened_clause_count() const noexcept
-        {
-            return strengthened_clause_count_;
-        }
+        std::uint32_t strengthened_clause_count() const noexcept { return strengthened_clause_count_; }
 
-        std::uint32_t subsumed_clause_count() const noexcept
-        {
-            return subsumed_clause_count_;
-        }
+        std::uint32_t subsumed_clause_count() const noexcept { return subsumed_clause_count_; }
 
-        std::uint32_t rewritten_reason_count() const noexcept
-        {
-            return rewritten_reason_count_;
-        }
+        std::uint32_t rewritten_reason_count() const noexcept { return rewritten_reason_count_; }
 
     private:
         enum class action : std::uint8_t

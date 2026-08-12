@@ -35,10 +35,7 @@ namespace kmx::sat::cdcl::controller
         /// @brief Checks whether the reduction schedule (or an out-of-band memory-pressure request) is due.
         /// @return True if a reduction pass should run now.
         /// @throws None (noexcept).
-        bool should_reduce() const noexcept
-        {
-            return reduce_pending_;
-        }
+        bool should_reduce() const noexcept { return reduce_pending_; }
 
         /// @brief Ranks redundant clauses by glue/activity/usage to select reduction candidates.
         /// @throws None (noexcept).
@@ -49,19 +46,47 @@ namespace kmx::sat::cdcl::controller
             last_candidates_.push_back(last_selected_candidate_count_);
         }
 
-        /// @brief Selects reduction candidates from a set of clause references using database tier/usage hints.
-        /// @param database Clause database that exposes tier and reason/garbage state.
-        /// @param candidates Candidate clauses to rank.
+        /// @brief Selects reduction candidates by scanning the current redundant set in the clause database.
+        /// @param database Clause database providing tier and reason/garbage state.
         /// @throws None (noexcept).
-        template <std::size_t size>
-        void select_reduction_candidates(const clause::database& database,
-                                         const std::array<clause::ref_t, size>& candidates) noexcept
+        void select_reduction_candidates(const clause::database& database) noexcept
         {
             ++select_call_count_;
             std::uint64_t selected {0};
             last_candidates_.clear();
 
-            for (const auto candidate : candidates)
+            database.iterate_redundant(
+                [&](const clause::ref_t candidate) noexcept
+                {
+                    if (!candidate.valid() || database.is_reason_clause(candidate))
+                    {
+                        return;
+                    }
+
+                    const auto tier = database.tier_of(candidate);
+                    if (tier >= clause::database::default_tier)
+                    {
+                        ++selected;
+                        last_candidates_.push_back(candidate.offset());
+                    }
+                });
+
+            last_selected_candidate_count_ = selected;
+            reduced_candidates_ = selected;
+        }
+
+        /// @brief Selects reduction candidates from a set of clause references using database tier/usage hints.
+        /// @param database Clause database that exposes tier and reason/garbage state.
+        /// @param candidates Candidate clauses to rank.
+        /// @throws None (noexcept).
+        template <std::size_t size>
+        void select_reduction_candidates(const clause::database& database, const std::array<clause::ref_t, size>& candidates) noexcept
+        {
+            ++select_call_count_;
+            std::uint64_t selected {0};
+            last_candidates_.clear();
+
+            for (const auto candidate: candidates)
             {
                 if (!candidate.valid() || database.is_reason_clause(candidate))
                 {
@@ -91,12 +116,44 @@ namespace kmx::sat::cdcl::controller
             }
         }
 
+        /// @brief Marks selected redundant clauses as garbage in the provided clause database.
+        /// @param database Clause database to mutate.
+        /// @throws None (noexcept).
+        void reduce_clauses(clause::database& database) noexcept
+        {
+            ++reduce_call_count_;
+            reduced_candidates_ = 0u;
+
+            for (const auto offset: last_candidates_)
+            {
+                const auto ref = clause::ref_t {static_cast<clause::ref_t::offset_t>(offset)};
+                if (!ref.valid() || database.is_reason_clause(ref) || database.is_garbage(ref))
+                {
+                    continue;
+                }
+                database.mark_garbage(ref);
+                ++reduced_candidates_;
+            }
+        }
+
         /// @brief Physically removes clauses marked garbage by this reduction pass.
         /// @throws None (noexcept).
         void flush_redundant() noexcept
         {
             ++flush_call_count_;
             flushed_candidates_ = reduced_candidates_;
+        }
+
+        /// @brief Physically removes clauses marked garbage from the provided clause database.
+        /// @param database Clause database whose garbage clauses should be removed.
+        /// @throws None (noexcept).
+        void flush_redundant(clause::database& database) noexcept
+        {
+            ++flush_call_count_;
+            const auto before = database.stats_snapshot().redundant_count;
+            database.flush_satisfied([&](const clause::ref_t ref) noexcept { return database.is_garbage(ref); });
+            const auto after = database.stats_snapshot().redundant_count;
+            flushed_candidates_ = (before >= after) ? (before - after) : 0u;
         }
 
         /// @brief Recomputes clause-database tier membership after a reduction pass.
@@ -114,48 +171,30 @@ namespace kmx::sat::cdcl::controller
         /// @brief Returns the number of candidates selected by the most recent reduction pass.
         /// @return Selected candidate count.
         /// @throws None (noexcept).
-        std::uint64_t last_selected_candidate_count() const noexcept
-        {
-            return last_selected_candidate_count_;
-        }
+        std::uint64_t last_selected_candidate_count() const noexcept { return last_selected_candidate_count_; }
 
         /// @brief Returns how many redundant clauses were marked for reduction by the latest pass.
         /// @return Reduced candidate count.
         /// @throws None (noexcept).
-        std::uint64_t reduced_candidates() const noexcept
-        {
-            return reduced_candidates_;
-        }
+        std::uint64_t reduced_candidates() const noexcept { return reduced_candidates_; }
 
         /// @brief Returns whether the most recent selection step produced any reduction candidates.
         /// @return True if at least one candidate was selected.
-        [[nodiscard]] bool has_candidates() const noexcept
-        {
-            return !last_candidates_.empty();
-        }
+        [[nodiscard]] bool has_candidates() const noexcept { return !last_candidates_.empty(); }
 
         /// @brief Returns how many candidates were actually flushed by the latest pass.
         /// @return Flushed candidate count.
         /// @throws None (noexcept).
-        std::uint64_t flushed_candidates() const noexcept
-        {
-            return flushed_candidates_;
-        }
+        std::uint64_t flushed_candidates() const noexcept { return flushed_candidates_; }
 
         /// @brief Requests that the next coordinator loop executes a reduction pass.
         /// @throws None (noexcept).
-        void request_reduce() noexcept
-        {
-            reduce_pending_ = true;
-        }
+        void request_reduce() noexcept { reduce_pending_ = true; }
 
         /// @brief Returns how many completed reduction passes have run.
         /// @return Number of completed reduction passes.
         /// @throws None (noexcept).
-        std::uint64_t reduction_pass_count() const noexcept
-        {
-            return reduction_pass_count_;
-        }
+        std::uint64_t reduction_pass_count() const noexcept { return reduction_pass_count_; }
 
     private:
         bool reduce_pending_ {false};

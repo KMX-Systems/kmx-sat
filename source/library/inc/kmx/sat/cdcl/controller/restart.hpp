@@ -30,17 +30,11 @@ namespace kmx::sat::cdcl::controller
         /// @brief Checks whether a restart should be performed now.
         /// @return True if either the conflict-interval or EMA-based trigger has fired.
         /// @throws None (noexcept).
-        bool should_restart() const noexcept
-        {
-            return restart_pending_;
-        }
+        bool should_restart() const noexcept { return restart_pending_; }
 
         /// @brief Returns whether a restart is currently pending for the next coordination step.
         /// @return True if a restart has been requested or a scheduled trigger fired.
-        [[nodiscard]] bool has_pending_restart() const noexcept
-        {
-            return restart_pending_;
-        }
+        [[nodiscard]] bool has_pending_restart() const noexcept { return restart_pending_; }
 
         /// @brief Advances restart bookkeeping by one conflict.
         /// @throws None (noexcept).
@@ -65,6 +59,17 @@ namespace kmx::sat::cdcl::controller
         void tick_decision() noexcept
         {
             ++decision_count_;
+
+            if (decision_restart_interval_ == 0)
+            {
+                return;
+            }
+
+            if (decision_count_ >= next_scheduled_decision_restart_at_)
+            {
+                restart_pending_ = true;
+                next_scheduled_decision_restart_at_ = decision_count_ + decision_restart_interval_;
+            }
         }
 
         /// @brief Resynchronizes restart counters after an inprocessing epoch changes the clause set.
@@ -80,6 +85,11 @@ namespace kmx::sat::cdcl::controller
             if (restart_interval_ != 0)
             {
                 next_scheduled_restart_at_ = conflict_count_ + restart_interval_;
+            }
+
+            if (decision_restart_interval_ != 0)
+            {
+                next_scheduled_decision_restart_at_ = decision_count_ + decision_restart_interval_;
             }
         }
 
@@ -108,10 +118,7 @@ namespace kmx::sat::cdcl::controller
 
         /// @brief Forces `should_restart` to fire until the next `reset_after_inprocess`.
         /// @throws None (noexcept).
-        void request_restart() noexcept
-        {
-            restart_pending_ = true;
-        }
+        void request_restart() noexcept { restart_pending_ = true; }
 
         /// @brief Sets the periodic conflict interval used for scheduled restart triggers.
         /// @param interval Number of conflicts between scheduled restart opportunities (zero disables schedule).
@@ -122,29 +129,52 @@ namespace kmx::sat::cdcl::controller
             next_scheduled_restart_at_ = conflict_count_ + restart_interval_;
         }
 
+        /// @brief Sets a periodic decision interval used for scheduled restart triggers.
+        /// @param interval Number of decisions between restart opportunities (zero disables decision schedule).
+        /// @throws None (noexcept).
+        void set_decision_restart_interval(const std::uint64_t interval) noexcept
+        {
+            decision_restart_interval_ = interval;
+            next_scheduled_decision_restart_at_ = decision_count_ + decision_restart_interval_;
+        }
+
+        /// @brief Returns the remaining decision budget before the next scheduled restart.
+        /// @return Remaining decision budget.
+        /// @throws None (noexcept).
+        std::uint64_t current_decision_restart_budget() const noexcept
+        {
+            if (decision_restart_interval_ == 0)
+            {
+                return 0;
+            }
+
+            if (restart_pending_)
+            {
+                return 0;
+            }
+
+            if (decision_count_ >= next_scheduled_decision_restart_at_)
+            {
+                return 0;
+            }
+
+            return next_scheduled_decision_restart_at_ - decision_count_;
+        }
+
         /// @brief Returns how many conflicts have been observed by this controller.
         /// @return Total conflict count.
         /// @throws None (noexcept).
-        std::uint64_t conflict_count() const noexcept
-        {
-            return conflict_count_;
-        }
+        std::uint64_t conflict_count() const noexcept { return conflict_count_; }
 
         /// @brief Returns how many decisions have been observed by this controller.
         /// @return Total decision count.
         /// @throws None (noexcept).
-        std::uint64_t decision_count() const noexcept
-        {
-            return decision_count_;
-        }
+        std::uint64_t decision_count() const noexcept { return decision_count_; }
 
         /// @brief Returns how many restarts have been performed.
         /// @return Total restart count.
         /// @throws None (noexcept).
-        std::uint64_t restart_count() const noexcept
-        {
-            return restart_count_;
-        }
+        std::uint64_t restart_count() const noexcept { return restart_count_; }
 
     private:
         std::uint64_t conflict_count_ {0};
@@ -152,6 +182,8 @@ namespace kmx::sat::cdcl::controller
         std::uint64_t restart_count_ {0};
         std::uint64_t restart_interval_ {0};
         std::uint64_t next_scheduled_restart_at_ {0};
+        std::uint64_t decision_restart_interval_ {0};
+        std::uint64_t next_scheduled_decision_restart_at_ {0};
         bool restart_pending_ {false};
     };
 }

@@ -32,5 +32,18 @@ namespace kmx::sat::cdcl
         restart.reset_after_inprocess();
         REQUIRE(restart.current_restart_budget() == 4u);
         REQUIRE(restart.has_pending_restart() == false);
+
+        restart.set_decision_restart_interval(2u);
+        restart.tick_decision();
+        REQUIRE(restart.should_restart() == false);
+        REQUIRE(restart.current_decision_restart_budget() == 1u);
+
+        restart.tick_decision();
+        REQUIRE(restart.should_restart() == true);
+        REQUIRE(restart.current_decision_restart_budget() == 0u);
+
+        restart.reset_after_inprocess();
+        REQUIRE(restart.should_restart() == false);
+        REQUIRE(restart.current_decision_restart_budget() == 2u);
     }
 }

@@ -14,8 +14,10 @@ namespace kmx::sat::cdcl
         using namespace kmx::sat;
 
         clause::storage storage;
+        clause::database database;
         clause::minimizer minimizer;
         minimizer.attach_storage(storage);
+        minimizer.attach_database(database);
 
         const variable var_a {1};
         const variable var_b {2};
@@ -25,6 +27,7 @@ namespace kmx::sat::cdcl
         const std::array<literal, 3> literals {a_pos, b_pos, a_pos};
         const auto ref = storage.create_learned_clause(literals);
         REQUIRE(ref.valid());
+        REQUIRE(database.tier_of(ref) == clause::database::default_tier);
 
         minimizer.minimize_learned_clause(ref);
         minimizer.shrink_clause(ref);
@@ -37,5 +40,6 @@ namespace kmx::sat::cdcl
         REQUIRE(minimizer.shrunk_clause_count() == 1u);
         REQUIRE(minimizer.last_glue() == 2u);
         REQUIRE(minimizer.promoted_clause_count() == 1u);
+        REQUIRE(database.tier_of(ref) == 0u);
     }
 }

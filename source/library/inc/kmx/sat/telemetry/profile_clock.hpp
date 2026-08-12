@@ -47,10 +47,10 @@ namespace kmx::sat::telemetry
             {
                 if (it->name == phase_name)
                 {
-                    const auto wall_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::steady_clock::now() - it->wall_start);
-                    const auto process_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::steady_clock::now() - it->wall_start);
+                    const auto wall_elapsed_ms =
+                        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - it->wall_start);
+                    const auto process_elapsed_ms =
+                        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - it->wall_start);
                     const auto wall_ticks = std::max<std::int64_t>(1, wall_elapsed_ms.count());
                     const auto process_ticks = std::max<std::int64_t>(1, process_elapsed_ms.count());
 
@@ -65,23 +65,14 @@ namespace kmx::sat::telemetry
         /// @brief Returns the cumulative process (CPU) time consumed so far.
         /// @return Process time, in an implementation-defined unit.
         /// @throws None (noexcept).
-        std::uint64_t current_process_time() const noexcept
-        {
-            return cumulative_process_time_;
-        }
+        std::uint64_t current_process_time() const noexcept { return cumulative_process_time_; }
 
         /// @brief Returns the cumulative wall-clock time elapsed so far.
         /// @return Wall-clock time, in an implementation-defined unit.
         /// @throws None (noexcept).
-        std::uint64_t current_wall_time() const noexcept
-        {
-            return cumulative_wall_time_;
-        }
+        std::uint64_t current_wall_time() const noexcept { return cumulative_wall_time_; }
 
-        std::size_t phase_count() const noexcept
-        {
-            return active_phases_.size();
-        }
+        std::size_t phase_count() const noexcept { return active_phases_.size(); }
 
     private:
         struct phase_entry

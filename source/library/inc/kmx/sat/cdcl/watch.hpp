@@ -18,43 +18,27 @@ namespace kmx::sat::cdcl
     public:
         watch() noexcept = default;
 
-        watch(const literal blocking, const clause::ref_t clause_ref, const bool is_binary = false) noexcept :
-            blocking_literal_ {blocking}, clause_ref_ {clause_ref}, is_binary_ {is_binary}
+        watch(const literal blocking, const clause::ref_t clause_ref, const bool is_binary = false) noexcept:
+            blocking_literal_ {blocking},
+            clause_ref_ {clause_ref},
+            is_binary_ {is_binary}
         {
         }
 
-        literal blocking_literal() const noexcept
-        {
-            return blocking_literal_;
-        }
+        literal blocking_literal() const noexcept { return blocking_literal_; }
 
-        bool is_binary() const noexcept
-        {
-            return is_binary_;
-        }
+        bool is_binary() const noexcept { return is_binary_; }
 
-        literal binary_literal() const noexcept
-        {
-            return binary_literal_;
-        }
+        literal binary_literal() const noexcept { return binary_literal_; }
 
-        clause::ref_t clause_ref() const noexcept
-        {
-            return clause_ref_;
-        }
+        clause::ref_t clause_ref() const noexcept { return clause_ref_; }
 
-        void set_binary_literal(const literal lit) noexcept
-        {
-            binary_literal_ = lit;
-        }
+        void set_binary_literal(const literal lit) noexcept { binary_literal_ = lit; }
 
         /// @brief Compares two watch entries by the clause reference they identify.
         /// @return True if both entries refer to the same clause.
         /// @throws None (noexcept).
-        bool operator==(const watch& other) const noexcept
-        {
-            return clause_ref_ == other.clause_ref_;
-        }
+        bool operator==(const watch& other) const noexcept { return clause_ref_ == other.clause_ref_; }
 
     private:
         literal blocking_literal_ {};

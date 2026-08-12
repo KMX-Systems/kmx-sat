@@ -37,9 +37,7 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void update_on_assignment(const variable var) noexcept
         {
-            auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept {
-                return entry.first == var;
-            });
+            auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept { return entry.first == var; });
             if (it == scores_.end())
             {
                 scores_.emplace_back(var, 0.25);
@@ -55,9 +53,7 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void update_on_conflict(const variable var) noexcept
         {
-            auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept {
-                return entry.first == var;
-            });
+            auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept { return entry.first == var; });
             if (it == scores_.end())
             {
                 scores_.emplace_back(var, 0.5);
@@ -74,9 +70,7 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         double score_of(const variable var) const noexcept
         {
-            const auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept {
-                return entry.first == var;
-            });
+            const auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept { return entry.first == var; });
             if (it == scores_.end())
             {
                 return 0.0;
@@ -88,7 +82,7 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void decay_step() noexcept
         {
-            for (auto& entry : scores_)
+            for (auto& entry: scores_)
             {
                 entry.second *= 0.5;
             }
@@ -96,10 +90,8 @@ namespace kmx::sat::cdcl
 
         /// @brief Returns the number of tracked variables with a non-zero CHB score.
         /// @return Number of tracked variables.
-        std::size_t tracked_variable_count() const noexcept
-        {
-            return scores_.size();
-        }
+        std::size_t tracked_variable_count() const noexcept { return scores_.size(); }
+
     private:
         std::vector<std::pair<variable, double>> scores_ {};
     };

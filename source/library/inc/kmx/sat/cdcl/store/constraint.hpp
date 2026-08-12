@@ -5,6 +5,7 @@
 #ifndef PCH
     #include <optional>
     #include <span>
+    #include <vector>
 #endif
 #include <kmx/sat/literal.hpp>
 
@@ -31,7 +32,7 @@ namespace kmx::sat::cdcl::store
         /// @throws None (noexcept).
         void set_constraint_clause(const std::span<const literal> clause) noexcept
         {
-            clause_ = clause;
+            clause_.assign(clause.begin(), clause.end());
             has_clause_ = true;
         }
 
@@ -39,17 +40,14 @@ namespace kmx::sat::cdcl::store
         /// @throws None (noexcept).
         void clear_constraint_clause() noexcept
         {
-            clause_ = std::span<const literal> {};
+            clause_.clear();
             has_clause_ = false;
         }
 
         /// @brief Checks whether a constraint clause is currently active.
         /// @return True if a constraint clause has been set and not yet cleared.
         /// @throws None (noexcept).
-        bool has_constraint_clause() const noexcept
-        {
-            return has_clause_;
-        }
+        bool has_constraint_clause() const noexcept { return has_clause_; }
 
         /// @brief Returns a read-only reference to the currently active constraint clause, if any.
         /// @return The constraint clause literals, or `std::nullopt` when none is active.
@@ -60,11 +58,11 @@ namespace kmx::sat::cdcl::store
             {
                 return std::nullopt;
             }
-            return clause_;
+            return std::span<const literal> {clause_};
         }
 
     private:
-        std::span<const literal> clause_ {};
+        std::vector<literal> clause_ {};
         bool has_clause_ {false};
     };
 }

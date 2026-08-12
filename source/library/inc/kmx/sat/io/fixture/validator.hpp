@@ -56,18 +56,12 @@ namespace kmx::sat::io::fixture
         /// @brief Records the declared/effective variable bound that payload literals must satisfy.
         /// @param variable_count Maximum allowed variable index.
         /// @throws None (noexcept).
-        void set_declared_variable_count(const std::uint32_t variable_count) noexcept
-        {
-            declared_variable_count_ = variable_count;
-        }
+        void set_declared_variable_count(const std::uint32_t variable_count) noexcept { declared_variable_count_ = variable_count; }
 
         /// @brief Records the clause payload to be validated.
         /// @param clauses Clause records decoded from the fixture payload.
         /// @throws None (noexcept).
-        void set_clauses(const clause_container& clauses) noexcept
-        {
-            clauses_ = clauses;
-        }
+        void set_clauses(const clause_container& clauses) noexcept { clauses_ = clauses; }
 
         /// @brief Records the assumption payload to be validated.
         /// @param assumptions Assumption literals decoded from the fixture payload.
@@ -80,10 +74,7 @@ namespace kmx::sat::io::fixture
         /// @brief Records the solve-request-style limits payload to be validated.
         /// @param request Limits payload decoded from the fixture.
         /// @throws None (noexcept).
-        void set_limits_payload(const solve_request& request) noexcept
-        {
-            request_ = request;
-        }
+        void set_limits_payload(const solve_request& request) noexcept { request_ = request; }
 
         /// @brief Computes the checksum implied by the currently recorded payload state.
         /// @return Deterministic checksum over the recorded payload fields.
@@ -91,7 +82,8 @@ namespace kmx::sat::io::fixture
         [[nodiscard]] std::uint64_t payload_checksum() const noexcept
         {
             std::uint64_t checksum {1469598103934665603ull};
-            const auto mix = [&checksum](const std::uint64_t value) noexcept {
+            const auto mix = [&checksum](const std::uint64_t value) noexcept
+            {
                 checksum ^= value;
                 checksum *= 1099511628211ull;
             };
@@ -101,19 +93,19 @@ namespace kmx::sat::io::fixture
             mix(declared_variable_count_);
             mix(schema_.feature_flags());
 
-            for (const auto& clause : clauses_)
+            for (const auto& clause: clauses_)
             {
                 mix(clause.size());
-                for (const auto lit : clause)
+                for (const auto lit: clause)
                 {
                     mix(lit.raw());
                 }
             }
-            for (const auto lit : assumptions_)
+            for (const auto lit: assumptions_)
             {
                 mix(lit.raw());
             }
-            for (const auto lit : request_.assumptions)
+            for (const auto lit: request_.assumptions)
             {
                 mix(lit.raw());
             }
@@ -127,10 +119,7 @@ namespace kmx::sat::io::fixture
         /// @brief Validates that the fixture envelope's magic identifier matches `SATB`.
         /// @return True if the magic identifier is correct.
         /// @throws None (noexcept).
-        bool validate_magic() const noexcept
-        {
-            return magic_ == "SATB";
-        }
+        bool validate_magic() const noexcept { return magic_ == "SATB"; }
 
         /// @brief Validates that the fixture's schema version is supported by this build.
         /// @return True if the schema version is supported.
@@ -144,24 +133,22 @@ namespace kmx::sat::io::fixture
         /// @brief Validates the fixture payload's checksum against the envelope-declared value.
         /// @return True if the checksum matches.
         /// @throws None (noexcept).
-        bool validate_checksum() const noexcept
-        {
-            return declared_checksum_ == payload_checksum();
-        }
+        bool validate_checksum() const noexcept { return declared_checksum_ == payload_checksum(); }
 
         /// @brief Validates that every literal in the payload falls within the declared/effective variable domain.
         /// @return True if every literal is within domain.
         /// @throws None (noexcept).
         bool validate_literal_domain() const noexcept
         {
-            const auto in_domain = [this](const literal lit) noexcept {
+            const auto in_domain = [this](const literal lit) noexcept
+            {
                 const auto index = lit.variable_of().index();
                 return index != 0u && index <= declared_variable_count_;
             };
 
-            for (const auto& clause : clauses_)
+            for (const auto& clause: clauses_)
             {
-                for (const auto lit : clause)
+                for (const auto lit: clause)
                 {
                     if (!in_domain(lit))
                     {
@@ -169,14 +156,14 @@ namespace kmx::sat::io::fixture
                     }
                 }
             }
-            for (const auto lit : assumptions_)
+            for (const auto lit: assumptions_)
             {
                 if (!in_domain(lit))
                 {
                     return false;
                 }
             }
-            for (const auto lit : request_.assumptions)
+            for (const auto lit: request_.assumptions)
             {
                 if (!in_domain(lit))
                 {
@@ -196,13 +183,13 @@ namespace kmx::sat::io::fixture
                 return true;
             }
 
-            for (const auto& clause : clauses_)
+            for (const auto& clause: clauses_)
             {
                 if (clause.empty())
                 {
                     return false;
                 }
-                for (const auto lit : clause)
+                for (const auto lit: clause)
                 {
                     if (lit.raw() == 0u)
                     {
@@ -223,7 +210,7 @@ namespace kmx::sat::io::fixture
                 return true;
             }
 
-            for (const auto lit : request_.assumptions)
+            for (const auto lit: request_.assumptions)
             {
                 if (lit.raw() == 0u)
                 {

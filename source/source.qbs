@@ -9,7 +9,7 @@ Project {
         "library/simplify.qbs",
         "library/runtime.qbs",
         "library/io.qbs",
-        "library/library.qbs"
-        // "library-test/unit-test.qbs"
+        "library/library.qbs",
+        "library-test/unit-test.qbs"
     ]
 }

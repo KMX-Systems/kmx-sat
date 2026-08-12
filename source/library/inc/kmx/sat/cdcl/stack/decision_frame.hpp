@@ -44,10 +44,7 @@ namespace kmx::sat::cdcl::stack
             frames_.resize(level);
         }
 
-        std::uint32_t current_level() const noexcept
-        {
-            return static_cast<std::uint32_t>(frames_.size());
-        }
+        std::uint32_t current_level() const noexcept { return static_cast<std::uint32_t>(frames_.size()); }
 
         literal decision_literal(const std::uint32_t level) const noexcept
         {
@@ -75,10 +72,7 @@ namespace kmx::sat::cdcl::stack
             }
         }
 
-        void set_current_trail_base(const std::uint32_t base) noexcept
-        {
-            current_trail_base_ = base;
-        }
+        void set_current_trail_base(const std::uint32_t base) noexcept { current_trail_base_ = base; }
 
     private:
         std::vector<frame> frames_ {};

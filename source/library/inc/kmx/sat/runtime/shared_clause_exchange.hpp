@@ -66,15 +66,9 @@ namespace kmx::sat::runtime
             policy_applied_ = false;
         }
 
-        [[nodiscard]] bool has_pending() const noexcept
-        {
-            return !pending_refs_.empty();
-        }
+        [[nodiscard]] bool has_pending() const noexcept { return !pending_refs_.empty(); }
 
-        [[nodiscard]] std::uint32_t drain_count() const noexcept
-        {
-            return drain_count_;
-        }
+        [[nodiscard]] std::uint32_t drain_count() const noexcept { return drain_count_; }
 
     private:
         std::vector<cdcl::clause::ref_t> pending_refs_ {};

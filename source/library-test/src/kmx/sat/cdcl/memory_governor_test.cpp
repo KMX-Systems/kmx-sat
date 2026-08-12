@@ -22,7 +22,18 @@ namespace kmx::sat::cdcl
         REQUIRE(governor.shrink_requests() == 1u);
         REQUIRE(governor.escalation_steps() == 1u);
 
+        governor.set_current_usage(12u);
+        REQUIRE(governor.current_usage() == 12u);
+        REQUIRE(governor.soft_limit_breached() == true);
+        REQUIRE(governor.hard_limit_breached() == false);
+
+        governor.set_current_usage(25u);
+        REQUIRE(governor.hard_limit_breached() == true);
+
         governor.reset_epoch_usage();
+        REQUIRE(governor.current_usage() == 0u);
+        REQUIRE(governor.soft_limit_breached() == false);
+        REQUIRE(governor.hard_limit_breached() == false);
         REQUIRE(governor.escalation_steps() == 1u);
     }
 }
