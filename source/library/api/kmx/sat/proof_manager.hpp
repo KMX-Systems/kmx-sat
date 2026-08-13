@@ -363,7 +363,7 @@ namespace kmx::sat
         proof::proof_event last_event_ {};
         proof::checker::online online_checker_ {};
         proof::checker::lrat lrat_checker_ {};
-        bool online_checker_enabled_ {false};
-        bool lrat_checker_enabled_ {false};
+        bool online_checker_enabled_ {};
+        bool lrat_checker_enabled_ {};
     };
 }

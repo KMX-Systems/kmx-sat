@@ -32,7 +32,7 @@ namespace kmx::sat::proof
         clause::id clause_id {};
         std::vector<int32_t> literals {};
         std::vector<clause::id> antecedent_ids {};
-        bool finalized {false};
+        bool finalized {};
     };
 
     /// @brief Channel between the hot path and output sinks.
@@ -111,7 +111,7 @@ namespace kmx::sat::proof
     private:
         sink_t sink_ {};
         std::vector<proof_event> buffered_events_ {};
-        std::size_t last_drain_count_ {0u};
-        std::size_t last_flush_count_ {0u};
+        std::size_t last_drain_count_ {};
+        std::size_t last_flush_count_ {};
     };
 }

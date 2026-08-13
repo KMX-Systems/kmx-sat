@@ -56,7 +56,7 @@ namespace kmx::sat::simplify
             database_->iterate_irredundant([&](const cdcl::clause::ref_t ref) noexcept { refs.push_back(ref); });
             database_->iterate_redundant([&](const cdcl::clause::ref_t ref) noexcept { refs.push_back(ref); });
 
-            for (std::size_t left_index {0}; left_index < refs.size(); ++left_index)
+            for (std::size_t left_index {}; left_index < refs.size(); ++left_index)
             {
                 if (database_->is_garbage(refs[left_index]))
                 {
@@ -111,7 +111,7 @@ namespace kmx::sat::simplify
             }
 
             const auto candidate_clause = database_->storage_of().literals_of(ref);
-            bool subsumed {false};
+            bool subsumed {};
             const auto scan = [&](const cdcl::clause::ref_t other_ref) noexcept
             {
                 if (subsumed || other_ref == ref)
@@ -185,11 +185,11 @@ namespace kmx::sat::simplify
             return true;
         }
 
-        cdcl::clause::database* database_ {nullptr};
-        kmx::sat::proof_manager* proof_manager_ {nullptr};
-        std::size_t run_count_ {0u};
-        std::size_t subsumed_count_ {0u};
-        std::size_t strengthened_count_ {0u};
+        cdcl::clause::database* database_ {};
+        kmx::sat::proof_manager* proof_manager_ {};
+        std::size_t run_count_ {};
+        std::size_t subsumed_count_ {};
+        std::size_t strengthened_count_ {};
         cdcl::clause::ref_t last_subsumed_ref_ {};
     };
 }

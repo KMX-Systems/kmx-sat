@@ -12,6 +12,8 @@
 #include <kmx/sat/cdcl/bank/watch_list.hpp>
 #include <kmx/sat/cdcl/clause/database.hpp>
 #include <kmx/sat/cdcl/store/assignment.hpp>
+#include <kmx/sat/cdcl/store/clause_cold.hpp>
+#include <kmx/sat/proof_manager.hpp>
 
 namespace kmx::sat::cdcl
 {
@@ -49,6 +51,7 @@ namespace kmx::sat::cdcl
             relocated_clause_count_ = 0u;
             watch_rewrite_count_ = 0u;
             reason_rewrite_count_ = 0u;
+            proof_relocation_count_ = 0u;
             finalized_ = false;
             pending_live_refs_.clear();
             relocated_refs_.clear();
@@ -73,6 +76,16 @@ namespace kmx::sat::cdcl
                 const auto new_ref = clause_database_->storage_of().relocate_clause(old_ref);
                 if (new_ref.valid() && new_ref != old_ref)
                 {
+                    clause_database_->rewrite_ref_after_gc(old_ref, new_ref);
+                    if (cold_store_ != nullptr)
+                    {
+                        cold_store_->rewrite_ref_after_gc(old_ref, new_ref);
+                    }
+                    if (proof_manager_ != nullptr)
+                    {
+                        proof_manager_->on_clause_relocated(old_ref, new_ref);
+                        ++proof_relocation_count_;
+                    }
                     relocated_refs_.push_back({old_ref, new_ref});
                     ++relocated_clause_count_;
                 }
@@ -136,6 +149,12 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void attach_assignment_store(store::assignment& assignment_store) noexcept { assignment_store_ = &assignment_store; }
 
+        /// @brief Attaches the proof manager whose stable clause identity map must survive relocation.
+        void attach_proof_manager(kmx::sat::proof_manager& proof_manager) noexcept { proof_manager_ = &proof_manager; }
+
+        /// @brief Attaches opt-in cold storage whose tracked references must follow clause relocation.
+        void attach_cold_store(store::clause_cold& cold_store) noexcept { cold_store_ = &cold_store; }
+
         /// @brief Completes the collection cycle by releasing the retired arena generation.
         /// @throws None (noexcept).
         void finalize_cycle() noexcept { finalized_ = true; }
@@ -155,20 +174,26 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         std::size_t reason_rewrite_count() const noexcept { return reason_rewrite_count_; }
 
+        /// @brief Returns how many relocation notifications were sent to proof management.
+        std::size_t proof_relocation_count() const noexcept { return proof_relocation_count_; }
+
         /// @brief Returns whether the current collection cycle has been finalized.
         /// @return True once the cycle has been finalized.
         /// @throws None (noexcept).
         bool finalized() const noexcept { return finalized_; }
 
     private:
-        clause::database* clause_database_ {nullptr};
-        bank::watch_list* watch_list_ {nullptr};
-        store::assignment* assignment_store_ {nullptr};
+        clause::database* clause_database_ {};
+        bank::watch_list* watch_list_ {};
+        store::assignment* assignment_store_ {};
+        kmx::sat::proof_manager* proof_manager_ {};
+        store::clause_cold* cold_store_ {};
         std::vector<clause::ref_t> pending_live_refs_ {};
         std::vector<std::pair<clause::ref_t, clause::ref_t>> relocated_refs_ {};
         std::size_t relocated_clause_count_ = 0u;
         std::size_t watch_rewrite_count_ = 0u;
         std::size_t reason_rewrite_count_ = 0u;
+        std::size_t proof_relocation_count_ = 0u;
         bool finalized_ = false;
     };
 }

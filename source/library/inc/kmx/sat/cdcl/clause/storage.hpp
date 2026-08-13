@@ -137,16 +137,17 @@ namespace kmx::sat::cdcl::clause
 
         /// @brief Rewrites a clause's stored literal payload in place after compaction or substitution.
         /// @param ref Reference to the clause whose literal payload should be replaced.
-        /// @param literals New literals to store; must preserve the clause's current size.
+        /// @param literals New literals to store; the replacement may preserve or reduce the current size.
         /// @throws None (noexcept).
         void rewrite_clause_literals(const ref_t ref, const std::span<const literal> literals) noexcept
         {
             const auto resolved = resolve_ref(ref);
-            if (!resolved.valid() || arena_.literal_count(resolved) != literals.size())
+            if (!resolved.valid() || literals.size() > arena_.literal_count(resolved))
             {
                 return;
             }
             arena_.write_literals(resolved, literals);
+            arena_.truncate_literals(resolved, static_cast<std::uint32_t>(literals.size()));
         }
 
         /// @brief Checks whether a clause was created as a learned (redundant) clause.

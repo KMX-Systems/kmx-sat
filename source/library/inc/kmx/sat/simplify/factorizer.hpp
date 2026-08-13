@@ -92,8 +92,8 @@ namespace kmx::sat::simplify
     private:
         std::vector<std::vector<literal>> clauses_ {};
         literal pattern_literal_ {};
-        bool have_pattern_ {false};
-        std::uint64_t introduced_variable_count_ {0};
-        std::uint64_t rewritten_clause_count_ {0};
+        bool have_pattern_ {};
+        std::uint64_t introduced_variable_count_ {};
+        std::uint64_t rewritten_clause_count_ {};
     };
 }

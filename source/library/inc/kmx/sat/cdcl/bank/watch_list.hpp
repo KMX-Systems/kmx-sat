@@ -39,7 +39,18 @@ namespace kmx::sat::cdcl::bank
         /// @param lit Literal whose list receives the new entry.
         /// @param entry Watch entry to add.
         /// @throws None (noexcept).
-        void watch_literal(const literal lit, const watch entry) noexcept { ensure_list(lit).push_back(entry); }
+        void watch_literal(const literal lit, const watch entry) noexcept
+        {
+            auto& list = ensure_list(lit);
+            const auto existing = std::find_if(list.begin(), list.end(), [&](const watch& current) noexcept
+                                               { return current.clause_ref() == entry.clause_ref(); });
+            if (existing != list.end())
+            {
+                *existing = entry;
+                return;
+            }
+            list.push_back(entry);
+        }
 
         /// @brief Removes one watch entry from the list for the given literal.
         /// @param lit Literal whose list loses the entry.
@@ -91,6 +102,7 @@ namespace kmx::sat::cdcl::bank
         template <typename visitor_t>
         void iterate(const literal lit, visitor_t&& visitor) const noexcept
         {
+            ++iterate_call_count_;
             const auto index = lit.index_in_watch_bank();
             const auto it = lists_.find(index);
             if (it == lists_.end())
@@ -112,6 +124,12 @@ namespace kmx::sat::cdcl::bank
             const auto it = lists_.find(lit.index_in_watch_bank());
             return it != lists_.end() ? it->second.size() : 0u;
         }
+
+        /// @brief Returns how many watch partitions have been iterated since construction/reset.
+        std::size_t iterate_call_count() const noexcept { return iterate_call_count_; }
+
+        /// @brief Clears watch-list diagnostic counters without changing stored watches.
+        void reset_diagnostics() noexcept { iterate_call_count_ = 0u; }
 
         /// @brief Rewrites every stored clause reference after a garbage-collection cycle relocates one clause.
         /// @param old_ref Clause reference before relocation.
@@ -138,6 +156,19 @@ namespace kmx::sat::cdcl::bank
                         entry = rewritten_entry;
                     }
                 }
+                std::vector<watch> unique_entries {};
+                unique_entries.reserve(list.size());
+                for (const auto& entry: list)
+                {
+                    const auto duplicate = std::find_if(unique_entries.begin(), unique_entries.end(),
+                                                        [&](const watch& existing) noexcept
+                                                        { return existing.clause_ref() == entry.clause_ref(); });
+                    if (duplicate == unique_entries.end())
+                    {
+                        unique_entries.push_back(entry);
+                    }
+                }
+                list.swap(unique_entries);
             }
         }
 
@@ -148,12 +179,19 @@ namespace kmx::sat::cdcl::bank
         void reindex_after_compaction(remap_fn&& remap) noexcept
         {
             std::unordered_map<literal::raw_t, std::vector<watch>> rebuilt {};
+            std::vector<literal::raw_t> indices {};
+            indices.reserve(lists_.size());
             for (const auto& [index, list]: lists_)
             {
-                if (list.empty())
+                if (!list.empty())
                 {
-                    continue;
+                    indices.push_back(index);
                 }
+            }
+            std::sort(indices.begin(), indices.end());
+            for (const auto index: indices)
+            {
+                const auto& list = lists_.at(index);
                 const literal old_lit {index};
                 const auto new_lit = remap(old_lit);
                 auto& target = rebuilt[new_lit.index_in_watch_bank()];
@@ -164,7 +202,13 @@ namespace kmx::sat::cdcl::bank
                     {
                         remapped_entry.set_binary_literal(remap(entry.binary_literal()));
                     }
-                    target.push_back(remapped_entry);
+                    const auto duplicate = std::find_if(target.begin(), target.end(),
+                                                        [&](const watch& existing) noexcept
+                                                        { return existing.clause_ref() == remapped_entry.clause_ref(); });
+                    if (duplicate == target.end())
+                    {
+                        target.push_back(remapped_entry);
+                    }
                 }
             }
             lists_.swap(rebuilt);
@@ -197,5 +241,6 @@ namespace kmx::sat::cdcl::bank
         std::vector<watch>& ensure_list(const literal lit) noexcept { return lists_[lit.index_in_watch_bank()]; }
 
         std::unordered_map<literal::raw_t, std::vector<watch>> lists_ {};
+        mutable std::size_t iterate_call_count_ {};
     };
 }

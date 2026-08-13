@@ -35,8 +35,28 @@ namespace kmx::sat::telemetry
         std::string format_statistics_line(const solver_statistics::snapshot& snapshot) const noexcept
         {
             std::ostringstream stream;
-            stream << "conflicts=" << snapshot.conflicts << " decisions=" << snapshot.decisions << " propagations=" << snapshot.propagations
-                   << " restarts=" << snapshot.restarts << " learned_clauses=" << snapshot.learned_clauses;
+                 stream << "conflicts=" << snapshot.conflicts << " decisions=" << snapshot.decisions << " propagations=" << snapshot.propagations
+                     << " restarts=" << snapshot.restarts << " learned_clauses=" << snapshot.learned_clauses
+                     << " learned_clause_glue_total=" << snapshot.learned_clause_glue_total
+                        << " learned_clause_glue_samples=" << snapshot.learned_clause_glue_samples
+                        << " reduction_passes=" << snapshot.reduction_passes
+                        << " reduced_clauses=" << snapshot.reduced_clauses
+                        << " deleted_clauses=" << snapshot.deleted_clauses;
+            return stream.str();
+        }
+
+        /// @brief Renders a detailed statistics line including callback/configuration activity counters.
+        /// @param snapshot Statistics snapshot to render.
+        /// @return Formatted verbose statistics line.
+        /// @throws None (noexcept).
+        std::string format_statistics_line_verbose(const solver_statistics::snapshot& snapshot) const noexcept
+        {
+            std::ostringstream stream;
+            stream << format_statistics_line(snapshot) << " terminate_callback_calls=" << snapshot.terminate_callback_calls
+                   << " learn_callback_calls=" << snapshot.learn_callback_calls
+                   << " external_propagator_calls=" << snapshot.external_propagator_calls
+                   << " option_updates=" << snapshot.option_updates
+                   << " configuration_updates=" << snapshot.configuration_updates;
             return stream.str();
         }
 
@@ -63,7 +83,7 @@ namespace kmx::sat::telemetry
 
     private:
         mutable profile_clock profile_clock_ {};
-        mutable std::size_t progress_steps_ {0u};
+        mutable std::size_t progress_steps_ {};
         mutable std::size_t total_steps_ {10u};
     };
 }

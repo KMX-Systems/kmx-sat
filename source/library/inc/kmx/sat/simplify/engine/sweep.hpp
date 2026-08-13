@@ -26,6 +26,15 @@ namespace kmx::sat::simplify::engine
         /// @throws None (noexcept).
         sweep() noexcept = default;
 
+        /// @brief Clears the current micro-instance and all episode-local sweep results.
+        void reset() noexcept
+        {
+            micro_instance_built_ = false;
+            backbone_count_ = 0u;
+            equivalence_count_ = 0u;
+            transferred_ = false;
+        }
+
         /// @brief Runs the embedded micro-solver over the current micro-instance and collects its results.
         /// @throws None (noexcept).
         void run() noexcept { transferred_ = true; }
@@ -55,9 +64,9 @@ namespace kmx::sat::simplify::engine
         bool transferred() const noexcept { return transferred_; }
 
     private:
-        bool micro_instance_built_ {false};
-        std::size_t backbone_count_ {0u};
-        std::size_t equivalence_count_ {0u};
-        bool transferred_ {false};
+        bool micro_instance_built_ {};
+        std::size_t backbone_count_ {};
+        std::size_t equivalence_count_ {};
+        bool transferred_ {};
     };
 }

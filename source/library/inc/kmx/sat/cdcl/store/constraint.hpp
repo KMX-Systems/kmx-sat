@@ -63,6 +63,6 @@ namespace kmx::sat::cdcl::store
 
     private:
         std::vector<literal> clause_ {};
-        bool has_clause_ {false};
+        bool has_clause_ {};
     };
 }

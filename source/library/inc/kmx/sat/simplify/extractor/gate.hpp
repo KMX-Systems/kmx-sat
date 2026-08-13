@@ -39,7 +39,7 @@ namespace kmx::sat::simplify::extractor
         struct gate_record final
         {
             gate_kind kind {gate_kind::definition_gate};
-            std::uint32_t output {0u};
+            std::uint32_t output {};
             std::array<std::uint32_t, 2> inputs {0u, 0u};
         };
 
@@ -260,9 +260,9 @@ namespace kmx::sat::simplify::extractor
 
             for (const auto& clause: ternary_clauses)
             {
-                std::uint32_t output {0u};
+                std::uint32_t output {};
                 std::array<std::uint32_t, 2> negative_inputs {0u, 0u};
-                std::size_t negative_count {0u};
+                std::size_t negative_count {};
 
                 for (const auto lit: clause)
                 {
@@ -321,12 +321,12 @@ namespace kmx::sat::simplify::extractor
             summary_materialized_ = false;
         }
 
-        cdcl::clause::database* clause_database_ {nullptr};
+        cdcl::clause::database* clause_database_ {};
         std::vector<gate_record> gate_records_ {};
-        std::size_t summarized_gate_count_ {0u};
+        std::size_t summarized_gate_count_ {};
         std::uint32_t next_synthetic_output_ {1u};
         std::uint32_t next_synthetic_input_ {101u};
-        bool synthetic_discovery_enabled_ {false};
-        bool summary_materialized_ {false};
+        bool synthetic_discovery_enabled_ {};
+        bool summary_materialized_ {};
     };
 }

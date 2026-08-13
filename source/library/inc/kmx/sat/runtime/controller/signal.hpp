@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstdint>
 #endif
 
 namespace kmx::sat::runtime::controller
@@ -22,13 +23,30 @@ namespace kmx::sat::runtime::controller
     class signal final
     {
     public:
+        struct metrics final
+        {
+            bool handlers_installed {};
+            bool termination_requested {};
+            std::uint32_t install_count {};
+            std::uint32_t stop_request_count {};
+            std::uint32_t os_signal_request_count {};
+            std::uint32_t clear_count {};
+        };
+
         /// @brief Constructs a signal controller with no installed handlers.
         /// @throws None (noexcept).
         signal() noexcept = default;
 
         /// @brief Installs async-signal-safe OS handlers for SIGINT/SIGTERM.
         /// @throws None (noexcept).
-        void install_handlers() noexcept { handlers_installed_ = true; }
+        void install_handlers() noexcept
+        {
+            if (!handlers_installed_)
+            {
+                handlers_installed_ = true;
+                ++install_count_;
+            }
+        }
 
         /// @brief Checks whether a termination request is currently pending.
         /// @return True if termination has been requested and not yet cleared.
@@ -37,14 +55,78 @@ namespace kmx::sat::runtime::controller
 
         /// @brief Requests an orderly stop programmatically, without going through an OS signal.
         /// @throws None (noexcept).
-        void request_stop() noexcept { termination_requested_ = true; }
+        void request_stop() noexcept
+        {
+            termination_requested_ = true;
+            ++stop_request_count_;
+        }
+
+        /// @brief Requests an orderly stop through the installed OS-signal path.
+        /// @throws None (noexcept).
+        void notify_os_signal() noexcept
+        {
+            if (!handlers_installed_)
+            {
+                return;
+            }
+            request_stop();
+            ++os_signal_request_count_;
+        }
 
         /// @brief Clears any pending termination request.
         /// @throws None (noexcept).
-        void clear() noexcept { termination_requested_ = false; }
+        void clear() noexcept
+        {
+            termination_requested_ = false;
+            ++clear_count_;
+        }
+
+        [[nodiscard]] bool handlers_installed() const noexcept { return handlers_installed_; }
+
+        [[nodiscard]] std::uint32_t install_count() const noexcept { return install_count_; }
+
+        [[nodiscard]] std::uint32_t stop_request_count() const noexcept { return stop_request_count_; }
+
+        [[nodiscard]] std::uint32_t os_signal_request_count() const noexcept { return os_signal_request_count_; }
+
+        [[nodiscard]] std::uint32_t clear_count() const noexcept { return clear_count_; }
+
+        [[nodiscard]] metrics metrics_snapshot() const noexcept
+        {
+            return metrics {
+                .handlers_installed = handlers_installed_,
+                .termination_requested = termination_requested_,
+                .install_count = install_count_,
+                .stop_request_count = stop_request_count_,
+                .os_signal_request_count = os_signal_request_count_,
+                .clear_count = clear_count_,
+            };
+        }
+
+        void reset_metrics() noexcept
+        {
+            handlers_installed_ = false;
+            termination_requested_ = false;
+            install_count_ = 0u;
+            stop_request_count_ = 0u;
+            os_signal_request_count_ = 0u;
+            clear_count_ = 0u;
+        }
+
+        static bool metrics_monotonic(const metrics& before, const metrics& after) noexcept
+        {
+            return after.install_count >= before.install_count
+                && after.stop_request_count >= before.stop_request_count
+                && after.os_signal_request_count >= before.os_signal_request_count
+                && after.clear_count >= before.clear_count;
+        }
 
     private:
-        bool handlers_installed_ {false};
-        bool termination_requested_ {false};
+        bool handlers_installed_ {};
+        bool termination_requested_ {};
+        std::uint32_t install_count_ {};
+        std::uint32_t stop_request_count_ {};
+        std::uint32_t os_signal_request_count_ {};
+        std::uint32_t clear_count_ {};
     };
 }

@@ -92,8 +92,8 @@ namespace kmx::sat::io
 
     private:
         proof::event_stream event_stream_ {};
-        bool active_ {false};
-        bool backpressure_policy_enabled_ {false};
-        std::size_t submitted_count_ {0u};
+        bool active_ {};
+        bool backpressure_policy_enabled_ {};
+        std::size_t submitted_count_ {};
     };
 }

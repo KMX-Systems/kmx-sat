@@ -1,7 +1,7 @@
 import qbs
-import "." as TestItems
+import "test-application.qbs" as TestItems
 
-TestItems.TestApplication {
+TestItems {
     name: "kmx-sat-simplify-test"
     testSources: [
         "src/kmx/sat/simplify/**/*.cpp",

@@ -62,8 +62,8 @@ namespace kmx::sat::cdcl
         }
 
     private:
-        std::uint32_t trail_reuse_depth_ {0u};
+        std::uint32_t trail_reuse_depth_ {};
         std::uint32_t max_depth_ {4u};
-        bool has_suggested_order_ {false};
+        bool has_suggested_order_ {};
     };
 }

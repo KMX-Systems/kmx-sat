@@ -41,4 +41,26 @@ namespace kmx::sat::cdcl
         REQUIRE(relocated_ref != reason_ref);
         REQUIRE(assignment.reason_of(internal_v1) == relocated_ref);
     }
+
+    TEST_CASE("assignment store handles reserved high internal variables sparsely", "[sat]")
+    {
+        store::assignment assignment;
+        const variable high_variable {1u << 30};
+        const clause::ref_t reason {42u};
+        assignment.set_current_level(3u);
+        assignment.set_current_trail_position(7u);
+        assignment.assign(literal {high_variable, false}, reason);
+
+        REQUIRE(assignment.value_of(high_variable).has_value());
+        REQUIRE(*assignment.value_of(high_variable));
+        REQUIRE(assignment.reason_of(high_variable) == reason);
+        REQUIRE(assignment.level_of(high_variable) == 3u);
+        REQUIRE(assignment.trail_position_of(high_variable) == 7u);
+
+        assignment.mark_analyzed(high_variable);
+        REQUIRE(assignment.analysis_seen(high_variable));
+        assignment.unassign_from(high_variable);
+        REQUIRE_FALSE(assignment.value_of(high_variable).has_value());
+        REQUIRE(assignment.reason_of(high_variable).invalid());
+    }
 }

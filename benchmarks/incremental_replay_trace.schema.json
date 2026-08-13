@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KMX SAT incremental replay JSON Lines",
+  "description": "Versioned header followed by ordered in-process solver operations.",
+  "type": "object",
+  "required": ["schema", "seed", "variable_count", "kind"],
+  "properties": {
+    "schema": {"const": 1},
+    "seed": {"type": "integer", "minimum": 0},
+    "variable_count": {"type": "integer", "minimum": 0},
+    "kind": {"const": "header"},
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind"],
+        "properties": {
+          "kind": {
+            "enum": ["add_clause", "assume", "release_assumptions", "solve", "reset_session", "set_option", "value_of", "failed"]
+          },
+          "literals": {"type": "array", "items": {"type": "integer", "not": {"const": 0}}},
+          "conflict_limit": {"type": "integer", "minimum": 0},
+          "decision_limit": {"type": "integer", "minimum": 0},
+          "option": {"type": "string"},
+          "value": {"type": "integer"},
+          "variable": {"type": "integer", "minimum": 0},
+          "literal": {"type": "integer", "not": {"const": 0}}
+        }
+      }
+    }
+  }
+}

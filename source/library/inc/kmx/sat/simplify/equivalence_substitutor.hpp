@@ -143,7 +143,7 @@ namespace kmx::sat::simplify
     private:
         std::uint32_t resolve_representative(std::uint32_t value) const noexcept
         {
-            std::size_t guard {0u};
+            std::size_t guard {};
             while (guard++ < rewrite_map_.size())
             {
                 const auto it = rewrite_map_.find(value);
@@ -178,7 +178,7 @@ namespace kmx::sat::simplify
                 }
 
                 auto literals = storage.literals_of(ref);
-                bool changed {false};
+                bool changed {};
                 for (auto& lit: literals)
                 {
                     const auto remapped = remap_literal(lit);
@@ -196,16 +196,16 @@ namespace kmx::sat::simplify
             }
         }
 
-        cdcl::clause::database* clause_database_ {nullptr};
-        cdcl::bank::watch_list* watch_list_ {nullptr};
-        cdcl::variable_mapper* variable_mapper_ {nullptr};
+        cdcl::clause::database* clause_database_ {};
+        cdcl::bank::watch_list* watch_list_ {};
+        cdcl::variable_mapper* variable_mapper_ {};
         std::vector<std::pair<std::uint32_t, std::uint32_t>> pending_rewrites_ {};
         std::unordered_map<std::uint32_t, std::uint32_t> rewrite_map_ {};
-        std::size_t equivalence_class_count_ {0u};
-        std::size_t clause_rewrite_count_ {0u};
-        std::size_t watch_rewrite_count_ {0u};
-        std::size_t external_mapping_rewrite_count_ {0u};
-        std::size_t last_applied_rewrite_count_ {0u};
-        bool rewrite_completed_ {false};
+        std::size_t equivalence_class_count_ {};
+        std::size_t clause_rewrite_count_ {};
+        std::size_t watch_rewrite_count_ {};
+        std::size_t external_mapping_rewrite_count_ {};
+        std::size_t last_applied_rewrite_count_ {};
+        bool rewrite_completed_ {};
     };
 }

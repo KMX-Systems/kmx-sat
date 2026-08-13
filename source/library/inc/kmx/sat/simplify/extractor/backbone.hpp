@@ -41,11 +41,27 @@ namespace kmx::sat::simplify::extractor
 
         void attach_clause_sink(clause_sink_t sink) noexcept { clause_sink_ = std::move(sink); }
 
+        /// @brief Clears episode-local candidates, confirmations, and emitted-fact history.
+        void reset() noexcept
+        {
+            candidates_.clear();
+            confirmed_.clear();
+            emitted_.clear();
+        }
+
         /// @brief Stages a candidate backbone literal discovered by probing or sweeping.
         /// @param lit Candidate literal.
         /// @throws None (noexcept).
         void record_candidate(const literal lit) noexcept
         {
+            if (lit.raw() == 0u)
+            {
+                return;
+            }
+            if (std::find(candidates_.begin(), candidates_.end(), lit.negated()) != candidates_.end())
+            {
+                return;
+            }
             if (std::find(candidates_.begin(), candidates_.end(), lit) == candidates_.end())
             {
                 candidates_.push_back(lit);
@@ -62,24 +78,14 @@ namespace kmx::sat::simplify::extractor
                 return;
             }
 
-            if (database_ != nullptr)
+            if (database_ != nullptr && has_unit_clause(lit.negated()))
             {
-                for (const auto ref: database_->irredundant_refs())
-                {
-                    const auto clause = database_->storage_of().literals_of(ref);
-                    if (clause.size() == 1u && clause.front() == lit.negated())
-                    {
-                        return;
-                    }
-                }
-                for (const auto ref: database_->redundant_refs())
-                {
-                    const auto clause = database_->storage_of().literals_of(ref);
-                    if (clause.size() == 1u && clause.front() == lit.negated())
-                    {
-                        return;
-                    }
-                }
+                return;
+            }
+
+            if (std::find(confirmed_.begin(), confirmed_.end(), lit.negated()) != confirmed_.end())
+            {
+                return;
             }
 
             if (std::find(confirmed_.begin(), confirmed_.end(), lit) == confirmed_.end())
@@ -103,14 +109,14 @@ namespace kmx::sat::simplify::extractor
                 return;
             }
 
-            if (database_ != nullptr)
+            if (database_ != nullptr && !has_unit_clause(lit))
             {
                 const auto ref = database_->add_clause(std::array<literal, 1> {lit}, true);
-                if (clause_sink_)
+                if (ref.valid() && clause_sink_)
                 {
                     clause_sink_(ref);
                 }
-                if (proof_manager_ != nullptr)
+                if (ref.valid() && proof_manager_ != nullptr)
                 {
                     proof_manager_->on_add_derived(ref, std::array<literal, 1> {lit});
                 }
@@ -128,8 +134,42 @@ namespace kmx::sat::simplify::extractor
         literal last_emitted_literal() const noexcept { return emitted_.empty() ? literal {} : emitted_.back(); }
 
     private:
-        cdcl::clause::database* database_ {nullptr};
-        kmx::sat::proof_manager* proof_manager_ {nullptr};
+        bool has_unit_clause(const literal lit) const noexcept
+        {
+            if (database_ == nullptr)
+            {
+                return false;
+            }
+
+            bool found = false;
+            database_->iterate_irredundant(
+                [&](const cdcl::clause::ref_t ref) noexcept
+                {
+                    if (database_->storage_of().literals_of(ref).size() == 1u
+                        && database_->storage_of().literals_of(ref).front() == lit)
+                    {
+                        found = true;
+                    }
+                });
+            if (found)
+            {
+                return true;
+            }
+
+            database_->iterate_redundant(
+                [&](const cdcl::clause::ref_t ref) noexcept
+                {
+                    if (database_->storage_of().literals_of(ref).size() == 1u
+                        && database_->storage_of().literals_of(ref).front() == lit)
+                    {
+                        found = true;
+                    }
+                });
+            return found;
+        }
+
+        cdcl::clause::database* database_ {};
+        kmx::sat::proof_manager* proof_manager_ {};
         clause_sink_t clause_sink_ {};
         std::vector<literal> candidates_ {};
         std::vector<literal> confirmed_ {};

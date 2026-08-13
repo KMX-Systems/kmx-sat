@@ -121,7 +121,7 @@ namespace kmx::sat::proof::tracer
 
     private:
         std::vector<emitted_event> emitted_events_ {};
-        std::uint32_t current_epoch_ {0u};
-        bool finalized_ {false};
+        std::uint32_t current_epoch_ {};
+        bool finalized_ {};
     };
 }

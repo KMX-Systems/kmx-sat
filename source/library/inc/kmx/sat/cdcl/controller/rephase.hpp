@@ -125,13 +125,13 @@ namespace kmx::sat::cdcl::controller
         std::uint32_t observed_opportunity_count() const noexcept { return conflict_count_ + decision_count_; }
 
     private:
-        std::uint32_t conflict_count_ {0u};
-        std::uint32_t decision_count_ {0u};
-        bool rephase_pending_ {false};
-        store::phase* phase_store_ {nullptr};
-        std::uint8_t current_snapshot_ {0u};
-        std::uint8_t best_snapshot_ {0u};
-        bool has_best_snapshot_ {false};
+        std::uint32_t conflict_count_ {};
+        std::uint32_t decision_count_ {};
+        bool rephase_pending_ {};
+        store::phase* phase_store_ {};
+        std::uint8_t current_snapshot_ {};
+        std::uint8_t best_snapshot_ {};
+        bool has_best_snapshot_ {};
 
         std::uint8_t capture_snapshot() const noexcept
         {
@@ -140,7 +140,7 @@ namespace kmx::sat::cdcl::controller
                 return current_snapshot_;
             }
 
-            std::uint8_t snapshot {0u};
+            std::uint8_t snapshot {};
             if (phase_store_->saved_phase(variable {1u}))
             {
                 snapshot |= 0x01u;

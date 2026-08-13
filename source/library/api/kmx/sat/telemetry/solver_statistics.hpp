@@ -40,6 +40,23 @@ namespace kmx::sat::telemetry
             std::uint64_t restarts {};
             /// @brief Total number of clauses learned from conflict analysis so far.
             std::uint64_t learned_clauses {};
+            /// @brief Sum of learned-clause LBD/glue values observed so far.
+            std::uint64_t learned_clause_glue_total {};
+            /// @brief Number of learned-clause LBD/glue samples included in the total.
+            std::uint64_t learned_clause_glue_samples {};
+            std::uint64_t reduction_passes {};
+            std::uint64_t reduced_clauses {};
+            std::uint64_t deleted_clauses {};
+            /// @brief Total number of terminate-callback polls executed so far.
+            std::uint64_t terminate_callback_calls {};
+            /// @brief Total number of learned-clause callback invocations executed so far.
+            std::uint64_t learn_callback_calls {};
+            /// @brief Total number of external propagator callback invocations executed so far.
+            std::uint64_t external_propagator_calls {};
+            /// @brief Total number of recognized option updates applied through the facade.
+            std::uint64_t option_updates {};
+            /// @brief Total number of recognized configuration profile updates applied through the facade.
+            std::uint64_t configuration_updates {};
         };
 
         /// @brief Constructs a statistics accumulator with every counter at zero.
@@ -62,12 +79,82 @@ namespace kmx::sat::telemetry
             snapshot_.propagations += counter_name == "propagations" ? amount : 0u;
             snapshot_.restarts += counter_name == "restarts" ? amount : 0u;
             snapshot_.learned_clauses += counter_name == "learned_clauses" ? amount : 0u;
+            snapshot_.learned_clause_glue_total += counter_name == "learned_clause_glue_total" ? amount : 0u;
+            snapshot_.learned_clause_glue_samples += counter_name == "learned_clause_glue_samples" ? amount : 0u;
+            snapshot_.reduction_passes += counter_name == "reduction_passes" ? amount : 0u;
+            snapshot_.reduced_clauses += counter_name == "reduced_clauses" ? amount : 0u;
+            snapshot_.deleted_clauses += counter_name == "deleted_clauses" ? amount : 0u;
+            snapshot_.terminate_callback_calls += counter_name == "terminate_callback_calls" ? amount : 0u;
+            snapshot_.learn_callback_calls += counter_name == "learn_callback_calls" ? amount : 0u;
+            snapshot_.external_propagator_calls += counter_name == "external_propagator_calls" ? amount : 0u;
+            snapshot_.option_updates += counter_name == "option_updates" ? amount : 0u;
+            snapshot_.configuration_updates += counter_name == "configuration_updates" ? amount : 0u;
         }
 
         /// @brief Captures an immutable snapshot of the currently tracked counters.
         /// @return Point-in-time copy of every tracked counter.
         /// @throws None (noexcept).
         snapshot snapshot_of() const noexcept { return snapshot_; }
+
+        /// @brief Reports whether every tracked counter is monotonic between two snapshots.
+        /// @param before Baseline snapshot.
+        /// @param after Candidate snapshot.
+        /// @return True when all counters in @p after are greater-than-or-equal to @p before.
+        /// @throws None (noexcept).
+        static bool snapshot_monotonic(const snapshot& before, const snapshot& after) noexcept
+        {
+            return after.conflicts >= before.conflicts && after.decisions >= before.decisions
+                && after.propagations >= before.propagations && after.restarts >= before.restarts
+                && after.learned_clauses >= before.learned_clauses
+                && after.learned_clause_glue_total >= before.learned_clause_glue_total
+                && after.learned_clause_glue_samples >= before.learned_clause_glue_samples
+                && after.reduction_passes >= before.reduction_passes
+                && after.reduced_clauses >= before.reduced_clauses
+                && after.deleted_clauses >= before.deleted_clauses
+                && after.terminate_callback_calls >= before.terminate_callback_calls
+                && after.learn_callback_calls >= before.learn_callback_calls
+                && after.external_propagator_calls >= before.external_propagator_calls
+                && after.option_updates >= before.option_updates
+                && after.configuration_updates >= before.configuration_updates;
+        }
+
+        /// @brief Computes the non-negative per-counter delta between two snapshots.
+        /// @param before Baseline snapshot.
+        /// @param after Candidate snapshot.
+        /// @return Snapshot containing `after - before` for each counter (saturating at zero).
+        /// @throws None (noexcept).
+        static snapshot snapshot_delta_between(const snapshot& before, const snapshot& after) noexcept
+        {
+            return snapshot {
+                .conflicts = after.conflicts >= before.conflicts ? after.conflicts - before.conflicts : 0u,
+                .decisions = after.decisions >= before.decisions ? after.decisions - before.decisions : 0u,
+                .propagations = after.propagations >= before.propagations ? after.propagations - before.propagations : 0u,
+                .restarts = after.restarts >= before.restarts ? after.restarts - before.restarts : 0u,
+                .learned_clauses =
+                    after.learned_clauses >= before.learned_clauses ? after.learned_clauses - before.learned_clauses : 0u,
+                .learned_clause_glue_total = after.learned_clause_glue_total >= before.learned_clause_glue_total
+                    ? after.learned_clause_glue_total - before.learned_clause_glue_total : 0u,
+                .learned_clause_glue_samples = after.learned_clause_glue_samples >= before.learned_clause_glue_samples
+                    ? after.learned_clause_glue_samples - before.learned_clause_glue_samples : 0u,
+                .reduction_passes = after.reduction_passes >= before.reduction_passes ? after.reduction_passes - before.reduction_passes : 0u,
+                .reduced_clauses = after.reduced_clauses >= before.reduced_clauses ? after.reduced_clauses - before.reduced_clauses : 0u,
+                .deleted_clauses = after.deleted_clauses >= before.deleted_clauses ? after.deleted_clauses - before.deleted_clauses : 0u,
+                .terminate_callback_calls = after.terminate_callback_calls >= before.terminate_callback_calls
+                                              ? after.terminate_callback_calls - before.terminate_callback_calls
+                                              : 0u,
+                .learn_callback_calls = after.learn_callback_calls >= before.learn_callback_calls
+                                          ? after.learn_callback_calls - before.learn_callback_calls
+                                          : 0u,
+                .external_propagator_calls = after.external_propagator_calls >= before.external_propagator_calls
+                                                ? after.external_propagator_calls - before.external_propagator_calls
+                                                : 0u,
+                .option_updates =
+                    after.option_updates >= before.option_updates ? after.option_updates - before.option_updates : 0u,
+                .configuration_updates = after.configuration_updates >= before.configuration_updates
+                                             ? after.configuration_updates - before.configuration_updates
+                                             : 0u,
+            };
+        }
 
         /// @brief Merges counters accumulated by a sub-phase (portfolio worker, parallel sub-task) into this instance.
         /// @param other Statistics accumulator whose counters should be merged in.
@@ -79,6 +166,16 @@ namespace kmx::sat::telemetry
             snapshot_.propagations += other.snapshot_.propagations;
             snapshot_.restarts += other.snapshot_.restarts;
             snapshot_.learned_clauses += other.snapshot_.learned_clauses;
+            snapshot_.learned_clause_glue_total += other.snapshot_.learned_clause_glue_total;
+            snapshot_.learned_clause_glue_samples += other.snapshot_.learned_clause_glue_samples;
+            snapshot_.reduction_passes += other.snapshot_.reduction_passes;
+            snapshot_.reduced_clauses += other.snapshot_.reduced_clauses;
+            snapshot_.deleted_clauses += other.snapshot_.deleted_clauses;
+            snapshot_.terminate_callback_calls += other.snapshot_.terminate_callback_calls;
+            snapshot_.learn_callback_calls += other.snapshot_.learn_callback_calls;
+            snapshot_.external_propagator_calls += other.snapshot_.external_propagator_calls;
+            snapshot_.option_updates += other.snapshot_.option_updates;
+            snapshot_.configuration_updates += other.snapshot_.configuration_updates;
         }
 
         /// @brief Resets per-epoch counters at an incremental session boundary.
@@ -90,6 +187,16 @@ namespace kmx::sat::telemetry
             snapshot_.propagations = 0u;
             snapshot_.restarts = 0u;
             snapshot_.learned_clauses = 0u;
+            snapshot_.learned_clause_glue_total = 0u;
+            snapshot_.learned_clause_glue_samples = 0u;
+            snapshot_.reduction_passes = 0u;
+            snapshot_.reduced_clauses = 0u;
+            snapshot_.deleted_clauses = 0u;
+            snapshot_.terminate_callback_calls = 0u;
+            snapshot_.learn_callback_calls = 0u;
+            snapshot_.external_propagator_calls = 0u;
+            snapshot_.option_updates = 0u;
+            snapshot_.configuration_updates = 0u;
         }
 
     private:

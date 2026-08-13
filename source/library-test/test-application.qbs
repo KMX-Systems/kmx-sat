@@ -41,4 +41,5 @@ CppApplication {
         cpp.commonCompilerFlags: ["-O3", "-march=native", "-flto=auto"]
         cpp.linkerFlags: ["-flto=auto"]
     }
+
 }

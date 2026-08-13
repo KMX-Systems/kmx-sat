@@ -93,10 +93,10 @@ namespace kmx::sat::cdcl
             subsumed
         };
 
-        std::uint32_t strengthened_clause_count_ {0u};
-        std::uint32_t subsumed_clause_count_ {0u};
-        std::uint32_t rewritten_reason_count_ {0u};
-        std::uint32_t proof_event_count_ {0u};
+        std::uint32_t strengthened_clause_count_ {};
+        std::uint32_t subsumed_clause_count_ {};
+        std::uint32_t rewritten_reason_count_ {};
+        std::uint32_t proof_event_count_ {};
         action last_action_ {action::none};
         clause::ref_t last_ref_ {};
         clause::ref_t last_rewritten_ref_ {};

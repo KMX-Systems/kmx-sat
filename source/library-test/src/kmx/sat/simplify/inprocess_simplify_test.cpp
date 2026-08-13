@@ -401,4 +401,87 @@ namespace kmx::sat::simplify
         REQUIRE(scheduler.last_budget() >= 5u);
     }
 
+    TEST_CASE("inprocess telemetry uses restart and reduction pressure", "[sat]")
+    {
+        using namespace kmx::sat;
+        using namespace kmx::sat::simplify;
+
+        scheduler::inprocess scheduler;
+        cdcl::memory_governor governor;
+        governor.register_budget(10u, 20u);
+        scheduler.attach_memory_governor(governor);
+
+        cdcl::clause::database database;
+        scheduler.attach_clause_database(database);
+
+        for (const auto pass_name: scheduler::inprocess::baseline_passes)
+        {
+            scheduler.disable_pass(pass_name);
+        }
+        scheduler.enable_pass("forward_subsumer");
+
+        scheduler.set_conflicts_seen(64u);
+        scheduler.set_decisions_seen(1024u);
+        scheduler.set_restart_count(64u);
+        scheduler.set_reduction_passes_seen(64u);
+        scheduler.run_epoch();
+
+        REQUIRE(scheduler.epoch_count() == 1u);
+        REQUIRE(scheduler.last_structural_gain() == 0u);
+        REQUIRE(scheduler.conflict_density_ema() < 0.10);
+        REQUIRE(scheduler.restart_pressure_ema() >= 0.03);
+        REQUIRE(scheduler.reduction_pressure_ema() >= 0.03);
+        REQUIRE(scheduler.telemetry_budget_bonus() == 2u);
+
+        scheduler.set_conflicts_seen(96u);
+        scheduler.set_decisions_seen(2048u);
+        scheduler.set_restart_count(96u);
+        scheduler.set_reduction_passes_seen(96u);
+        scheduler.run_epoch();
+
+        REQUIRE(scheduler.epoch_count() == 2u);
+        REQUIRE(scheduler.last_budget() >= 8u);
+    }
+
+    TEST_CASE("inprocess telemetry uses learned-clause pressure", "[sat]")
+    {
+        using namespace kmx::sat;
+        using namespace kmx::sat::simplify;
+
+        scheduler::inprocess scheduler;
+        cdcl::memory_governor governor;
+        governor.register_budget(10u, 20u);
+        scheduler.attach_memory_governor(governor);
+
+        cdcl::clause::database database;
+        scheduler.attach_clause_database(database);
+
+        for (const auto pass_name: scheduler::inprocess::baseline_passes)
+        {
+            scheduler.disable_pass(pass_name);
+        }
+        scheduler.enable_pass("forward_subsumer");
+
+        scheduler.set_conflicts_seen(64u);
+        scheduler.set_decisions_seen(4096u);
+        scheduler.set_restart_count(0u);
+        scheduler.set_reduction_passes_seen(0u);
+        scheduler.set_learned_clauses_seen(64u);
+        scheduler.run_epoch();
+
+        REQUIRE(scheduler.epoch_count() == 1u);
+        REQUIRE(scheduler.last_structural_gain() == 0u);
+        REQUIRE(scheduler.conflict_density_ema() < 0.10);
+        REQUIRE(scheduler.learned_clause_pressure_ema() >= 1.0);
+        REQUIRE(scheduler.telemetry_budget_bonus() == 2u);
+
+        scheduler.set_conflicts_seen(96u);
+        scheduler.set_decisions_seen(8192u);
+        scheduler.set_learned_clauses_seen(96u);
+        scheduler.run_epoch();
+
+        REQUIRE(scheduler.epoch_count() == 2u);
+        REQUIRE(scheduler.last_budget() >= 6u);
+    }
+
 } // namespace

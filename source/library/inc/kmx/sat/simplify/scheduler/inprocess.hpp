@@ -43,16 +43,16 @@ namespace kmx::sat::simplify::scheduler
     public:
         struct pass_effectiveness final
         {
-            std::uint64_t observed_runs {0u};
-            std::uint64_t effective_runs {0u};
+            std::uint64_t observed_runs {};
+            std::uint64_t effective_runs {};
         };
 
         struct pass_summary final
         {
             std::string_view pass_name {};
-            bool executed {false};
-            bool skipped_by_memory_policy {false};
-            bool skipped_by_proof_format {false};
+            bool executed {};
+            bool skipped_by_memory_policy {};
+            bool skipped_by_proof_format {};
             std::optional<std::size_t> clause_count_before {};
             std::optional<std::size_t> clause_count_after {};
             std::optional<bool> was_effective {};
@@ -145,6 +145,7 @@ namespace kmx::sat::simplify::scheduler
             if (restarts < restart_count_)
             {
                 next_restart_trigger_ = restart_trigger_window_;
+                last_restart_snapshot_ = restarts;
             }
             restart_count_ = restarts;
         }
@@ -157,6 +158,26 @@ namespace kmx::sat::simplify::scheduler
                 last_decisions_snapshot_ = decisions;
             }
             decisions_seen_ = decisions;
+        }
+
+        /// @brief Sets how many reduction passes have already been executed by CDCL maintenance.
+        void set_reduction_passes_seen(const std::uint64_t reduction_passes) noexcept
+        {
+            if (reduction_passes < reduction_passes_seen_)
+            {
+                last_reduction_snapshot_ = reduction_passes;
+            }
+            reduction_passes_seen_ = reduction_passes;
+        }
+
+        /// @brief Sets how many learned clauses have already been produced by the current episode.
+        void set_learned_clauses_seen(const std::uint64_t learned_clause_count) noexcept
+        {
+            if (learned_clause_count < learned_clauses_seen_)
+            {
+                last_learned_clause_snapshot_ = learned_clause_count;
+            }
+            learned_clauses_seen_ = learned_clause_count;
         }
 
         /// @brief Checks whether an inprocessing epoch is due now.
@@ -236,7 +257,7 @@ namespace kmx::sat::simplify::scheduler
                 std::min<std::size_t>(ordered_passes.size(), std::min<std::size_t>(static_cast<std::size_t>(last_budget_),
                                                                                    static_cast<std::size_t>(adaptive_pass_cap_)));
 
-            for (std::size_t index {0u}; index < max_passes; ++index)
+            for (std::size_t index {}; index < max_passes; ++index)
             {
                 const auto pass_name = ordered_passes[index];
                 if (skip_memory_heavy_passes && (pass_name == "vivifier" || pass_name == "congruence"))
@@ -304,6 +325,12 @@ namespace kmx::sat::simplify::scheduler
         double conflict_density_ema() const noexcept { return conflict_density_ema_; }
 
         double structural_gain_ema() const noexcept { return structural_gain_ema_; }
+
+        double restart_pressure_ema() const noexcept { return restart_pressure_ema_; }
+
+        double reduction_pressure_ema() const noexcept { return reduction_pressure_ema_; }
+
+        double learned_clause_pressure_ema() const noexcept { return learned_clause_pressure_ema_; }
 
         std::uint64_t telemetry_budget_bonus() const noexcept { return telemetry_budget_bonus_; }
 
@@ -391,20 +418,41 @@ namespace kmx::sat::simplify::scheduler
         {
             const auto conflict_delta = conflicts_seen_ >= last_conflicts_snapshot_ ? conflicts_seen_ - last_conflicts_snapshot_ : 0u;
             const auto decision_delta = decisions_seen_ >= last_decisions_snapshot_ ? decisions_seen_ - last_decisions_snapshot_ : 0u;
+            const auto restart_delta = restart_count_ >= last_restart_snapshot_ ? restart_count_ - last_restart_snapshot_ : 0u;
+            const auto reduction_delta =
+                reduction_passes_seen_ >= last_reduction_snapshot_ ? reduction_passes_seen_ - last_reduction_snapshot_ : 0u;
+            const auto learned_clause_delta = learned_clauses_seen_ >= last_learned_clause_snapshot_ ?
+                                                  learned_clauses_seen_ - last_learned_clause_snapshot_ :
+                                                  0u;
 
             last_conflicts_snapshot_ = conflicts_seen_;
             last_decisions_snapshot_ = decisions_seen_;
+            last_restart_snapshot_ = restart_count_;
+            last_reduction_snapshot_ = reduction_passes_seen_;
+            last_learned_clause_snapshot_ = learned_clauses_seen_;
 
             const auto density_denominator = decision_delta == 0u ? 1.0 : static_cast<double>(decision_delta);
             const auto conflict_density = static_cast<double>(conflict_delta) / density_denominator;
+            const auto pressure_denominator = decision_delta == 0u ? 1.0 : static_cast<double>(decision_delta);
+            const auto restart_pressure = static_cast<double>(restart_delta) / pressure_denominator;
+            const auto reduction_pressure = static_cast<double>(reduction_delta) / pressure_denominator;
+            const auto learned_clause_denominator = conflict_delta == 0u ? 1.0 : static_cast<double>(conflict_delta);
+            const auto learned_clause_pressure = static_cast<double>(learned_clause_delta) / learned_clause_denominator;
 
             if (telemetry_samples_ == 0u)
             {
                 conflict_density_ema_ = conflict_density;
+                restart_pressure_ema_ = restart_pressure;
+                reduction_pressure_ema_ = reduction_pressure;
+                learned_clause_pressure_ema_ = learned_clause_pressure;
             }
             else
             {
                 conflict_density_ema_ = (1.0 - telemetry_alpha) * conflict_density_ema_ + telemetry_alpha * conflict_density;
+                restart_pressure_ema_ = (1.0 - telemetry_alpha) * restart_pressure_ema_ + telemetry_alpha * restart_pressure;
+                reduction_pressure_ema_ = (1.0 - telemetry_alpha) * reduction_pressure_ema_ + telemetry_alpha * reduction_pressure;
+                learned_clause_pressure_ema_ =
+                    (1.0 - telemetry_alpha) * learned_clause_pressure_ema_ + telemetry_alpha * learned_clause_pressure;
             }
         }
 
@@ -433,7 +481,22 @@ namespace kmx::sat::simplify::scheduler
                 return;
             }
 
-            if (conflict_density_ema_ >= medium_conflict_density_threshold || structural_gain_ema_ >= medium_structural_gain_threshold)
+            if (restart_pressure_ema_ >= high_restart_pressure_threshold || reduction_pressure_ema_ >= high_reduction_pressure_threshold)
+            {
+                telemetry_budget_bonus_ = 2u;
+                return;
+            }
+
+            if (learned_clause_pressure_ema_ >= high_learned_clause_pressure_threshold)
+            {
+                telemetry_budget_bonus_ = 2u;
+                return;
+            }
+
+            if (conflict_density_ema_ >= medium_conflict_density_threshold || structural_gain_ema_ >= medium_structural_gain_threshold ||
+                restart_pressure_ema_ >= medium_restart_pressure_threshold ||
+                reduction_pressure_ema_ >= medium_reduction_pressure_threshold ||
+                learned_clause_pressure_ema_ >= medium_learned_clause_pressure_threshold)
             {
                 telemetry_budget_bonus_ = 1u;
                 return;
@@ -495,6 +558,12 @@ namespace kmx::sat::simplify::scheduler
         static constexpr double high_conflict_density_threshold {0.25};
         static constexpr double medium_structural_gain_threshold {0.10};
         static constexpr double high_structural_gain_threshold {0.25};
+        static constexpr double medium_restart_pressure_threshold {0.01};
+        static constexpr double high_restart_pressure_threshold {0.03};
+        static constexpr double medium_reduction_pressure_threshold {0.01};
+        static constexpr double high_reduction_pressure_threshold {0.03};
+        static constexpr double medium_learned_clause_pressure_threshold {0.20};
+        static constexpr double high_learned_clause_pressure_threshold {0.50};
 
         bool is_known_pass(const std::string_view pass_name) const noexcept
         {
@@ -572,9 +641,9 @@ namespace kmx::sat::simplify::scheduler
             return static_cast<double>(entry.effective_runs) / static_cast<double>(entry.observed_runs);
         }
 
-        cdcl::memory_governor* memory_governor_ {nullptr};
-        cdcl::clause::database* clause_database_ {nullptr};
-        kmx::sat::proof_manager* proof_manager_ {nullptr};
+        cdcl::memory_governor* memory_governor_ {};
+        cdcl::clause::database* clause_database_ {};
+        kmx::sat::proof_manager* proof_manager_ {};
         std::vector<std::string_view> enabled_passes_ {};
         std::vector<std::string_view> last_execution_order_ {};
         mutable std::vector<pass_summary> last_reported_summaries_ {};
@@ -585,31 +654,39 @@ namespace kmx::sat::simplify::scheduler
         pass_effectiveness vivifier_effectiveness_ {};
         simplify::engine::congruence congruence_ {};
         pass_effectiveness congruence_effectiveness_ {};
-        bool abort_requested_ {false};
-        std::uint64_t conflicts_seen_ {0};
-        std::uint64_t restart_count_ {0};
-        std::uint64_t decisions_seen_ {0};
-        std::uint64_t last_conflicts_snapshot_ {0};
-        std::uint64_t last_decisions_snapshot_ {0};
+        bool abort_requested_ {};
+        std::uint64_t conflicts_seen_ {};
+        std::uint64_t restart_count_ {};
+        std::uint64_t decisions_seen_ {};
+        std::uint64_t reduction_passes_seen_ {};
+        std::uint64_t learned_clauses_seen_ {};
+        std::uint64_t last_conflicts_snapshot_ {};
+        std::uint64_t last_decisions_snapshot_ {};
+        std::uint64_t last_restart_snapshot_ {};
+        std::uint64_t last_reduction_snapshot_ {};
+        std::uint64_t last_learned_clause_snapshot_ {};
         std::uint64_t conflict_trigger_window_ {default_conflict_trigger_window};
         std::uint64_t restart_trigger_window_ {default_restart_trigger_window};
         std::uint64_t next_conflict_trigger_ {default_conflict_trigger_window};
         std::uint64_t next_restart_trigger_ {default_restart_trigger_window};
-        std::uint64_t epoch_count_ {0};
-        std::uint64_t last_budget_ {0};
-        std::uint64_t pass_count_ {0};
-        std::uint64_t last_passes_executed_ {0};
-        std::uint64_t clause_delta_last_epoch_ {0};
-        std::uint64_t last_effectiveness_ {0};
-        std::uint64_t adaptive_pass_cap_ {0};
-        std::uint64_t low_yield_streak_ {0};
-        std::uint64_t high_yield_streak_ {0};
-        std::uint64_t cooldown_low_yield_streak_ {0};
-        std::uint64_t cooldown_high_yield_streak_ {0};
-        std::uint64_t telemetry_budget_bonus_ {0};
-        std::uint64_t telemetry_samples_ {0};
+        std::uint64_t epoch_count_ {};
+        std::uint64_t last_budget_ {};
+        std::uint64_t pass_count_ {};
+        std::uint64_t last_passes_executed_ {};
+        std::uint64_t clause_delta_last_epoch_ {};
+        std::uint64_t last_effectiveness_ {};
+        std::uint64_t adaptive_pass_cap_ {};
+        std::uint64_t low_yield_streak_ {};
+        std::uint64_t high_yield_streak_ {};
+        std::uint64_t cooldown_low_yield_streak_ {};
+        std::uint64_t cooldown_high_yield_streak_ {};
+        std::uint64_t telemetry_budget_bonus_ {};
+        std::uint64_t telemetry_samples_ {};
         double conflict_density_ema_ {0.0};
         double structural_gain_ema_ {0.0};
-        mutable std::size_t reported_summary_count_ {0u};
+        double restart_pressure_ema_ {0.0};
+        double reduction_pressure_ema_ {0.0};
+        double learned_clause_pressure_ema_ {0.0};
+        mutable std::size_t reported_summary_count_ {};
     };
 }

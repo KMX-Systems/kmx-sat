@@ -11,7 +11,9 @@
 #include <kmx/sat/cdcl/bank/watch_list.hpp>
 #include <kmx/sat/cdcl/clause/database.hpp>
 #include <kmx/sat/cdcl/store/assignment.hpp>
+#include <kmx/sat/cdcl/store/clause_cold.hpp>
 #include <kmx/sat/cdcl/variable_mapper.hpp>
+#include <kmx/sat/proof_manager.hpp>
 
 namespace kmx::sat::cdcl
 {
@@ -86,6 +88,7 @@ namespace kmx::sat::cdcl
             }
 
             reason_ref_rewrite_.clear();
+            relocated_refs_.clear();
 
             rewrite_database_literals(
                 [&](const clause::ref_t ref) noexcept
@@ -98,9 +101,23 @@ namespace kmx::sat::cdcl
                     const auto relocated_ref = clause_database_->storage_of().relocate_clause(ref);
                     if (relocated_ref.valid() && relocated_ref != ref)
                     {
+                        clause_database_->rewrite_ref_after_gc(ref, relocated_ref);
+                        if (cold_store_ != nullptr)
+                        {
+                            cold_store_->rewrite_ref_after_gc(ref, relocated_ref);
+                        }
+                        if (proof_manager_ != nullptr)
+                        {
+                            proof_manager_->on_clause_relocated(ref, relocated_ref);
+                        }
                         reason_ref_rewrite_[ref.offset()] = relocated_ref.offset();
+                        relocated_refs_.push_back({ref, relocated_ref});
                     }
                     clause_database_->storage_of().rewrite_clause_literals(relocated_ref, literals);
+                    if (cold_store_ != nullptr)
+                    {
+                        cold_store_->rewrite_literals_after_compaction(relocated_ref, literals);
+                    }
                 });
         }
 
@@ -110,6 +127,10 @@ namespace kmx::sat::cdcl
         {
             if (watch_list_ != nullptr)
             {
+                for (const auto& [old_ref, new_ref]: relocated_refs_)
+                {
+                    watch_list_->replace_clause_ref_after_gc(old_ref, new_ref);
+                }
                 watch_list_->reindex_after_compaction([&](const literal lit) noexcept { return remap_literal(lit); });
             }
         }
@@ -148,6 +169,12 @@ namespace kmx::sat::cdcl
 
         void attach_assignment_store(store::assignment& assignment_store) noexcept { assignment_store_ = &assignment_store; }
 
+        /// @brief Attaches proof management for stable clause identity during compaction relocation.
+        void attach_proof_manager(kmx::sat::proof_manager& proof_manager) noexcept { proof_manager_ = &proof_manager; }
+
+        /// @brief Attaches opt-in cold storage whose tracked references must follow compaction relocation.
+        void attach_cold_store(store::clause_cold& cold_store) noexcept { cold_store_ = &cold_store; }
+
     private:
         literal remap_literal(const literal lit) const noexcept
         {
@@ -161,17 +188,31 @@ namespace kmx::sat::cdcl
         template <typename visitor_t>
         void rewrite_database_literals(visitor_t&& visitor) noexcept
         {
-            clause_database_->iterate_irredundant(visitor);
-            clause_database_->iterate_redundant(visitor);
+            std::vector<clause::ref_t> references {};
+            const auto irredundant = clause_database_->irredundant_refs();
+            const auto redundant = clause_database_->redundant_refs();
+            references.reserve(irredundant.size() + redundant.size());
+            references.insert(references.end(), irredundant.begin(), irredundant.end());
+            references.insert(references.end(), redundant.begin(), redundant.end());
+            for (const auto ref: references)
+            {
+                if (!clause_database_->is_garbage(ref))
+                {
+                    visitor(ref);
+                }
+            }
         }
 
-        clause::database* clause_database_ {nullptr};
-        bank::watch_list* watch_list_ {nullptr};
-        store::assignment* assignment_store_ {nullptr};
-        variable_mapper* mapper_ {nullptr};
+        clause::database* clause_database_ {};
+        bank::watch_list* watch_list_ {};
+        store::assignment* assignment_store_ {};
+        kmx::sat::proof_manager* proof_manager_ {};
+        store::clause_cold* cold_store_ {};
+        variable_mapper* mapper_ {};
         std::unordered_map<std::uint32_t, variable> variable_permutation_ {};
         std::unordered_map<clause::ref_t::offset_t, clause::ref_t::offset_t> reason_ref_rewrite_ {};
-        bool variable_permutation_ready_ {false};
+        std::vector<std::pair<clause::ref_t, clause::ref_t>> relocated_refs_ {};
+        bool variable_permutation_ready_ {};
         std::uint32_t dense_internal_base_ {1u << 30};
     };
 }

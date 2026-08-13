@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <limits>
 #include <span>
 
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
@@ -9,6 +10,7 @@
 #include <kmx/sat/model_view.hpp>
 #include <kmx/sat/proof/clause/id.hpp>
 #include <kmx/sat/solve_request.hpp>
+#include <kmx/sat/solve_result.hpp>
 #include <kmx/sat/variable.hpp>
 
 namespace kmx::sat
@@ -57,5 +59,42 @@ namespace kmx::sat
         REQUIRE_FALSE(invalid_id.valid());
         REQUIRE(live_id.valid());
         REQUIRE(live_id.value() == 9u);
+
+        const variable default_variable {};
+        REQUIRE(default_variable.index() == 0u);
+        REQUIRE(default_variable < var);
+        REQUIRE(var == variable {7u});
+
+        constexpr auto maximum_variable_index = std::numeric_limits<variable::index_t>::max() >> 1u;
+        const variable maximum_variable {maximum_variable_index};
+        const literal maximum_positive {maximum_variable, false};
+        const literal maximum_negative {maximum_variable, true};
+        REQUIRE(maximum_positive.variable_of().index() == maximum_variable_index);
+        REQUIRE(maximum_negative.variable_of().index() == maximum_variable_index);
+        REQUIRE(maximum_positive.negated() == maximum_negative);
+        REQUIRE(maximum_positive.raw() + 1u == maximum_negative.raw());
+
+        const literal zero_literal {};
+        REQUIRE(zero_literal.raw() == 0u);
+        REQUIRE(zero_literal.variable_of().index() == 0u);
+        REQUIRE_FALSE(zero_literal.is_negated());
+        REQUIRE(zero_literal.negated().raw() == 1u);
+
+        const model_view empty_model {};
+        const failed_core_view empty_failed_core {};
+        REQUIRE(empty_model.values().empty());
+        REQUIRE(empty_failed_core.assumptions().empty());
+
+        const solve_result default_result {};
+        REQUIRE(default_result.status_of() == solve_result::status::unknown);
+        REQUIRE(default_result.model().values().empty());
+        REQUIRE(default_result.failed_core().assumptions().empty());
+        REQUIRE_FALSE(default_result.proof_summary_of().proof_enabled);
+        REQUIRE_FALSE(default_result.proof_summary_of().proof_checked);
+
+        const auto statistics = default_result.statistics_snapshot();
+        REQUIRE(statistics.conflicts == 0u);
+        REQUIRE(statistics.decisions == 0u);
+        REQUIRE(statistics.propagations == 0u);
     }
 }

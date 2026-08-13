@@ -137,7 +137,7 @@ for raw in "${changed_paths[@]}"; do
   path="${raw#./}"
 
   case "$path" in
-    source.qbs|library-test/unit-test.qbs|library-test/TestApplication.qbs|library-test/*.qbs|library-test/src/kmx/sat/catch2_main.cpp)
+    source.qbs|library-test/unit-test.qbs|library-test/test-application.qbs|library-test/*.qbs|library-test/src/kmx/sat/catch2_main.cpp)
       select_all=true
       ;;
 

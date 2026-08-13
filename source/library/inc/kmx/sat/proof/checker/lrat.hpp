@@ -169,8 +169,8 @@ namespace kmx::sat::proof::checker
                     return false;
                 }
 
-                bool satisfied {false};
-                std::size_t unassigned_count {0};
+                bool satisfied {};
+                std::size_t unassigned_count {};
                 literal pending {};
                 for (const auto lit: it->second)
                 {

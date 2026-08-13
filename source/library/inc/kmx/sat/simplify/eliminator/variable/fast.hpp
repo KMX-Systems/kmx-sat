@@ -54,7 +54,7 @@ namespace kmx::sat::simplify::eliminator::variable
         /// @throws None (noexcept).
         std::int64_t cheap_score_variable(const kmx::sat::variable var) const noexcept
         {
-            std::int64_t score {0};
+            std::int64_t score {};
             for (const auto& clause: clauses_)
             {
                 const auto occurrences = std::count_if(clause.begin(), clause.end(), [var](const literal lit) noexcept
@@ -82,7 +82,7 @@ namespace kmx::sat::simplify::eliminator::variable
     private:
         bounded bounded_ {};
         std::vector<std::vector<literal>> clauses_ {};
-        std::uint64_t fast_round_count_ {0};
-        std::uint64_t elimination_count_ {0};
+        std::uint64_t fast_round_count_ {};
+        std::uint64_t elimination_count_ {};
     };
 }

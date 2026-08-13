@@ -180,7 +180,7 @@ namespace kmx::sat::cdcl
         model_view current_model_view() const noexcept { return model_view_; }
 
     private:
-        variable_mapper* mapper_ {nullptr};
+        variable_mapper* mapper_ {};
         std::vector<std::vector<literal>> clauses_ {};
         std::vector<literal> assumptions_ {};
         solve_request prepare_request_ {};

@@ -121,6 +121,6 @@ namespace kmx::sat::proof::tracer
 
     private:
         std::vector<emitted_event> emitted_events_ {};
-        bool finalized_ {false};
+        bool finalized_ {};
     };
 }

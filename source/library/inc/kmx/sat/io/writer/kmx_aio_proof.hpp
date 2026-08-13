@@ -78,10 +78,10 @@ namespace kmx::sat::io::writer
         [[nodiscard]] bool closed() const noexcept { return closed_; }
 
     private:
-        bool opened_ {false};
-        bool flushed_ {false};
-        bool closed_ {false};
-        std::uint32_t submitted_count_ {0u};
-        std::size_t last_buffer_size_ {0u};
+        bool opened_ {};
+        bool flushed_ {};
+        bool closed_ {};
+        std::uint32_t submitted_count_ {};
+        std::size_t last_buffer_size_ {};
     };
 }

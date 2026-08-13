@@ -83,7 +83,7 @@ namespace kmx::sat::telemetry
         };
 
         std::vector<phase_entry> active_phases_ {};
-        std::uint64_t cumulative_wall_time_ {0u};
-        std::uint64_t cumulative_process_time_ {0u};
+        std::uint64_t cumulative_wall_time_ {};
+        std::uint64_t cumulative_process_time_ {};
     };
 }

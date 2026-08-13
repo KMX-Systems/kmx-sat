@@ -22,7 +22,7 @@ namespace kmx::sat::io::fixture
     {
     public:
         static constexpr std::uint16_t current_version_value {1};
-        static constexpr std::uint64_t supported_feature_mask {0u};
+        static constexpr std::uint64_t supported_feature_mask {};
 
         /// @brief Enumerates the recognized binary fixture payload kinds.
         enum class payload_kind

@@ -5,6 +5,8 @@
 #ifndef PCH
     #include <algorithm>
     #include <cstddef>
+    #include <cstdint>
+        #include <optional>
     #include <utility>
     #include <vector>
 #endif
@@ -37,15 +39,7 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void update_on_assignment(const variable var) noexcept
         {
-            auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept { return entry.first == var; });
-            if (it == scores_.end())
-            {
-                scores_.emplace_back(var, 0.25);
-            }
-            else
-            {
-                it->second += 0.25;
-            }
+            update_score(var, 0.25);
         }
 
         /// @brief Updates the reward signal for a variable involved in a conflict.
@@ -53,15 +47,7 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void update_on_conflict(const variable var) noexcept
         {
-            auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept { return entry.first == var; });
-            if (it == scores_.end())
-            {
-                scores_.emplace_back(var, 0.5);
-            }
-            else
-            {
-                it->second += 0.5;
-            }
+            update_score(var, 1.0);
         }
 
         /// @brief Returns the current CHB score for a variable.
@@ -78,21 +64,71 @@ namespace kmx::sat::cdcl
             return it->second;
         }
 
+        /// @brief Returns the highest-scoring tracked variable accepted by an optional predicate.
+        template <typename predicate_t>
+        std::optional<variable> best_candidate(predicate_t&& selectable) const noexcept
+        {
+            const std::pair<variable, double>* best {};
+            for (const auto& entry: scores_)
+            {
+                if (entry.second <= 0.0 || !selectable(entry.first))
+                {
+                    continue;
+                }
+                if (best == nullptr || entry.second > best->second
+                    || (entry.second == best->second && entry.first.index() < best->first.index()))
+                {
+                    best = &entry;
+                }
+            }
+            return best == nullptr ? std::nullopt : std::optional<variable> {best->first};
+        }
+
         /// @brief Applies one decay step to all scores, reducing the weight of older conflict participation.
         /// @throws None (noexcept).
         void decay_step() noexcept
         {
             for (auto& entry: scores_)
             {
-                entry.second *= 0.5;
+                entry.second *= decay_factor_;
             }
+            ++decay_count_;
         }
+
+        /// @brief Sets the exponential reward learning rate in the inclusive range [0, 1].
+        void set_learning_rate(const double rate) noexcept
+        {
+            learning_rate_ = std::clamp(rate, 0.0, 1.0);
+        }
+
+        /// @brief Sets the multiplicative decay factor in the inclusive range [0, 1].
+        void set_decay_factor(const double factor) noexcept
+        {
+            decay_factor_ = std::clamp(factor, 0.0, 1.0);
+        }
+
+        /// @brief Returns how many explicit decay steps have been applied.
+        std::uint32_t decay_count() const noexcept { return decay_count_; }
 
         /// @brief Returns the number of tracked variables with a non-zero CHB score.
         /// @return Number of tracked variables.
         std::size_t tracked_variable_count() const noexcept { return scores_.size(); }
 
     private:
+        void update_score(const variable var, const double reward) noexcept
+        {
+            auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept { return entry.first == var; });
+            if (it == scores_.end())
+            {
+                scores_.emplace_back(var, learning_rate_ * reward);
+                return;
+            }
+            it->second += learning_rate_ * (reward - it->second);
+        }
+
         std::vector<std::pair<variable, double>> scores_ {};
+        double learning_rate_ {0.1};
+        double decay_factor_ {0.95};
+        std::uint32_t decay_count_ {};
     };
 }

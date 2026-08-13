@@ -104,6 +104,6 @@ namespace kmx::sat::simplify::eliminator::variable
     private:
         std::vector<std::vector<literal>> clauses_ {};
         std::vector<kmx::sat::variable> eliminated_variables_ {};
-        std::uint64_t elimination_count_ {0};
+        std::uint64_t elimination_count_ {};
     };
 }

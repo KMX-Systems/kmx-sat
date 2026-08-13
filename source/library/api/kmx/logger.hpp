@@ -73,13 +73,13 @@ namespace kmx::logger
             // Manually flush to ensure immediate output
             if (lvl == level::error)
             {
-                std::println(stderr, "[{0}] [{1}:{2}] {3}", detail::level_to_char(lvl), file, loc.line(),
+                std::println(stderr, "[{}] [{1}:{2}] {3}", detail::level_to_char(lvl), file, loc.line(),
                              std::format(fmt, std::forward<Args>(args)...));
                 std::fflush(stderr);
             }
             else
             {
-                std::println(stdout, "[{0}] [{1}:{2}] {3}", detail::level_to_char(lvl), file, loc.line(),
+                std::println(stdout, "[{}] [{1}:{2}] {3}", detail::level_to_char(lvl), file, loc.line(),
                              std::format(fmt, std::forward<Args>(args)...));
                 std::fflush(stdout);
             }

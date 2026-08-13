@@ -86,12 +86,12 @@ namespace kmx::sat::cdcl
         bool persisted_option_subset() const noexcept { return persisted_option_subset_; }
 
     private:
-        bool in_epoch_ {false};
-        bool persisted_option_subset_ {false};
-        bool transient_state_reset_ {false};
-        std::uint32_t retained_learned_clauses_ {0u};
-        std::uint32_t current_epoch_retained_learned_clauses_ {0u};
-        std::uint32_t last_epoch_retained_learned_clauses_ {0u};
-        std::uint32_t transient_reset_count_ {0u};
+        bool in_epoch_ {};
+        bool persisted_option_subset_ {};
+        bool transient_state_reset_ {};
+        std::uint32_t retained_learned_clauses_ {};
+        std::uint32_t current_epoch_retained_learned_clauses_ {};
+        std::uint32_t last_epoch_retained_learned_clauses_ {};
+        std::uint32_t transient_reset_count_ {};
     };
 }

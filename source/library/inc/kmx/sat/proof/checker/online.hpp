@@ -30,10 +30,10 @@ namespace kmx::sat::proof::checker
         /// @brief Coverage/overhead counters surfaced to `telemetry::solver_statistics`.
         struct coverage final
         {
-            std::size_t clauses_added {0};
-            std::size_t clauses_deleted {0};
-            std::size_t clauses_shrunk {0};
-            std::size_t structural_errors {0};
+            std::size_t clauses_added {};
+            std::size_t clauses_deleted {};
+            std::size_t clauses_shrunk {};
+            std::size_t structural_errors {};
         };
 
         /// @brief Constructs the online proof checker state.

@@ -25,9 +25,35 @@ namespace kmx::sat::runtime::controller
     class portfolio final
     {
     public:
+        struct lifecycle_metrics final
+        {
+            bool launched {};
+            bool cancelled {};
+            bool collected {};
+            bool termination_requested {};
+            std::uint32_t launch_count {};
+            std::uint32_t launch_epoch {};
+            std::uint32_t cancel_count {};
+            std::uint32_t collect_count {};
+            std::uint32_t strategy_budget {};
+        };
+
         /// @brief Constructs a portfolio controller with an embedded signal controller.
         /// @throws None (noexcept).
         portfolio() noexcept = default;
+
+        void set_strategy_budget(std::uint32_t strategy_budget) noexcept
+        {
+            strategy_budget_ = strategy_budget;
+            if (strategy_budget_ < 1u)
+            {
+                strategy_budget_ = 1u;
+            }
+            if (strategy_budget_ > 64u)
+            {
+                strategy_budget_ = 64u;
+            }
+        }
 
         /// @brief Launches the configured set of independently seeded solver instances.
         /// @throws None (noexcept).
@@ -38,16 +64,18 @@ namespace kmx::sat::runtime::controller
             collected_ = false;
             signal_.clear();
             launch_count_ += 1u;
+            ++launch_epoch_;
         }
 
         /// @brief Requests orderly termination of every instance other than the one that produced a result.
         /// @throws None (noexcept).
         void cancel_others_on_result() noexcept
         {
-            if (launched_)
+            if (launched_ && !cancelled_)
             {
                 cancelled_ = true;
                 signal_.request_stop();
+                ++cancel_count_;
             }
         }
 
@@ -55,9 +83,10 @@ namespace kmx::sat::runtime::controller
         /// @throws None (noexcept).
         void collect_winner() noexcept
         {
-            if (launched_)
+            if (launched_ && !collected_)
             {
                 collected_ = true;
+                ++collect_count_;
             }
         }
 
@@ -69,11 +98,61 @@ namespace kmx::sat::runtime::controller
 
         [[nodiscard]] std::uint32_t launch_count() const noexcept { return launch_count_; }
 
+        [[nodiscard]] std::uint32_t launch_epoch() const noexcept { return launch_epoch_; }
+
+        [[nodiscard]] std::uint32_t cancel_count() const noexcept { return cancel_count_; }
+
+        [[nodiscard]] std::uint32_t collect_count() const noexcept { return collect_count_; }
+
+        [[nodiscard]] std::uint32_t strategy_budget() const noexcept { return strategy_budget_; }
+
+        [[nodiscard]] bool termination_requested() const noexcept { return signal_.termination_requested(); }
+
+        [[nodiscard]] lifecycle_metrics lifecycle_metrics_snapshot() const noexcept
+        {
+            return lifecycle_metrics {
+                .launched = launched_,
+                .cancelled = cancelled_,
+                .collected = collected_,
+                .termination_requested = signal_.termination_requested(),
+                .launch_count = launch_count_,
+                .launch_epoch = launch_epoch_,
+                .cancel_count = cancel_count_,
+                .collect_count = collect_count_,
+                .strategy_budget = strategy_budget_,
+            };
+        }
+
+        void reset_lifecycle_metrics() noexcept
+        {
+            signal_.reset_metrics();
+            launched_ = false;
+            cancelled_ = false;
+            collected_ = false;
+            launch_count_ = 0u;
+            launch_epoch_ = 0u;
+            cancel_count_ = 0u;
+            collect_count_ = 0u;
+            strategy_budget_ = 1u;
+        }
+
+        static bool lifecycle_monotonic(const lifecycle_metrics& before, const lifecycle_metrics& after) noexcept
+        {
+            return after.launch_count >= before.launch_count
+                && after.launch_epoch >= before.launch_epoch
+                && after.cancel_count >= before.cancel_count
+                && after.collect_count >= before.collect_count;
+        }
+
     private:
         signal signal_ {};
-        bool launched_ {false};
-        bool cancelled_ {false};
-        bool collected_ {false};
-        std::uint32_t launch_count_ {0u};
+        bool launched_ {};
+        bool cancelled_ {};
+        bool collected_ {};
+        std::uint32_t launch_count_ {};
+        std::uint32_t launch_epoch_ {};
+        std::uint32_t cancel_count_ {};
+        std::uint32_t collect_count_ {};
+        std::uint32_t strategy_budget_ {1u};
     };
 }

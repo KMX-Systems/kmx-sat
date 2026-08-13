@@ -75,7 +75,7 @@ namespace kmx::sat::simplify::engine
                             continue;
                         }
 
-                        bool satisfied {false};
+                        bool satisfied {};
                         std::vector<literal> survivors {};
                         survivors.reserve(clause.size());
                         for (const auto lit: clause)
@@ -195,12 +195,12 @@ namespace kmx::sat::simplify::engine
             return lit.is_negated() ? !assigned_true : assigned_true;
         }
 
-        cdcl::clause::database* database_ {nullptr};
-        kmx::sat::proof_manager* proof_manager_ {nullptr};
-        std::size_t probe_count_ {0u};
-        std::size_t hyper_binary_count_ {0u};
-        std::size_t backbone_candidate_count_ {0u};
+        cdcl::clause::database* database_ {};
+        kmx::sat::proof_manager* proof_manager_ {};
+        std::size_t probe_count_ {};
+        std::size_t hyper_binary_count_ {};
+        std::size_t backbone_candidate_count_ {};
         std::vector<literal> backbone_candidates_ {};
-        bool probing_completed_ {false};
+        bool probing_completed_ {};
     };
 }

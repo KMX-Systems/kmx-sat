@@ -15,6 +15,33 @@
 
 namespace kmx::sat::simplify
 {
+    TEST_CASE("preprocess scheduler runs opt-in sweep pass", "[sat]")
+    {
+        scheduler::preprocess scheduler;
+        for (const auto pass_name: scheduler::preprocess::baseline_passes)
+        {
+            scheduler.disable_pass(pass_name);
+        }
+        scheduler.enable_pass("sweep");
+
+        scheduler.run_initial_pipeline();
+
+        REQUIRE(scheduler.enabled_pass_count() == 1u);
+        REQUIRE(scheduler.executed_pass_count() == 1u);
+    }
+
+    TEST_CASE("preprocess pass ids have stable text projections", "[sat]")
+    {
+        for (std::uint8_t value {}; value <= static_cast<std::uint8_t>(scheduler::preprocess::pass_id::sweep); ++value)
+        {
+            const auto id = static_cast<scheduler::preprocess::pass_id>(value);
+            REQUIRE(!scheduler::preprocess::pass_name(id).empty());
+            REQUIRE(parse_pass(scheduler::preprocess::pass_name(id)).has_value());
+            REQUIRE(parse_pass(scheduler::preprocess::pass_name(id)).value() == id);
+        }
+        REQUIRE_FALSE(parse_pass("not_a_pass").has_value());
+    }
+
     TEST_CASE("preprocess scheduler runs enabled passes and reports summaries", "[sat]")
     {
         using namespace kmx::sat;
@@ -41,6 +68,7 @@ namespace kmx::sat::simplify
         REQUIRE(std::all_of(scheduler.last_reported_summaries().begin(), scheduler.last_reported_summaries().end(),
                             [](const scheduler::preprocess::pass_summary& summary) noexcept
                             { return summary.executed && !summary.skipped_by_selector; }));
+        REQUIRE(scheduler::preprocess::pass_name_of(scheduler.last_reported_summaries().front()) == "transitive_reducer");
 
         scheduler.enable_pass("vivifier");
         REQUIRE(scheduler.enabled_pass_count() == enabled_after_disable + 1u);
@@ -213,14 +241,16 @@ namespace kmx::sat::simplify
         REQUIRE(first_summaries.size() == scheduler::preprocess::baseline_passes.size());
         const auto vivifier_summary =
             std::find_if(first_summaries.begin(), first_summaries.end(),
-                         [](const scheduler::preprocess::pass_summary& summary) noexcept { return summary.pass_name == "vivifier"; });
+                         [](const scheduler::preprocess::pass_summary& summary) noexcept
+                         { return summary.id == scheduler::preprocess::pass_id::vivifier; });
         REQUIRE(vivifier_summary != first_summaries.end());
         REQUIRE_FALSE(vivifier_summary->executed);
         REQUIRE(vivifier_summary->skipped_by_selector);
 
         const auto congruence_summary =
             std::find_if(first_summaries.begin(), first_summaries.end(),
-                         [](const scheduler::preprocess::pass_summary& summary) noexcept { return summary.pass_name == "congruence"; });
+                         [](const scheduler::preprocess::pass_summary& summary) noexcept
+                         { return summary.id == scheduler::preprocess::pass_id::congruence; });
         REQUIRE(congruence_summary != first_summaries.end());
         REQUIRE_FALSE(congruence_summary->executed);
         REQUIRE(congruence_summary->skipped_by_selector);
@@ -376,6 +406,109 @@ namespace kmx::sat::simplify
         REQUIRE(fingerprint.binary_clause_ratio == 0.0);
     }
 
+    TEST_CASE("preprocess selector uses inprocess pressure to skip memory heavy passes", "[sat]")
+    {
+        using namespace kmx::sat;
+
+        scheduler::preprocess scheduler;
+        cdcl::memory_governor governor;
+        governor.register_budget(10u, 20u);
+        scheduler.attach_memory_governor(governor);
+
+        governor.set_current_usage(0u);
+        scheduler.set_inprocess_telemetry_snapshot(0.30, 0.01, 0.04, 0.04, 0.10);
+        scheduler.run_initial_pipeline();
+        scheduler.report_pass_summary();
+
+        const auto& plan = scheduler.profile_selector().current_pass_plan();
+        REQUIRE(plan.skip_memory_heavy_from_inprocess_pressure);
+        REQUIRE_FALSE(plan.skip_memory_heavy_from_learned_clause_pressure);
+        REQUIRE(plan.skip_memory_heavy_passes);
+
+        const auto& summaries = scheduler.last_reported_summaries();
+        const auto vivifier_summary =
+            std::find_if(summaries.begin(), summaries.end(),
+                         [](const scheduler::preprocess::pass_summary& summary) noexcept
+                         { return summary.id == scheduler::preprocess::pass_id::vivifier; });
+        REQUIRE(vivifier_summary != summaries.end());
+        REQUIRE_FALSE(vivifier_summary->executed);
+        REQUIRE(vivifier_summary->skipped_by_selector);
+
+        const auto congruence_summary =
+            std::find_if(summaries.begin(), summaries.end(),
+                         [](const scheduler::preprocess::pass_summary& summary) noexcept
+                         { return summary.id == scheduler::preprocess::pass_id::congruence; });
+        REQUIRE(congruence_summary != summaries.end());
+        REQUIRE_FALSE(congruence_summary->executed);
+        REQUIRE(congruence_summary->skipped_by_selector);
+    }
+
+    TEST_CASE("preprocess selector uses learned-clause pressure from inprocess telemetry", "[sat]")
+    {
+        using namespace kmx::sat;
+
+        scheduler::preprocess scheduler;
+        cdcl::memory_governor governor;
+        governor.register_budget(10u, 20u);
+        scheduler.attach_memory_governor(governor);
+
+        governor.set_current_usage(0u);
+        scheduler.set_inprocess_telemetry_snapshot(0.01, 0.01, 0.00, 0.00, 0.80);
+        scheduler.run_initial_pipeline();
+        scheduler.report_pass_summary();
+
+        const auto& plan = scheduler.profile_selector().current_pass_plan();
+        REQUIRE(plan.skip_memory_heavy_from_inprocess_pressure);
+        REQUIRE(plan.skip_memory_heavy_from_learned_clause_pressure);
+        REQUIRE(plan.skip_memory_heavy_passes);
+
+        const auto& summaries = scheduler.last_reported_summaries();
+        const auto vivifier_summary =
+            std::find_if(summaries.begin(), summaries.end(),
+                         [](const scheduler::preprocess::pass_summary& summary) noexcept
+                         { return summary.id == scheduler::preprocess::pass_id::vivifier; });
+        REQUIRE(vivifier_summary != summaries.end());
+        REQUIRE_FALSE(vivifier_summary->executed);
+        REQUIRE(vivifier_summary->skipped_by_selector);
+    }
+
+    TEST_CASE("preprocess selector keeps heavy passes when inprocess structural gain is healthy", "[sat]")
+    {
+        using namespace kmx::sat;
+
+        scheduler::preprocess scheduler;
+        cdcl::memory_governor governor;
+        governor.register_budget(10u, 20u);
+        scheduler.attach_memory_governor(governor);
+
+        governor.set_current_usage(0u);
+        scheduler.set_inprocess_telemetry_snapshot(0.01, 0.50, 0.00, 0.00, 0.80);
+        scheduler.run_initial_pipeline();
+        scheduler.report_pass_summary();
+
+        const auto& plan = scheduler.profile_selector().current_pass_plan();
+        REQUIRE_FALSE(plan.skip_memory_heavy_from_inprocess_pressure);
+        REQUIRE_FALSE(plan.skip_memory_heavy_from_learned_clause_pressure);
+        REQUIRE_FALSE(plan.skip_memory_heavy_passes);
+
+        const auto& summaries = scheduler.last_reported_summaries();
+        const auto vivifier_summary =
+            std::find_if(summaries.begin(), summaries.end(),
+                         [](const scheduler::preprocess::pass_summary& summary) noexcept
+                         { return summary.id == scheduler::preprocess::pass_id::vivifier; });
+        REQUIRE(vivifier_summary != summaries.end());
+        REQUIRE(vivifier_summary->executed);
+        REQUIRE_FALSE(vivifier_summary->skipped_by_selector);
+
+        const auto congruence_summary =
+            std::find_if(summaries.begin(), summaries.end(),
+                         [](const scheduler::preprocess::pass_summary& summary) noexcept
+                         { return summary.id == scheduler::preprocess::pass_id::congruence; });
+        REQUIRE(congruence_summary != summaries.end());
+        REQUIRE(congruence_summary->executed);
+        REQUIRE_FALSE(congruence_summary->skipped_by_selector);
+    }
+
     TEST_CASE("preprocess probing forwards backbone candidates into clause state and proof events", "[sat]")
     {
         using namespace kmx::sat;
@@ -404,9 +537,9 @@ namespace kmx::sat::simplify
         REQUIRE(scheduler.executed_pass_count() == 1u);
         REQUIRE(clause_database.storage_of().literals_of(binary_ref).size() == 1u);
         REQUIRE(clause_database.storage_of().literals_of(binary_ref)[0] == implied_lit);
-        REQUIRE(clause_database.stats_snapshot().redundant_count == 1u);
+        REQUIRE(clause_database.stats_snapshot().redundant_count == 0u);
         REQUIRE(clause_database.storage_of().literals_of(unit_ref).size() == 1u);
-        bool attached_backbone_unit {false};
+        bool attached_backbone_unit {};
         clause_database.iterate_redundant(
             [&](const cdcl::clause::ref_t ref) noexcept
             {
@@ -416,10 +549,8 @@ namespace kmx::sat::simplify
                     attached_backbone_unit = true;
                 }
             });
-        REQUIRE(attached_backbone_unit);
-        REQUIRE(proof_manager.last_event().kind == proof::event_kind::add_derived);
-        REQUIRE(proof_manager.last_event().literals.size() == 1u);
-        REQUIRE(proof_manager.last_event().literals[0] == 62);
+        REQUIRE_FALSE(attached_backbone_unit);
+        REQUIRE(proof_manager.last_event().kind == proof::event_kind::shrink_clause);
     }
 
     TEST_CASE("preprocess selector adapts factorizer gating after repeated low yield", "[sat]")
@@ -447,7 +578,7 @@ namespace kmx::sat::simplify
         selector.select_pass_plan();
         REQUIRE(!selector.current_pass_plan().skip_factorizer_for_binary_dense);
 
-        for (std::size_t sample {0u}; sample < 4u; ++sample)
+        for (std::size_t sample {}; sample < 4u; ++sample)
         {
             selector.record_pass_effectiveness("factorizer", false);
             selector.update_selection_policy();

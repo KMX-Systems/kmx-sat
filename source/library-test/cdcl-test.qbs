@@ -1,7 +1,7 @@
 import qbs
-import "." as TestItems
+import "test-application.qbs" as TestItems
 
-TestItems.TestApplication {
+TestItems {
     name: "kmx-sat-cdcl-test"
     testSources: [
         "src/kmx/sat/cdcl/**/*.cpp",

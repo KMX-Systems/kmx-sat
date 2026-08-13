@@ -29,8 +29,8 @@ namespace kmx::sat::simplify
         REQUIRE(blocked_literal.raw() == expected_literal.raw());
 
         eliminator::clause::covered covered;
-        covered.compute_covered_literals(cdcl::clause::ref_t {0u});
-        covered.mark_covered(cdcl::clause::ref_t {0u});
+        covered.compute_covered_literals(cdcl::clause::ref_t {});
+        covered.mark_covered(cdcl::clause::ref_t {});
         covered.run();
         REQUIRE(covered.covered_count() == 1u);
 
@@ -98,6 +98,39 @@ namespace kmx::sat::simplify
         REQUIRE(backbone.last_emitted_literal() == backbone_lit);
         REQUIRE(backbone_database.stats_snapshot().redundant_count == 1u);
         REQUIRE(backbone_proof_manager.last_event().kind == proof::event_kind::add_derived);
+        backbone.reset();
+        REQUIRE(backbone.candidate_count() == 0u);
+        REQUIRE(backbone.confirmed_count() == 0u);
+        REQUIRE(backbone.emitted_count() == 0u);
+        backbone.record_candidate(backbone_lit);
+        backbone.confirm_candidate(backbone_lit);
+        backbone.emit_unit_fact(backbone_lit);
+        REQUIRE(backbone.emitted_count() == 1u);
+        REQUIRE(backbone_database.stats_snapshot().redundant_count == 1u);
+
+        extractor::backbone guarded_backbone;
+        cdcl::clause::database guarded_database;
+        guarded_backbone.attach_database(guarded_database);
+        const literal guarded_lit {variable {31u}, false};
+        guarded_backbone.record_candidate(literal {});
+        guarded_backbone.record_candidate(guarded_lit);
+        guarded_backbone.record_candidate(guarded_lit.negated());
+        REQUIRE(guarded_backbone.candidate_count() == 1u);
+        guarded_backbone.confirm_candidate(guarded_lit);
+        guarded_backbone.emit_unit_fact(guarded_lit);
+        guarded_backbone.emit_unit_fact(guarded_lit);
+        REQUIRE(guarded_backbone.emitted_count() == 1u);
+
+        extractor::backbone existing_unit_backbone;
+        cdcl::clause::database existing_unit_database;
+        existing_unit_database.add_clause(std::array<literal, 1> {literal {variable {32u}, false}}, false);
+        existing_unit_backbone.attach_database(existing_unit_database);
+        const literal existing_unit {variable {32u}, false};
+        existing_unit_backbone.record_candidate(existing_unit);
+        existing_unit_backbone.confirm_candidate(existing_unit);
+        existing_unit_backbone.emit_unit_fact(existing_unit);
+        REQUIRE(existing_unit_backbone.emitted_count() == 1u);
+        REQUIRE(existing_unit_database.stats_snapshot().irredundant_count == 1u);
 
         preprocessing_profile_selector selector;
         selector.fingerprint_formula();

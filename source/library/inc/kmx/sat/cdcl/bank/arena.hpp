@@ -59,7 +59,7 @@ namespace kmx::sat::cdcl::bank
             {
                 return;
             }
-            for (std::size_t index {0}; index < literals.size(); ++index)
+            for (std::size_t index {}; index < literals.size(); ++index)
             {
                 const auto raw = literals[index].raw();
                 std::memcpy(active_.data() + payload_offset + index * sizeof(literal::raw_t), &raw, sizeof(raw));
@@ -81,7 +81,7 @@ namespace kmx::sat::cdcl::bank
             {
                 return 0u;
             }
-            std::uint32_t count {0u};
+            std::uint32_t count {};
             std::memcpy(&count, active_.data() + offset, sizeof(count));
             return count;
         }
@@ -105,9 +105,9 @@ namespace kmx::sat::cdcl::bank
                 return result;
             }
             result.reserve(count);
-            for (std::uint32_t index {0}; index < count; ++index)
+            for (std::uint32_t index {}; index < count; ++index)
             {
-                literal::raw_t raw {0u};
+                literal::raw_t raw {};
                 std::memcpy(&raw, active_.data() + payload_offset + index * sizeof(literal::raw_t), sizeof(raw));
                 result.push_back(literal {raw});
             }

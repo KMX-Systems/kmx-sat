@@ -5,6 +5,7 @@
 #ifndef PCH
     #include <algorithm>
     #include <optional>
+    #include <unordered_map>
     #include <utility>
     #include <vector>
 #endif
@@ -36,14 +37,19 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void increase_score(const variable var) noexcept
         {
-            const auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept { return entry.first == var; });
-            if (it != scores_.end())
+            const auto index = static_cast<std::size_t>(var.index());
+            const auto position_it = positions_.find(index);
+            if (position_it != positions_.end())
             {
-                it->second += bump_increment_;
+                scores_[position_it->second].second += bump_increment_;
+                sift_up(position_it->second);
             }
             else
             {
                 scores_.emplace_back(var, bump_increment_);
+                const auto position = scores_.size() - 1u;
+                positions_[index] = position;
+                sift_up(position);
             }
         }
 
@@ -68,17 +74,18 @@ namespace kmx::sat::cdcl
                 return std::nullopt;
             }
 
-            auto best_it = scores_.begin();
-            for (auto it = std::next(scores_.begin()); it != scores_.end(); ++it)
+            const variable best = scores_.front().first;
+            positions_.erase(static_cast<std::size_t>(best.index()));
+            if (scores_.size() == 1u)
             {
-                if (it->second > best_it->second)
-                {
-                    best_it = it;
-                }
+                scores_.pop_back();
+                return best;
             }
 
-            const variable best = best_it->first;
-            scores_.erase(best_it);
+            scores_.front() = scores_.back();
+            scores_.pop_back();
+            positions_[static_cast<std::size_t>(scores_.front().first.index())] = 0u;
+            sift_down(0u);
             return best;
         }
 
@@ -88,27 +95,91 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         bool contains(const variable var) const noexcept
         {
-            return std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept { return entry.first == var; }) !=
-                   scores_.end();
+            return positions_.find(static_cast<std::size_t>(var.index())) != positions_.end();
         }
 
         /// @brief Restores heap ordering invariants after bulk score or membership changes.
         /// @throws None (noexcept).
         void rebuild() noexcept
         {
-            std::sort(scores_.begin(), scores_.end(),
-                      [](const auto& left, const auto& right) noexcept
-                      {
-                          if (left.second != right.second)
-                          {
-                              return left.second > right.second;
-                          }
-                          return left.first.index() < right.first.index();
-                      });
+            std::make_heap(scores_.begin(), scores_.end(), heap_compare {});
+            rebuild_positions();
         }
 
     private:
+        struct heap_compare final
+        {
+            bool operator()(const std::pair<variable, double>& left, const std::pair<variable, double>& right) const noexcept
+            {
+                if (left.second != right.second)
+                {
+                    return left.second < right.second;
+                }
+                return left.first.index() > right.first.index();
+            }
+        };
+
+        bool precedes(const std::size_t left, const std::size_t right) const noexcept
+        {
+            return heap_compare {}(scores_[right], scores_[left]);
+        }
+
+        void swap_entries(const std::size_t left, const std::size_t right) noexcept
+        {
+            std::swap(scores_[left], scores_[right]);
+            positions_[static_cast<std::size_t>(scores_[left].first.index())] = left;
+            positions_[static_cast<std::size_t>(scores_[right].first.index())] = right;
+        }
+
+        void sift_up(std::size_t position) noexcept
+        {
+            while (position != 0u)
+            {
+                const auto parent = (position - 1u) / 2u;
+                if (!precedes(position, parent))
+                {
+                    break;
+                }
+                swap_entries(position, parent);
+                position = parent;
+            }
+        }
+
+        void sift_down(std::size_t position) noexcept
+        {
+            for (;;)
+            {
+                const auto left = position * 2u + 1u;
+                if (left >= scores_.size())
+                {
+                    return;
+                }
+                auto best = left;
+                const auto right = left + 1u;
+                if (right < scores_.size() && precedes(right, left))
+                {
+                    best = right;
+                }
+                if (!precedes(best, position))
+                {
+                    return;
+                }
+                swap_entries(position, best);
+                position = best;
+            }
+        }
+
+        void rebuild_positions() noexcept
+        {
+            positions_.clear();
+            for (std::size_t index {}; index < scores_.size(); ++index)
+            {
+                positions_[static_cast<std::size_t>(scores_[index].first.index())] = index;
+            }
+        }
+
         std::vector<std::pair<variable, double>> scores_ {};
+        std::unordered_map<std::size_t, std::size_t> positions_ {};
         double bump_increment_ {1.0};
     };
 }

@@ -46,7 +46,7 @@ namespace kmx::sat::cdcl
         clause::ref_t propagate() noexcept
         {
             ++propagation_call_count_;
-            if (!staged_conflicts_.empty())
+            if (has_staged_conflicts())
             {
                 return consume_staged_conflict();
             }
@@ -62,11 +62,14 @@ namespace kmx::sat::cdcl
 
             if (pending_assumption_count_ == 0)
             {
+                // No assumptions are pending for this episode: any currently staged conflict was not caused by
+                // assumption processing (e.g. it was staged directly ahead of the regular search loop), so it
+                // must not be misattributed here; leave it for `propagate` to discover in the normal loop.
                 return {};
             }
 
             pending_assumption_count_ = 0;
-            if (!staged_conflicts_.empty())
+            if (has_staged_conflicts())
             {
                 return consume_staged_conflict();
             }
@@ -79,7 +82,7 @@ namespace kmx::sat::cdcl
         clause::ref_t propagate_beyond_conflict() noexcept
         {
             ++beyond_conflict_propagation_call_count_;
-            if (!staged_conflicts_.empty())
+            if (has_staged_conflicts())
             {
                 return consume_staged_conflict();
             }
@@ -121,7 +124,6 @@ namespace kmx::sat::cdcl
                 return;
             }
             staged_conflicts_.push_back(ref);
-            ++staged_conflict_count_;
         }
 
         /// @brief Returns the number of currently watched clauses.
@@ -136,11 +138,14 @@ namespace kmx::sat::cdcl
 
         /// @brief Returns whether there are staged conflicts still pending for the next consume step.
         /// @return True if at least one staged conflict remains queued.
-        [[nodiscard]] bool has_staged_conflicts() const noexcept { return !staged_conflicts_.empty(); }
+        [[nodiscard]] bool has_staged_conflicts() const noexcept { return staged_conflict_head_ < staged_conflicts_.size(); }
 
         /// @brief Returns the number of conflicts currently queued for the next propagation step.
         /// @return Number of staged conflicts waiting to be consumed.
-        std::size_t staged_conflict_count() const noexcept { return staged_conflict_count_; }
+        std::size_t staged_conflict_count() const noexcept
+        {
+            return staged_conflict_head_ < staged_conflicts_.size() ? staged_conflicts_.size() - staged_conflict_head_ : 0u;
+        }
 
         /// @brief Returns the number of main propagation calls performed so far.
         /// @return Number of `propagate` calls.
@@ -162,6 +167,15 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void set_pending_assumption_count(const std::size_t count) noexcept { pending_assumption_count_ = count; }
 
+        /// @brief Clears episode-scoped propagation state before starting a fresh solve episode.
+        /// @throws None (noexcept).
+        void reset_episode_state() noexcept
+        {
+            staged_conflicts_.clear();
+            staged_conflict_head_ = 0u;
+            pending_assumption_count_ = 0u;
+        }
+
     private:
         bool is_watched(const clause::ref_t ref) const noexcept
         {
@@ -170,22 +184,35 @@ namespace kmx::sat::cdcl
 
         clause::ref_t consume_staged_conflict() noexcept
         {
-            if (staged_conflicts_.empty())
+            if (!has_staged_conflicts())
             {
                 return {};
             }
 
-            const auto conflict = staged_conflicts_.front();
-            staged_conflicts_.erase(staged_conflicts_.begin());
+            const auto conflict = staged_conflicts_[staged_conflict_head_++];
+
+            if (staged_conflict_head_ == staged_conflicts_.size())
+            {
+                staged_conflicts_.clear();
+                staged_conflict_head_ = 0u;
+            }
+            else if (staged_conflict_head_ >= staged_conflict_compaction_threshold_)
+            {
+                staged_conflicts_.erase(staged_conflicts_.begin(), staged_conflicts_.begin() + static_cast<std::ptrdiff_t>(staged_conflict_head_));
+                staged_conflict_head_ = 0u;
+            }
+
             return conflict;
         }
 
+        static constexpr std::size_t staged_conflict_compaction_threshold_ {64u};
+
         std::vector<clause::ref_t> watched_ {};
         std::vector<clause::ref_t> staged_conflicts_ {};
-        std::size_t staged_conflict_count_ {0};
-        std::size_t propagation_call_count_ {0};
-        std::size_t assumption_propagation_call_count_ {0};
-        std::size_t beyond_conflict_propagation_call_count_ {0};
-        std::size_t pending_assumption_count_ {0};
+        std::size_t staged_conflict_head_ {};
+        std::size_t propagation_call_count_ {};
+        std::size_t assumption_propagation_call_count_ {};
+        std::size_t beyond_conflict_propagation_call_count_ {};
+        std::size_t pending_assumption_count_ {};
     };
 }

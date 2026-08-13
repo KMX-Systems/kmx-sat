@@ -61,6 +61,6 @@ namespace kmx::sat::cdcl
 
     private:
         std::vector<literal> literals_ {};
-        std::uint32_t propagation_head_ {0};
+        std::uint32_t propagation_head_ {};
     };
 }

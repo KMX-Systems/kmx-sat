@@ -10,6 +10,7 @@ Project {
         "library/runtime.qbs",
         "library/io.qbs",
         "library/library.qbs",
-        "library-test/unit-test.qbs"
+        "library-test/unit-test.qbs",
+        "cli.qbs"
     ]
 }

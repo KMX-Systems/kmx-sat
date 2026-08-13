@@ -44,6 +44,6 @@ namespace kmx::sat::cdcl
         literal blocking_literal_ {};
         literal binary_literal_ {};
         clause::ref_t clause_ref_ {};
-        bool is_binary_ {false};
+        bool is_binary_ {};
     };
 }

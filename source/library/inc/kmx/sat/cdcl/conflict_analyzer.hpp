@@ -33,6 +33,12 @@ namespace kmx::sat::cdcl
     class conflict_analyzer final
     {
     public:
+        /// @brief Non-owning callback returning a variable's current decision level (0 if unknown/unassigned).
+        using level_lookup_t = std::uint32_t (*)(const void* context, variable var) noexcept;
+
+        /// @brief Non-owning callback returning a variable's reason-clause literals, or an empty span if it has none.
+        using reason_lookup_t = std::span<const literal> (*)(const void* context, variable var) noexcept;
+
         /// @brief Constructs a conflict analyzer with no in-progress analysis state.
         /// @throws None (noexcept).
         conflict_analyzer() noexcept = default;
@@ -54,19 +60,66 @@ namespace kmx::sat::cdcl
                 pending_conflict_literals_.clear();
             }
 
-            // Keep first-occurrence order while removing duplicates by raw literal encoding.
+            // Keep first-occurrence order while removing duplicates by variable identity.
             std::vector<literal> unique_literals;
             unique_literals.reserve(learned_literals_.size());
             for (const auto lit: learned_literals_)
             {
                 const auto duplicate_it = std::find_if(unique_literals.begin(), unique_literals.end(),
-                                                       [lit](const literal existing) noexcept { return existing.raw() == lit.raw(); });
+                                                       [lit](const literal existing) noexcept
+                                                       {
+                                                           return existing.variable_of().index() == lit.variable_of().index();
+                                                       });
                 if (duplicate_it == unique_literals.end())
                 {
                     unique_literals.push_back(lit);
                 }
             }
             learned_literals_ = std::move(unique_literals);
+
+            // Conservative minimization: keep asserting literal and drop level-0 tail literals.
+            if (learned_literals_.size() > 1u)
+            {
+                std::vector<literal> minimized_literals {};
+                minimized_literals.reserve(learned_literals_.size());
+                minimized_literals.push_back(learned_literals_.front());
+
+                for (std::size_t index = 1u; index < learned_literals_.size(); ++index)
+                {
+                    const auto lit = learned_literals_[index];
+                    if (level_of_variable(lit.variable_of()) == 0u)
+                    {
+                        continue;
+                    }
+                    minimized_literals.push_back(lit);
+                }
+
+                learned_literals_ = std::move(minimized_literals);
+            }
+
+            // Canonicalize asserting literal position: keep the highest-level literal at index 0.
+            if (learned_literals_.size() > 1u)
+            {
+                std::size_t asserting_index = 0u;
+                auto asserting_level = level_of_variable(learned_literals_.front().variable_of());
+
+                for (std::size_t index = 1u; index < learned_literals_.size(); ++index)
+                {
+                    const auto candidate_level = level_of_variable(learned_literals_[index].variable_of());
+                    if (candidate_level > asserting_level)
+                    {
+                        asserting_level = candidate_level;
+                        asserting_index = index;
+                    }
+                }
+
+                if (asserting_index != 0u)
+                {
+                    const auto asserting_literal = learned_literals_[asserting_index];
+                    learned_literals_.erase(learned_literals_.begin() + static_cast<std::ptrdiff_t>(asserting_index));
+                    learned_literals_.insert(learned_literals_.begin(), asserting_literal);
+                }
+            }
 
             bump_candidates_.clear();
             bump_candidates_.reserve(learned_literals_.size());
@@ -82,6 +135,180 @@ namespace kmx::sat::cdcl
             }
 
             backjump_level_ = second_highest_decision_level();
+        }
+
+        /// @brief Runs real first-UIP conflict analysis by resolving the implication graph backward over reason
+        /// clauses, following the classic GRASP/Chaff/MiniSat scheme.
+        ///
+        /// @details
+        /// Starting from the seeded conflict clause (see `seed_conflict_clause`), this walks the assignment trail
+        /// backward, resolving on the reason clause of each literal assigned at `current_level` until exactly one
+        /// such literal remains unresolved: that literal's negation becomes the derived clause's asserting literal
+        /// (index 0). Literals from earlier decision levels are kept in the derived clause; level-0 (root-forced)
+        /// literals are dropped since they can never be falsified. The backjump level is the highest decision level
+        /// among the kept (non-asserting) literals, or 0 if none remain.
+        /// @param trail_in_order Full assignment trail (decisions and implied literals) in chronological order.
+        /// @param current_level Decision level at which the conflict was detected.
+        /// @param level_of Callback returning a variable's current decision level.
+        /// @param reason_of Callback returning a variable's reason-clause literals (empty span if none/decision).
+        /// @param context Opaque context forwarded to both callbacks.
+        /// @throws None (noexcept).
+        void analyze_via_resolution(const std::span<const literal> trail_in_order, const std::uint32_t current_level,
+                                    const level_lookup_t level_of, const reason_lookup_t reason_of, const void* context) noexcept
+        {
+            resolution_chain_literals_.clear();
+            resolution_chain_step_count_ = 0u;
+            learned_literals_.clear();
+            bump_candidates_.clear();
+            backjump_level_ = 0u;
+
+            std::vector<literal> conflict_literals {};
+            if (pending_conflict_literals_.empty())
+            {
+                conflict_literals.clear();
+            }
+            else
+            {
+                conflict_literals = std::move(pending_conflict_literals_);
+                pending_conflict_literals_.clear();
+            }
+
+            if (conflict_literals.empty() || level_of == nullptr || reason_of == nullptr)
+            {
+                return;
+            }
+
+            for (const auto index: touched_variable_indices_)
+            {
+                if (index < seen_flags_.size())
+                {
+                    seen_flags_[index] = 0u;
+                }
+            }
+            touched_variable_indices_.clear();
+
+            const auto mark_seen = [this](const variable var) noexcept -> bool
+            {
+                const auto index = static_cast<std::size_t>(var.index());
+                if (index >= seen_flags_.size())
+                {
+                    seen_flags_.resize(index + 1u, 0u);
+                }
+                if (seen_flags_[index] != 0u)
+                {
+                    return false;
+                }
+                seen_flags_[index] = 1u;
+                touched_variable_indices_.push_back(index);
+                return true;
+            };
+
+            const auto is_seen = [this](const variable var) noexcept -> bool
+            {
+                const auto index = static_cast<std::size_t>(var.index());
+                return index < seen_flags_.size() && seen_flags_[index] != 0u;
+            };
+
+            std::vector<literal> tail_literals {};
+            std::uint32_t unresolved_at_current_level {};
+            bool have_pivot = false;
+            literal pivot {};
+            std::span<const literal> literals_to_resolve = conflict_literals;
+            auto trail_cursor = static_cast<std::ptrdiff_t>(trail_in_order.size()) - 1;
+
+            for (;;)
+            {
+                for (const auto candidate: literals_to_resolve)
+                {
+                    const auto candidate_variable = candidate.variable_of();
+                    if (have_pivot && candidate_variable.index() == pivot.variable_of().index())
+                    {
+                        continue;
+                    }
+                    if (!mark_seen(candidate_variable))
+                    {
+                        continue;
+                    }
+
+                    bump_candidates_.push_back(candidate_variable);
+                    const auto candidate_level = level_of(context, candidate_variable);
+                    if (candidate_level == 0u)
+                    {
+                        continue;
+                    }
+                    if (candidate_level >= current_level)
+                    {
+                        ++unresolved_at_current_level;
+                    }
+                    else
+                    {
+                        tail_literals.push_back(candidate);
+                    }
+                }
+
+                if (unresolved_at_current_level == 0u)
+                {
+                    // Nothing left to resolve at the conflict's decision level: either every literal was a
+                    // root-forced (level-0) fact, or the previous resolution round already discharged the last
+                    // one. There is no genuine UIP to find; stop before the pivot search below would otherwise
+                    // underflow the unsigned counter.
+                    break;
+                }
+
+                have_pivot = false;
+                pivot = {};
+                while (trail_cursor >= 0)
+                {
+                    const auto trail_literal = trail_in_order[static_cast<std::size_t>(trail_cursor)];
+                    --trail_cursor;
+                    if (is_seen(trail_literal.variable_of()))
+                    {
+                        pivot = trail_literal;
+                        have_pivot = true;
+                        break;
+                    }
+                }
+
+                if (!have_pivot)
+                {
+                    break;
+                }
+
+                --unresolved_at_current_level;
+                if (unresolved_at_current_level == 0u)
+                {
+                    break;
+                }
+
+                literals_to_resolve = reason_of(context, pivot.variable_of());
+            }
+
+            if (have_pivot)
+            {
+                learned_literals_.push_back(pivot.negated());
+            }
+            else if (!tail_literals.empty())
+            {
+                learned_literals_.push_back(tail_literals.front());
+                tail_literals.erase(tail_literals.begin());
+            }
+            else
+            {
+                return;
+            }
+
+            std::uint32_t highest_tail_level {};
+            for (const auto lit: tail_literals)
+            {
+                const auto level = level_of(context, lit.variable_of());
+                if (level > highest_tail_level)
+                {
+                    highest_tail_level = level;
+                }
+            }
+            backjump_level_ = highest_tail_level;
+
+            learned_literals_.insert(learned_literals_.end(), tail_literals.begin(), tail_literals.end());
         }
 
         /// @brief Returns the first Unique Implication Point literal found by the last `analyze` call.
@@ -192,17 +419,17 @@ namespace kmx::sat::cdcl
                 return 0;
             }
 
-            std::uint32_t highest {0};
-            std::uint32_t second_highest {0};
+            std::uint32_t highest {};
+            std::uint32_t second_highest {};
             for (const auto lit: learned_literals_)
             {
                 const auto level = level_of_variable(lit.variable_of());
-                if (level >= highest)
+                if (level > highest)
                 {
                     second_highest = highest;
                     highest = level;
                 }
-                else if (level > second_highest)
+                else if (level < highest && level > second_highest)
                 {
                     second_highest = level;
                 }
@@ -216,7 +443,9 @@ namespace kmx::sat::cdcl
         std::vector<literal> resolution_chain_literals_ {};
         std::vector<variable> bump_candidates_ {};
         std::vector<std::pair<variable, std::uint32_t>> decision_levels_ {};
-        std::uint32_t backjump_level_ {0};
-        std::uint32_t resolution_chain_step_count_ {0};
+        std::vector<std::uint8_t> seen_flags_ {};
+        std::vector<std::size_t> touched_variable_indices_ {};
+        std::uint32_t backjump_level_ {};
+        std::uint32_t resolution_chain_step_count_ {};
     };
 }

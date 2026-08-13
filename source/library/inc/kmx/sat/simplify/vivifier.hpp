@@ -46,7 +46,7 @@ namespace kmx::sat::simplify
 
             if (database_ != nullptr)
             {
-                bool stopped {false};
+                bool stopped {};
                 auto process_ref = [&](const cdcl::clause::ref_t ref) noexcept
                 {
                     if (stopped || abort_on_budget())
@@ -121,13 +121,13 @@ namespace kmx::sat::simplify
         bool run_completed() const noexcept { return run_completed_; }
 
     private:
-        cdcl::clause::database* database_ {nullptr};
+        cdcl::clause::database* database_ {};
         std::size_t clause_budget_ {1u};
-        std::size_t processed_in_current_run_ {0u};
-        std::size_t vivified_clause_count_ {0u};
-        std::size_t committed_shrink_count_ {0u};
+        std::size_t processed_in_current_run_ {};
+        std::size_t vivified_clause_count_ {};
+        std::size_t committed_shrink_count_ {};
         cdcl::clause::ref_t pending_shrink_ref_ {};
-        std::uint32_t pending_target_size_ {0u};
-        bool run_completed_ {false};
+        std::uint32_t pending_target_size_ {};
+        bool run_completed_ {};
     };
 }

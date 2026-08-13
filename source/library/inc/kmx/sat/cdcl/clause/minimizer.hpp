@@ -27,6 +27,12 @@ namespace kmx::sat::cdcl::clause
     class minimizer final
     {
     public:
+        /// @brief Non-owning callback returning the current decision level of a variable.
+        using level_lookup_t = std::uint32_t (*)(const void* context, variable var) noexcept;
+
+        /// @brief Non-owning callback returning the reason clause of a variable.
+        using reason_lookup_t = std::span<const literal> (*)(const void* context, variable var) noexcept;
+
         /// @brief Constructs a minimizer with no clause-specific state.
         /// @throws None (noexcept).
         minimizer() noexcept = default;
@@ -69,6 +75,99 @@ namespace kmx::sat::cdcl::clause
             }
         }
 
+        /// @brief Minimizes a learned clause through recursive reason-closure checks.
+        /// @param ref Clause to minimize.
+        /// @param level_of Callback returning a variable's current decision level.
+        /// @param reason_of Callback returning a variable's implication reason.
+        /// @param context Opaque callback context passed to both callbacks.
+        /// @throws None (noexcept).
+        void minimize_learned_clause(const ref_t ref, const level_lookup_t level_of, const reason_lookup_t reason_of,
+                                     const void* context) noexcept
+        {
+            if (storage_ == nullptr || !ref.valid() || level_of == nullptr || reason_of == nullptr)
+            {
+                minimize_learned_clause(ref);
+                return;
+            }
+
+            const auto literals = storage_->literals_of(ref);
+            if (literals.size() <= 1u)
+            {
+                return;
+            }
+
+            std::unordered_set<literal::raw_t> exact_literals {};
+            exact_literals.reserve(literals.size());
+            for (const auto lit: literals)
+            {
+                exact_literals.insert(lit.raw());
+            }
+
+            std::unordered_set<std::uint32_t> removable_variables {};
+            std::unordered_set<std::uint32_t> visiting_variables {};
+            const auto can_remove = [&](const auto& self, const variable var) noexcept -> bool
+            {
+                const auto variable_index = var.index();
+                if (removable_variables.contains(variable_index))
+                {
+                    return true;
+                }
+                if (!visiting_variables.insert(variable_index).second)
+                {
+                    return false;
+                }
+
+                const auto reason_view = reason_of(context, var);
+                if (reason_view.empty())
+                {
+                    visiting_variables.erase(variable_index);
+                    return false;
+                }
+
+                const std::vector<literal> reason {reason_view.begin(), reason_view.end()};
+                for (const auto reason_literal: reason)
+                {
+                    if (reason_literal.variable_of().index() == variable_index || level_of(context, reason_literal.variable_of()) == 0u
+                        || exact_literals.contains(reason_literal.raw()))
+                    {
+                        continue;
+                    }
+                    if (!self(self, reason_literal.variable_of()))
+                    {
+                        visiting_variables.erase(variable_index);
+                        return false;
+                    }
+                }
+
+                visiting_variables.erase(variable_index);
+                removable_variables.insert(variable_index);
+                return true;
+            };
+
+            std::vector<literal> minimized_literals {};
+            minimized_literals.reserve(literals.size());
+            minimized_literals.push_back(literals.front());
+            for (std::size_t index = 1u; index < literals.size(); ++index)
+            {
+                const auto lit = literals[index];
+                if (!can_remove(can_remove, lit.variable_of()))
+                {
+                    minimized_literals.push_back(lit);
+                }
+            }
+
+            if (minimized_literals.size() < literals.size())
+            {
+                storage_->rewrite_clause_literals(ref, minimized_literals);
+                target_sizes_[ref.offset()] = static_cast<std::uint32_t>(minimized_literals.size());
+                minimized_.insert(ref.offset());
+            }
+            else
+            {
+                minimize_learned_clause(ref);
+            }
+        }
+
         /// @brief Commits a clause's reduced literal set in place after minimization.
         /// @param ref Reference to the clause to shrink.
         /// @throws None (noexcept).
@@ -99,6 +198,38 @@ namespace kmx::sat::cdcl::clause
             const auto target_size = target_sizes_.contains(ref.offset()) ? target_sizes_.at(ref.offset()) : 1u;
             last_glue_ = std::max<std::uint32_t>(1u, target_size);
             glue_.insert_or_assign(ref.offset(), last_glue_);
+            if (database_ != nullptr)
+            {
+                database_->set_glue(ref, last_glue_);
+            }
+        }
+
+        /// @brief Recomputes exact LBD/glue as the number of distinct decision levels in the stored clause.
+        /// @param ref Clause whose current literals should be measured.
+        /// @param level_of Callback returning a literal variable's decision level.
+        /// @param context Opaque callback context.
+        /// @throws None (noexcept).
+        void recompute_glue(const ref_t ref, const level_lookup_t level_of, const void* context) noexcept
+        {
+            if (storage_ == nullptr || !ref.valid() || level_of == nullptr)
+            {
+                return;
+            }
+
+            const auto literals = storage_->literals_of(ref);
+            std::unordered_set<std::uint32_t> levels {};
+            levels.reserve(literals.size());
+            for (const auto lit: literals)
+            {
+                levels.insert(level_of(context, lit.variable_of()));
+            }
+
+            last_glue_ = std::max<std::uint32_t>(1u, static_cast<std::uint32_t>(levels.size()));
+            glue_.insert_or_assign(ref.offset(), last_glue_);
+            if (database_ != nullptr)
+            {
+                database_->set_glue(ref, last_glue_);
+            }
         }
 
         /// @brief Promotes a clause to a higher-quality tier if its recomputed glue justifies it.
@@ -126,16 +257,19 @@ namespace kmx::sat::cdcl::clause
 
         [[nodiscard]] std::uint32_t promoted_clause_count() const noexcept { return static_cast<std::uint32_t>(promoted_.size()); }
 
+        /// @brief Returns whether a specific clause was physically shrunk by this minimizer.
+        bool was_shrunk(const ref_t ref) const noexcept { return ref.valid() && shrunk_.find(ref.offset()) != shrunk_.end(); }
+
         [[nodiscard]] std::uint32_t last_glue() const noexcept { return last_glue_; }
 
     private:
-        storage* storage_ {nullptr};
-        database* database_ {nullptr};
+        storage* storage_ {};
+        database* database_ {};
         std::unordered_map<ref_t::offset_t, std::uint32_t> glue_ {};
         std::unordered_map<ref_t::offset_t, std::uint32_t> target_sizes_ {};
         std::unordered_set<ref_t::offset_t> minimized_ {};
         std::unordered_set<ref_t::offset_t> shrunk_ {};
         std::unordered_set<ref_t::offset_t> promoted_ {};
-        std::uint32_t last_glue_ {0u};
+        std::uint32_t last_glue_ {};
     };
 }

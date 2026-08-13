@@ -3,13 +3,16 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <array>
     #include <cstdint>
     #include <functional>
     #include <optional>
     #include <span>
+    #include <string>
     #include <string_view>
 #endif
 #include <kmx/sat/literal.hpp>
+#include <kmx/sat/proof/event_stream.hpp>
 #include <kmx/sat/solve_request.hpp>
 #include <kmx/sat/solve_result.hpp>
 #include <kmx/sat/solver_state_machine.hpp>
@@ -51,6 +54,12 @@ namespace kmx::sat
     class solver final
     {
     public:
+        enum class statistics_report_detail : std::uint8_t
+        {
+            compact,
+            verbose
+        };
+
         using terminate_callback_t = std::function<bool()>;
         using learn_callback_t = std::function<void(std::span<const literal>)>;
         using external_propagator_hook_t = std::function<void()>;
@@ -136,6 +145,46 @@ namespace kmx::sat
         /// @return Immutable statistics snapshot.
         /// @throws None (noexcept).
         telemetry::solver_statistics::snapshot statistics() const noexcept;
+        /// @brief Sets the detail level used when formatting statistics report lines.
+        /// @param detail Statistics report detail mode.
+        /// @throws None (noexcept).
+        void set_statistics_report_detail(statistics_report_detail detail) noexcept;
+        /// @brief Returns the detail level used when formatting statistics report lines.
+        /// @return Current statistics report detail mode.
+        /// @throws None (noexcept).
+        statistics_report_detail statistics_report_detail_of() const noexcept;
+        /// @brief Formats the current statistics snapshot as one report line.
+        /// @return Formatted report line in the configured detail mode.
+        /// @throws None.
+        std::string statistics_report_line() const;
+        /// @brief Returns the number of statistics report lines emitted by solve checkpoints in this session.
+        /// @return Count of emitted report lines retained by this facade.
+        /// @throws None (noexcept).
+        std::size_t statistics_report_emission_count() const noexcept;
+        /// @brief Returns the latest statistics report line emitted by solve checkpoints.
+        /// @return Empty string view when no checkpoint line has been emitted.
+        /// @throws None (noexcept).
+        std::string_view last_emitted_statistics_report_line() const noexcept;
+        /// @brief Returns the previous statistics report line emitted by solve checkpoints.
+        /// @return Empty string view when fewer than two checkpoint lines have been emitted.
+        /// @throws None (noexcept).
+        std::string_view previous_emitted_statistics_report_line() const noexcept;
+        /// @brief Returns the latest statistics snapshot emitted by solve checkpoints.
+        /// @return Latest emitted checkpoint snapshot, or `std::nullopt` when unavailable.
+        /// @throws None (noexcept).
+        std::optional<telemetry::solver_statistics::snapshot> last_emitted_statistics_snapshot() const noexcept;
+        /// @brief Returns the previous statistics snapshot emitted by solve checkpoints.
+        /// @return Previous emitted checkpoint snapshot, or `std::nullopt` when unavailable.
+        /// @throws None (noexcept).
+        std::optional<telemetry::solver_statistics::snapshot> previous_emitted_statistics_snapshot() const noexcept;
+        /// @brief Returns whether the last two emitted checkpoint snapshots are monotonic.
+        /// @return True when fewer than two snapshots exist or when the tail pair is monotonic.
+        /// @throws None (noexcept).
+        bool emitted_statistics_snapshot_tail_monotonic() const noexcept;
+        /// @brief Returns the non-negative per-counter delta between previous and latest emitted checkpoint snapshots.
+        /// @return Snapshot delta, or `std::nullopt` when fewer than two snapshots exist.
+        /// @throws None (noexcept).
+        std::optional<telemetry::solver_statistics::snapshot> emitted_statistics_snapshot_tail_delta() const noexcept;
         /// @brief Resets the current incremental session state.
         /// @throws None (noexcept).
         void reset_session() noexcept;
@@ -146,6 +195,77 @@ namespace kmx::sat
         /// @return Current solver state machine value.
         /// @throws None (noexcept).
         solver_state_machine::state current_state() const noexcept;
+
+        /// @brief Returns whether a persistent option subset is currently marked in the internal core.
+        /// @return True if option/configuration state has been persisted for subsequent solve epochs.
+        /// @throws None (noexcept).
+        bool persisted_option_subset() const noexcept;
+
+        /// @brief Returns the number of buffered proof events currently held by the internal proof manager.
+        /// @return Buffered proof event count.
+        /// @throws None (noexcept).
+        std::size_t proof_buffered_event_count() const noexcept;
+
+        /// @brief Returns the buffered proof events for the current solve session.
+        std::span<const proof::proof_event> buffered_proof_events() const noexcept;
+        std::size_t proof_buffered_payload_bytes() const noexcept;
+
+        /// @brief Returns whether any persisted configuration override is currently stored in this facade.
+        /// @return True when at least one persisted option/configuration override is configured.
+        /// @throws None (noexcept).
+        bool has_persisted_configuration() const noexcept;
+
+        /// @brief Returns currently configured decision maintenance intervals in conflict/conflict/restart order.
+        /// @return Active intervals used by the internal decision engine.
+        /// @throws None (noexcept).
+        std::array<std::uint32_t, 3> decision_maintenance_intervals() const noexcept;
+
+        /// @brief Returns whether the research-track CHB candidate source is enabled.
+        bool chb_enabled() const noexcept;
+
+        /// @brief Returns the learned-clause reduction quota percentage.
+        std::uint32_t reduction_fraction_percent() const noexcept;
+
+        /// @brief Returns the activity threshold protecting low-glue learned clauses.
+        double activity_retention_threshold() const noexcept;
+
+        /// @brief Returns the glue EMA restart threshold percentage; zero means disabled.
+        std::uint32_t glue_restart_threshold_percent() const noexcept;
+
+        /// @brief Returns whether research-track cold clause storage is enabled.
+        bool cold_storage_enabled() const noexcept;
+
+        /// @brief Returns the current cold-storage footprint in bytes.
+        std::size_t cold_footprint_bytes() const noexcept;
+
+        /// @brief Returns the configured default conflict limit override, if present.
+        /// @return Optional configured conflict limit.
+        /// @throws None (noexcept).
+        std::optional<std::uint64_t> configured_conflict_limit() const noexcept;
+
+        /// @brief Returns the configured default decision limit override, if present.
+        /// @return Optional configured decision limit.
+        /// @throws None (noexcept).
+        std::optional<std::uint64_t> configured_decision_limit() const noexcept;
+
+        /// @brief Returns the configured default enabled-pass-mask override, if present.
+        /// @return Optional configured enabled pass mask.
+        /// @throws None (noexcept).
+        std::optional<std::uint64_t> configured_enabled_pass_mask() const noexcept;
+
+        /// @brief Returns the configured strict-mode override, if present.
+        /// @return Optional strict-mode override value.
+        /// @throws None (noexcept).
+        std::optional<bool> configured_strict_mode() const noexcept;
+
+        /// @brief Returns the active configuration profile name, if one is configured.
+        /// @return Empty string view when no named profile is active.
+        /// @throws None (noexcept).
+        std::string_view configuration_profile_name() const noexcept;
+
+        /// @brief Clears persisted option/profile overrides stored in this facade instance.
+        /// @throws None (noexcept).
+        void clear_persisted_configuration() noexcept;
 
     private:
         class impl;

@@ -90,8 +90,19 @@ namespace kmx::sat::proof::tracer
         /// @throws None (noexcept).
         void finalize() noexcept
         {
+            if (finalized_)
+            {
+                return;
+            }
             emitted_events_.push_back({event_kind::finalize, 0u});
             finalized_ = true;
+        }
+
+        /// @brief Clears emitted FRAT records and reopens the tracer for a fresh proof episode.
+        void reset() noexcept
+        {
+            emitted_events_.clear();
+            finalized_ = false;
         }
 
         enum class event_kind
@@ -120,6 +131,6 @@ namespace kmx::sat::proof::tracer
 
     private:
         std::vector<emitted_event> emitted_events_ {};
-        bool finalized_ {false};
+        bool finalized_ {};
     };
 }

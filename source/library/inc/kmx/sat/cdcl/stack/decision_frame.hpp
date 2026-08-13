@@ -15,7 +15,7 @@ namespace kmx::sat::cdcl::stack
     struct frame
     {
         literal decision {};
-        std::uint32_t trail_base {0};
+        std::uint32_t trail_base {};
     };
 
     /// @brief Control frames in the CaDiCaL/Kissat style for decisions and backtracking.
@@ -76,6 +76,6 @@ namespace kmx::sat::cdcl::stack
 
     private:
         std::vector<frame> frames_ {};
-        std::uint32_t current_trail_base_ {0};
+        std::uint32_t current_trail_base_ {};
     };
 }

@@ -40,9 +40,19 @@ namespace kmx::sat::cdcl::clause
         /// @brief Snapshot of clause-count/tier statistics for telemetry reporting.
         struct stats final
         {
-            std::size_t irredundant_count {0};
-            std::size_t redundant_count {0};
-            std::size_t garbage_count {0};
+            std::size_t irredundant_count {};
+            std::size_t redundant_count {};
+            std::size_t garbage_count {};
+        };
+
+        /// @brief Quality metadata used by learned-clause retention and reduction policies.
+        struct quality final
+        {
+            tier_t tier {};
+            std::uint32_t glue {};
+            std::uint32_t used_count {};
+            std::uint32_t size {};
+            double activity {};
         };
 
         /// @brief Constructs a database with an empty underlying clause storage.
@@ -71,7 +81,64 @@ namespace kmx::sat::cdcl::clause
                 irredundant_refs_.push_back(ref);
             }
             tiers_[ref.offset()] = redundant ? default_tier : 0u;
+            glue_[ref.offset()] = static_cast<std::uint32_t>(literals.size());
+            used_counts_[ref.offset()] = 0u;
+            activities_[ref.offset()] = 0.0;
             return ref;
+        }
+
+        /// @brief Returns live quality metadata for a clause.
+        [[nodiscard]] quality quality_of(const ref_t ref) const noexcept
+        {
+            const auto resolved = storage_.resolve_ref(ref);
+            const auto glue_it = glue_.find(resolved.offset());
+            const auto used_it = used_counts_.find(resolved.offset());
+            const auto activity_it = activities_.find(resolved.offset());
+            return quality {tier_of(resolved), glue_it != glue_.end() ? glue_it->second : 0u,
+                            used_it != used_counts_.end() ? used_it->second : 0u,
+                            static_cast<std::uint32_t>(storage_.literals_of(resolved).size()),
+                            activity_it != activities_.end() ? activity_it->second : 0.0};
+        }
+
+        /// @brief Records a clause's current LBD/glue value.
+        void set_glue(const ref_t ref, const std::uint32_t glue) noexcept
+        {
+            if (ref.valid())
+            {
+                glue_[storage_.resolve_ref(ref).offset()] = glue;
+            }
+        }
+
+        /// @brief Records one use of a clause as an implication reason.
+        void increment_used_count(const ref_t ref) noexcept
+        {
+            if (ref.valid())
+            {
+                ++used_counts_[storage_.resolve_ref(ref).offset()];
+            }
+        }
+
+        /// @brief Adds conflict-derived activity to a clause's retention score.
+        void increment_activity(const ref_t ref, const double amount = 1.0) noexcept
+        {
+            if (ref.valid())
+            {
+                activities_[storage_.resolve_ref(ref).offset()] += amount;
+            }
+        }
+
+        /// @brief Ages activity and usage metadata so old conflict history cannot dominate indefinitely.
+        void decay_quality(const double factor = 0.5) noexcept
+        {
+            const auto bounded_factor = factor < 0.0 ? 0.0 : (factor > 1.0 ? 1.0 : factor);
+            for (auto& entry: activities_)
+            {
+                entry.second *= bounded_factor;
+            }
+            for (auto& entry: used_counts_)
+            {
+                entry.second = static_cast<std::uint32_t>(static_cast<double>(entry.second) * bounded_factor);
+            }
         }
 
         /// @brief Marks a clause as garbage, making it eligible for physical reclamation by the garbage collector.
@@ -94,6 +161,26 @@ namespace kmx::sat::cdcl::clause
             {
                 reasons_.insert(ref.offset());
             }
+        }
+
+        /// @brief Clears all transient implication-reason marks for a fresh solve episode.
+        void clear_reason_clauses() noexcept { reasons_.clear(); }
+
+        /// @brief Rewrites database bookkeeping after a live clause moves to a new physical reference.
+        void rewrite_ref_after_gc(const ref_t old_ref, const ref_t new_ref) noexcept
+        {
+            if (!old_ref.valid() || !new_ref.valid() || old_ref == new_ref)
+            {
+                return;
+            }
+            rewrite_ref_in_vector(irredundant_refs_, old_ref, new_ref);
+            rewrite_ref_in_vector(redundant_refs_, old_ref, new_ref);
+            migrate_set_entry(garbage_, old_ref, new_ref);
+            migrate_set_entry(reasons_, old_ref, new_ref);
+            migrate_map_entry(tiers_, old_ref, new_ref);
+            migrate_map_entry(glue_, old_ref, new_ref);
+            migrate_map_entry(used_counts_, old_ref, new_ref);
+            migrate_map_entry(activities_, old_ref, new_ref);
         }
 
         /// @brief Checks whether a clause is currently marked garbage.
@@ -212,6 +299,39 @@ namespace kmx::sat::cdcl::clause
         [[nodiscard]] std::span<const ref_t> redundant_refs() const noexcept { return redundant_refs_; }
 
     private:
+        static void rewrite_ref_in_vector(std::vector<ref_t>& refs, const ref_t old_ref, const ref_t new_ref) noexcept
+        {
+            for (auto& ref: refs)
+            {
+                if (ref == old_ref)
+                {
+                    ref = new_ref;
+                }
+            }
+        }
+
+        static void migrate_set_entry(std::unordered_set<ref_t::offset_t>& entries, const ref_t old_ref,
+                                       const ref_t new_ref) noexcept
+        {
+            if (entries.erase(old_ref.offset()) != 0u)
+            {
+                entries.insert(new_ref.offset());
+            }
+        }
+
+        template <typename value_t>
+        static void migrate_map_entry(std::unordered_map<ref_t::offset_t, value_t>& entries, const ref_t old_ref,
+                                       const ref_t new_ref) noexcept
+        {
+            const auto it = entries.find(old_ref.offset());
+            if (it != entries.end())
+            {
+                const auto value = it->second;
+                entries.erase(it);
+                entries.insert_or_assign(new_ref.offset(), value);
+            }
+        }
+
         template <typename visitor_t>
         void iterate(const std::vector<ref_t>& refs, visitor_t&& visitor) const noexcept
         {
@@ -227,8 +347,8 @@ namespace kmx::sat::cdcl::clause
         template <typename predicate_t>
         void flush_matching(std::vector<ref_t>& refs, predicate_t&& is_satisfied) noexcept
         {
-            std::size_t write_index {0};
-            for (std::size_t read_index {0}; read_index < refs.size(); ++read_index)
+            std::size_t write_index {};
+            for (std::size_t read_index {}; read_index < refs.size(); ++read_index)
             {
                 const auto ref = refs[read_index];
                 if (is_satisfied(ref))
@@ -237,6 +357,9 @@ namespace kmx::sat::cdcl::clause
                     garbage_.erase(ref.offset());
                     reasons_.erase(ref.offset());
                     tiers_.erase(ref.offset());
+                    glue_.erase(ref.offset());
+                    used_counts_.erase(ref.offset());
+                    activities_.erase(ref.offset());
                     continue;
                 }
                 refs[write_index++] = ref;
@@ -250,5 +373,8 @@ namespace kmx::sat::cdcl::clause
         std::unordered_set<ref_t::offset_t> garbage_ {};
         std::unordered_set<ref_t::offset_t> reasons_ {};
         std::unordered_map<ref_t::offset_t, tier_t> tiers_ {};
+        std::unordered_map<ref_t::offset_t, std::uint32_t> glue_ {};
+        std::unordered_map<ref_t::offset_t, std::uint32_t> used_counts_ {};
+        std::unordered_map<ref_t::offset_t, double> activities_ {};
     };
 }

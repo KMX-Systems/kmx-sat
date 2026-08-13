@@ -12,6 +12,22 @@
 
 namespace kmx::sat::cdcl
 {
+    struct coordinator_filter_context final
+    {
+        std::uint32_t blocked_variable {0u};
+    };
+
+    static bool allow_variable_except_blocked(const variable var, const void* raw_context) noexcept
+    {
+        if (raw_context == nullptr)
+        {
+            return true;
+        }
+
+        const auto& context = *static_cast<const coordinator_filter_context*>(raw_context);
+        return var.index() != context.blocked_variable;
+    }
+
 
     TEST_CASE("search coordinator flow", "[sat]")
     {
@@ -49,11 +65,58 @@ namespace kmx::sat::cdcl
 
             REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::in_progress);
             REQUIRE(coordinator.learned_clause_count() == 1);
-            REQUIRE(coordinator.last_asserting_literal().raw() == conflict_clause.front().raw());
+            REQUIRE(coordinator.last_asserting_literal().raw() == literal {variable {2}, true}.raw());
             REQUIRE(coordinator.assumption_propagation_call_count() == 1);
             REQUIRE(coordinator.propagation_call_count() == 2);
             REQUIRE(coordinator.conflict_event_count() == 1);
             REQUIRE(coordinator.decision_event_count() == 1);
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.apply_assumptions({});
+
+            const std::vector<literal> conflict_clause {literal {variable {41}, false}, literal {variable {42}, true},
+                                                        literal {variable {43}, false}};
+            coordinator.seed_conflict_clause(std::span<const literal> {conflict_clause});
+            coordinator.set_decision_level(variable {41}, 4);
+            coordinator.set_decision_level(variable {42}, 2);
+            coordinator.set_decision_level(variable {43}, 1);
+            coordinator.stage_conflict(clause::ref_t {29});
+
+            coordinator.run_search_epoch();
+
+            REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::in_progress);
+            REQUIRE(coordinator.learned_clause_count() == 1u);
+            REQUIRE(coordinator.conflict_event_count() == 1u);
+            REQUIRE(coordinator.decision_event_count() == 1u);
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.apply_assumptions({});
+
+            // conflict_analyzer::analyze() deduplicates seeded literals by variable identity, keeping only the
+            // first occurrence; a variable that appears with both polarities therefore collapses to a single
+            // (non-tautological) occurrence before clause::learner ever sees it, so this can never actually reach
+            // clause::learner's own tautology guard. This verifies that safe, non-tautological collapse.
+            const std::vector<literal> duplicate_variable_conflict_clause {
+                literal {variable {51}, false}, literal {variable {51}, true}, literal {variable {52}, false}
+            };
+            coordinator.seed_conflict_clause(std::span<const literal> {duplicate_variable_conflict_clause});
+            coordinator.set_decision_level(variable {51}, 4u);
+            coordinator.set_decision_level(variable {52}, 2u);
+            coordinator.stage_conflict(clause::ref_t {31});
+
+            coordinator.run_search_epoch();
+
+            REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::in_progress);
+            REQUIRE(coordinator.learned_clause_count() == 1u);
+            REQUIRE(coordinator.last_learned_clause().size() == 2u);
+            REQUIRE(coordinator.last_learned_clause()[0].raw() == literal {variable {51}, false}.raw());
+            REQUIRE(coordinator.last_learned_clause()[1].raw() == literal {variable {52}, false}.raw());
+            REQUIRE(coordinator.last_asserting_literal().raw() == literal {variable {51}, false}.raw());
+            REQUIRE(coordinator.conflict_event_count() == 1u);
         }
 
         {
@@ -88,6 +151,8 @@ namespace kmx::sat::cdcl
 
             REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::in_progress);
             REQUIRE(coordinator.reduction_pass_count() == 1);
+            REQUIRE(coordinator.reduced_clause_count() == 1);
+            REQUIRE(coordinator.deleted_clause_count() == 1);
             REQUIRE(coordinator.decision_event_count() == 1);
             REQUIRE(database.stats_snapshot().redundant_count == 1u);
             REQUIRE(database.storage_of().is_alive(removable_ref) == false);
@@ -144,15 +209,15 @@ namespace kmx::sat::cdcl
 
             REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::in_progress);
             REQUIRE(coordinator.decision_event_count() == 1);
-            REQUIRE(coordinator.restart_count() == 0);
-            REQUIRE(coordinator.current_decision_restart_budget() == 0);
+            REQUIRE(coordinator.restart_count() == 1);
+            REQUIRE(coordinator.current_decision_restart_budget() == 1);
 
             coordinator.set_next_decision_variable(32);
             coordinator.run_search_epoch();
 
             REQUIRE(coordinator.decision_event_count() == 2);
-            REQUIRE(coordinator.restart_count() == 1);
-            REQUIRE(coordinator.current_decision_restart_budget() == 0);
+            REQUIRE(coordinator.restart_count() == 2);
+            REQUIRE(coordinator.current_decision_restart_budget() == 1);
         }
 
         {
@@ -165,6 +230,7 @@ namespace kmx::sat::cdcl
             coordinator.run_search_epoch();
 
             REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::terminated);
+            REQUIRE(coordinator.current_termination_cause() == search_coordinator::termination_cause::decision_limit);
             REQUIRE(coordinator.decision_event_count() == 1);
         }
 
@@ -178,7 +244,52 @@ namespace kmx::sat::cdcl
             coordinator.run_search_epoch();
 
             REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::terminated);
+            REQUIRE(coordinator.current_termination_cause() == search_coordinator::termination_cause::conflict_limit);
             REQUIRE(coordinator.conflict_event_count() == 1);
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.apply_assumptions({});
+            REQUIRE(coordinator.current_termination_cause() == search_coordinator::termination_cause::none);
+
+            coordinator.handle_termination();
+
+            REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::terminated);
+            REQUIRE(coordinator.current_termination_cause() == search_coordinator::termination_cause::external);
+
+            coordinator.apply_assumptions({});
+            REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::in_progress);
+            REQUIRE(coordinator.current_termination_cause() == search_coordinator::termination_cause::none);
+
+            coordinator.handle_termination();
+            REQUIRE(coordinator.current_termination_cause() == search_coordinator::termination_cause::external);
+            coordinator.handle_sat();
+            REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::satisfiable);
+            REQUIRE(coordinator.current_termination_cause() == search_coordinator::termination_cause::none);
+
+            coordinator.handle_termination();
+            REQUIRE(coordinator.current_termination_cause() == search_coordinator::termination_cause::external);
+            coordinator.handle_unsat();
+            REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::unsatisfiable);
+            REQUIRE(coordinator.current_termination_cause() == search_coordinator::termination_cause::none);
+        }
+
+        {
+            search_coordinator coordinator;
+            solve_request request;
+            request.conflict_limit = 1u;
+            request.decision_limit = 5u;
+            coordinator.apply_assumptions(request);
+            coordinator.stage_conflict(clause::ref_t {41});
+            coordinator.set_next_decision_variable(99u);
+
+            coordinator.run_search_epoch();
+
+            REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::terminated);
+            REQUIRE(coordinator.current_termination_cause() == search_coordinator::termination_cause::conflict_limit);
+            REQUIRE(coordinator.conflict_event_count() == 1u);
+            REQUIRE(coordinator.decision_event_count() == 0u);
         }
 
         {
@@ -199,6 +310,160 @@ namespace kmx::sat::cdcl
             coordinator.run_search_epoch();
             REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::in_progress);
             REQUIRE(coordinator.decision_event_count() == 1);
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.apply_assumptions({});
+
+            const std::array<literal, 5> broad_clause {
+                literal {variable {71u}, false}, literal {variable {72u}, false}, literal {variable {73u}, false},
+                literal {variable {74u}, false}, literal {variable {75u}, false}
+            };
+            const std::array<literal, 2> short_clause {literal {variable {81u}, false}, literal {variable {82u}, false}};
+
+            coordinator.notify_learned_clause(broad_clause);
+            coordinator.notify_learned_clause(short_clause);
+
+            const auto candidate = coordinator.next_branch_literal(0u);
+            REQUIRE(candidate.has_value());
+            REQUIRE(candidate->variable_of().index() == 81u);
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.apply_assumptions({});
+
+            const std::array<literal, 3> learned_clause {
+                literal {variable {111u}, true}, literal {variable {112u}, false}, literal {variable {113u}, false}
+            };
+
+            coordinator.notify_learned_clause(learned_clause);
+
+            const auto branch = coordinator.next_branch_literal(0u);
+            REQUIRE(branch.has_value());
+            REQUIRE(branch->variable_of().index() == 111u);
+            REQUIRE(branch->is_negated());
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.apply_assumptions({});
+
+            coordinator.notify_assignment_literal(literal {variable {131u}, true});
+            coordinator.notify_propagated_variables(std::array<variable, 1> {variable {131u}});
+
+            const auto branch = coordinator.next_branch_literal(0u);
+            REQUIRE(branch.has_value());
+            REQUIRE(branch->variable_of().index() == 131u);
+            REQUIRE(branch->is_negated());
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.apply_assumptions({});
+
+            const std::array<literal, 2> conflict_clause {literal {variable {161u}, true}, literal {variable {162u}, false}};
+            coordinator.notify_conflict_clause(conflict_clause);
+
+            const auto branch = coordinator.next_branch_literal(0u);
+            REQUIRE(branch.has_value());
+            REQUIRE(branch->variable_of().index() == 161u);
+            REQUIRE(branch->is_negated());
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.apply_assumptions({});
+
+            const std::array<literal, 3> duplicate_conflict_clause {
+                literal {variable {191u}, true}, literal {variable {191u}, false}, literal {variable {192u}, false}
+            };
+            coordinator.notify_conflict_clause(duplicate_conflict_clause);
+
+            const auto branch = coordinator.next_branch_literal(0u);
+            REQUIRE(branch.has_value());
+            REQUIRE(branch->variable_of().index() == 191u);
+            REQUIRE_FALSE(branch->is_negated());
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.apply_assumptions({});
+
+            const std::array<literal, 2> learned_clause {literal {variable {261u}, false}, literal {variable {262u}, false}};
+            coordinator.notify_learned_clause(learned_clause);
+
+            const coordinator_filter_context filter_context {261u};
+            coordinator.set_variable_selectability_filter(&allow_variable_except_blocked, &filter_context);
+
+            const auto branch = coordinator.next_branch_literal(0u);
+            REQUIRE(branch.has_value());
+            REQUIRE(branch->variable_of().index() == 262u);
+            REQUIRE_FALSE(branch->is_negated());
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.apply_assumptions({});
+            coordinator.clear_variable_selectability_filter();
+            coordinator.set_next_decision_variable(271u);
+
+            const auto branch = coordinator.next_branch_literal(271u);
+            REQUIRE(branch.has_value());
+            REQUIRE(branch->variable_of().index() == 271u);
+            REQUIRE_FALSE(branch->is_negated());
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.apply_assumptions({});
+            coordinator.set_next_decision_variable(377u);
+
+            const auto branch = coordinator.next_branch_literal(0u);
+            REQUIRE(branch.has_value());
+            REQUIRE(branch->variable_of().index() == 377u);
+            REQUIRE_FALSE(branch->is_negated());
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.apply_assumptions({});
+
+            coordinator.notify_assignment_literal(literal {variable {231u}, true});
+            coordinator.notify_propagated_variables(std::array<variable, 3> {variable {231u}, variable {231u}, variable {232u}});
+
+            const auto branch = coordinator.next_branch_literal(0u);
+            REQUIRE(branch.has_value());
+            REQUIRE(branch->variable_of().index() == 231u);
+            REQUIRE(branch->is_negated());
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.apply_assumptions({});
+            coordinator.set_decision_maintenance_intervals(1u, 1u, 1u);
+            const auto intervals = coordinator.decision_maintenance_intervals();
+            REQUIRE(intervals[0] == 1u);
+            REQUIRE(intervals[1] == 1u);
+            REQUIRE(intervals[2] == 1u);
+
+            const std::array<literal, 3> conflict_clause {
+                literal {variable {171u}, true}, literal {variable {172u}, false}, literal {variable {173u}, false}
+            };
+            coordinator.seed_conflict_clause(conflict_clause);
+            coordinator.set_decision_level(variable {171u}, 3u);
+            coordinator.set_decision_level(variable {172u}, 2u);
+            coordinator.set_decision_level(variable {173u}, 1u);
+
+            coordinator.handle_conflict();
+
+            const auto learned_driven_branch = coordinator.next_branch_literal(0u);
+            REQUIRE(learned_driven_branch.has_value());
+            REQUIRE(learned_driven_branch->variable_of().index() == 171u);
+            REQUIRE(learned_driven_branch->is_negated());
+            REQUIRE(coordinator.decision_evsids_rescale_count() >= 1u);
+            REQUIRE(coordinator.decision_chb_decay_count() >= 1u);
         }
 
         {
@@ -252,6 +517,107 @@ namespace kmx::sat::cdcl
             REQUIRE(coordinator.restart_count() == 2u);
             REQUIRE(coordinator.current_restart_budget() == 5u);
             REQUIRE(coordinator.deferred_inprocess_resync_count() == 1u);
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.set_restart_interval(3u);
+            coordinator.apply_assumptions({});
+
+            REQUIRE(coordinator.current_restart_budget() == 3u);
+
+            coordinator.request_restart();
+            REQUIRE(coordinator.current_restart_budget() == 0u);
+
+            coordinator.apply_assumptions({});
+            REQUIRE(coordinator.current_restart_budget() == 3u);
+            REQUIRE(coordinator.restart_count() == 0u);
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.set_decision_restart_interval(2u);
+            coordinator.apply_assumptions({});
+
+            REQUIRE(coordinator.current_decision_restart_budget() == 2u);
+
+            coordinator.request_restart();
+            REQUIRE(coordinator.current_decision_restart_budget() == 0u);
+
+            coordinator.apply_assumptions({});
+            REQUIRE(coordinator.current_decision_restart_budget() == 2u);
+            REQUIRE(coordinator.restart_count() == 0u);
+
+            coordinator.set_next_decision_variable(341u);
+            coordinator.run_search_epoch();
+            REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::in_progress);
+            REQUIRE(coordinator.decision_event_count() == 1u);
+            REQUIRE(coordinator.current_decision_restart_budget() == 1u);
+
+            coordinator.set_next_decision_variable(342u);
+            coordinator.run_search_epoch();
+            REQUIRE(coordinator.decision_event_count() == 2u);
+            REQUIRE(coordinator.restart_count() == 1u);
+        }
+
+        {
+            search_coordinator coordinator;
+            solve_request request;
+            request.decision_limit = 1u;
+            coordinator.apply_assumptions(request);
+            coordinator.set_restart_interval(5u);
+            coordinator.request_restart();
+            coordinator.request_reduce();
+            coordinator.set_next_decision_variable(351u);
+
+            coordinator.run_search_epoch();
+
+            REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::terminated);
+            REQUIRE(coordinator.current_termination_cause() == search_coordinator::termination_cause::decision_limit);
+            REQUIRE(coordinator.restart_count() == 1u);
+            REQUIRE(coordinator.reduction_pass_count() == 1u);
+            REQUIRE(coordinator.decision_event_count() == 1u);
+            REQUIRE(coordinator.current_restart_budget() == 5u);
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.apply_assumptions({});
+            coordinator.set_restart_interval(2u);
+            coordinator.request_restart();
+            coordinator.request_reduce();
+            coordinator.notify_inprocess_epoch_completed(0u);
+
+            REQUIRE(coordinator.restart_count() == 1u);
+            REQUIRE(coordinator.reduction_pass_count() == 0u);
+            REQUIRE(coordinator.current_restart_budget() == 2u);
+            REQUIRE(coordinator.inprocess_epoch_notification_count() == 1u);
+
+            coordinator.apply_assumptions({});
+            coordinator.set_next_decision_variable(333u);
+            coordinator.run_search_epoch();
+
+            REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::in_progress);
+            REQUIRE(coordinator.restart_count() == 0u);
+            REQUIRE(coordinator.reduction_pass_count() == 0u);
+            REQUIRE(coordinator.current_restart_budget() == 2u);
+            REQUIRE(coordinator.inprocess_epoch_notification_count() == 0u);
+            REQUIRE(coordinator.deferred_inprocess_resync_count() == 0u);
+            REQUIRE(coordinator.decision_event_count() == 1u);
+        }
+
+        {
+            search_coordinator coordinator;
+            coordinator.apply_assumptions({});
+            coordinator.set_next_decision_variable(389u);
+
+            coordinator.run_search_epoch();
+
+            REQUIRE(coordinator.current_outcome() == search_coordinator::outcome::in_progress);
+            REQUIRE(coordinator.decision_event_count() == 1u);
+            const auto followup_branch = coordinator.next_branch_literal(0u);
+            REQUIRE(followup_branch.has_value());
+            REQUIRE(followup_branch->variable_of().index() == 389u);
         }
 
         {

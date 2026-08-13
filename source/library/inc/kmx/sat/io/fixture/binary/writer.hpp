@@ -131,7 +131,7 @@ namespace kmx::sat::io::fixture::binary
     private:
         std::uint32_t max_variable_index() const noexcept
         {
-            std::uint32_t max_index {0u};
+            std::uint32_t max_index {};
             const auto update = [&max_index](const literal lit) noexcept
             {
                 if (lit.variable_of().index() > max_index)

@@ -48,6 +48,6 @@ namespace kmx::sat::simplify::eliminator::clause
 
     private:
         blocked blocked_ {};
-        std::size_t covered_count_ {0u};
+        std::size_t covered_count_ {};
     };
 }

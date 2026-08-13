@@ -59,7 +59,7 @@ namespace kmx::sat::simplify
                 return;
             }
 
-            restore_matching([](const flushed_clause& record) noexcept { return true; });
+            restore_matching([](const flushed_clause&) noexcept { return true; });
         }
 
         /// @brief Restores only previously flushed irredundant (original) clauses, the correctness-preserving option.
@@ -110,7 +110,7 @@ namespace kmx::sat::simplify
         struct flushed_clause final
         {
             std::vector<literal> literals {};
-            bool redundant {false};
+            bool redundant {};
         };
 
         template <typename predicate_t>
@@ -189,12 +189,12 @@ namespace kmx::sat::simplify
             flushed_clauses_ = std::move(remaining);
         }
 
-        cdcl::clause::database* database_ {nullptr};
+        cdcl::clause::database* database_ {};
         std::vector<flushed_clause> flushed_clauses_ {};
-        std::size_t flush_count_ {0u};
-        std::size_t restore_count_ {0u};
-        std::size_t satisfied_removed_count_ {0u};
-        std::size_t restored_clause_count_ {0u};
-        std::size_t last_flush_removed_count_ {0u};
+        std::size_t flush_count_ {};
+        std::size_t restore_count_ {};
+        std::size_t satisfied_removed_count_ {};
+        std::size_t restored_clause_count_ {};
+        std::size_t last_flush_removed_count_ {};
     };
 }

@@ -157,7 +157,7 @@ namespace kmx::sat::cdcl
             return false;
         }
 
-        const clause::database* clauses_ {nullptr};
-        const store::constraint* constraint_ {nullptr};
+        const clause::database* clauses_ {};
+        const store::constraint* constraint_ {};
     };
 }

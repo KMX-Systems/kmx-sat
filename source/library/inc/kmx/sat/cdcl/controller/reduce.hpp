@@ -3,7 +3,9 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <algorithm>
     #include <cstdint>
+    #include <span>
 #endif
 #include <kmx/sat/cdcl/clause/database.hpp>
 
@@ -37,13 +39,30 @@ namespace kmx::sat::cdcl::controller
         /// @throws None (noexcept).
         bool should_reduce() const noexcept { return reduce_pending_; }
 
+        /// @brief Resets reduction pending state and pass-local counters for a fresh solve episode.
+        /// @throws None (noexcept).
+        void reset() noexcept
+        {
+            reduce_pending_ = false;
+            select_call_count_ = 0u;
+            reduce_call_count_ = 0u;
+            flush_call_count_ = 0u;
+            update_tiers_call_count_ = 0u;
+            reduction_pass_count_ = 0u;
+            last_selected_candidate_count_ = 0u;
+            reduced_candidates_ = 0u;
+            flushed_candidates_ = 0u;
+            last_candidates_.clear();
+        }
+
         /// @brief Ranks redundant clauses by glue/activity/usage to select reduction candidates.
         /// @throws None (noexcept).
         void select_reduction_candidates() noexcept
         {
             ++select_call_count_;
-            last_selected_candidate_count_ = select_call_count_;
-            last_candidates_.push_back(last_selected_candidate_count_);
+            last_selected_candidate_count_ = 0u;
+            reduced_candidates_ = 0u;
+            last_candidates_.clear();
         }
 
         /// @brief Selects reduction candidates by scanning the current redundant set in the clause database.
@@ -52,7 +71,6 @@ namespace kmx::sat::cdcl::controller
         void select_reduction_candidates(const clause::database& database) noexcept
         {
             ++select_call_count_;
-            std::uint64_t selected {0};
             last_candidates_.clear();
 
             database.iterate_redundant(
@@ -64,15 +82,45 @@ namespace kmx::sat::cdcl::controller
                     }
 
                     const auto tier = database.tier_of(candidate);
-                    if (tier >= clause::database::default_tier)
+                    const auto quality = database.quality_of(candidate);
+                    if (tier >= clause::database::default_tier && !retained_by_activity(quality))
                     {
-                        ++selected;
                         last_candidates_.push_back(candidate.offset());
                     }
                 });
 
-            last_selected_candidate_count_ = selected;
-            reduced_candidates_ = selected;
+            std::sort(last_candidates_.begin(), last_candidates_.end(),
+                      [&database](const auto left_offset, const auto right_offset) noexcept
+                      {
+                          const auto left = database.quality_of(clause::ref_t {static_cast<clause::ref_t::offset_t>(left_offset)});
+                          const auto right = database.quality_of(clause::ref_t {static_cast<clause::ref_t::offset_t>(right_offset)});
+                          if (left.tier != right.tier)
+                          {
+                              return left.tier > right.tier;
+                          }
+                          if (left.glue != right.glue)
+                          {
+                              return left.glue > right.glue;
+                          }
+                          if (left.used_count != right.used_count)
+                          {
+                              return left.used_count < right.used_count;
+                          }
+                          if (left.activity != right.activity)
+                          {
+                              return left.activity < right.activity;
+                          }
+                          if (left.size != right.size)
+                          {
+                              return left.size > right.size;
+                          }
+                          return left_offset < right_offset;
+                      });
+
+            last_selected_candidate_count_ = last_candidates_.size();
+            trim_to_reduction_quota();
+            last_selected_candidate_count_ = last_candidates_.size();
+            reduced_candidates_ = last_selected_candidate_count_;
         }
 
         /// @brief Selects reduction candidates from a set of clause references using database tier/usage hints.
@@ -83,7 +131,6 @@ namespace kmx::sat::cdcl::controller
         void select_reduction_candidates(const clause::database& database, const std::array<clause::ref_t, size>& candidates) noexcept
         {
             ++select_call_count_;
-            std::uint64_t selected {0};
             last_candidates_.clear();
 
             for (const auto candidate: candidates)
@@ -94,15 +141,36 @@ namespace kmx::sat::cdcl::controller
                 }
 
                 const auto tier = database.tier_of(candidate);
-                if (tier >= clause::database::default_tier)
+                const auto quality = database.quality_of(candidate);
+                if (tier >= clause::database::default_tier && !retained_by_activity(quality))
                 {
-                    ++selected;
                     last_candidates_.push_back(candidate.offset());
                 }
             }
 
-            last_selected_candidate_count_ = selected;
-            reduced_candidates_ = selected;
+            std::sort(last_candidates_.begin(), last_candidates_.end(),
+                      [&database](const auto left_offset, const auto right_offset) noexcept
+                      {
+                          const auto left = database.quality_of(clause::ref_t {static_cast<clause::ref_t::offset_t>(left_offset)});
+                          const auto right = database.quality_of(clause::ref_t {static_cast<clause::ref_t::offset_t>(right_offset)});
+                          if (left.glue != right.glue)
+                          {
+                              return left.glue > right.glue;
+                          }
+                          if (left.used_count != right.used_count)
+                          {
+                              return left.used_count < right.used_count;
+                          }
+                          if (left.activity != right.activity)
+                          {
+                              return left.activity < right.activity;
+                          }
+                          return left_offset < right_offset;
+                      });
+
+            trim_to_reduction_quota();
+            last_selected_candidate_count_ = last_candidates_.size();
+            reduced_candidates_ = last_selected_candidate_count_;
         }
 
         /// @brief Marks the selected low-quality redundant clauses as garbage.
@@ -110,10 +178,7 @@ namespace kmx::sat::cdcl::controller
         void reduce_clauses() noexcept
         {
             ++reduce_call_count_;
-            if (!last_candidates_.empty())
-            {
-                reduced_candidates_ = last_candidates_.size();
-            }
+            reduced_candidates_ = last_candidates_.size();
         }
 
         /// @brief Marks selected redundant clauses as garbage in the provided clause database.
@@ -182,6 +247,29 @@ namespace kmx::sat::cdcl::controller
         /// @return True if at least one candidate was selected.
         [[nodiscard]] bool has_candidates() const noexcept { return !last_candidates_.empty(); }
 
+        /// @brief Returns the most recent quality-ranked candidate offsets.
+        /// @return Read-only candidate ordering from worst to best retention quality.
+        std::span<const std::uint64_t> candidate_offsets() const noexcept { return last_candidates_; }
+
+        /// @brief Sets the percentage of ranked candidates eligible for deletion in each reduction pass.
+        /// @param percent Percentage in the inclusive range [1, 100].
+        void set_reduction_fraction_percent(const std::uint32_t percent) noexcept
+        {
+            reduction_fraction_percent_ = std::clamp(percent, 1u, 100u);
+        }
+
+        /// @brief Returns the configured reduction quota percentage.
+        std::uint32_t reduction_fraction_percent() const noexcept { return reduction_fraction_percent_; }
+
+        /// @brief Sets the activity threshold protecting low-glue clauses from deletion.
+        void set_activity_retention_threshold(const double threshold) noexcept
+        {
+            activity_retention_threshold_ = threshold < 0.0 ? 0.0 : threshold;
+        }
+
+        /// @brief Returns the activity threshold protecting low-glue clauses.
+        double activity_retention_threshold() const noexcept { return activity_retention_threshold_; }
+
         /// @brief Returns how many candidates were actually flushed by the latest pass.
         /// @return Flushed candidate count.
         /// @throws None (noexcept).
@@ -197,15 +285,36 @@ namespace kmx::sat::cdcl::controller
         std::uint64_t reduction_pass_count() const noexcept { return reduction_pass_count_; }
 
     private:
-        bool reduce_pending_ {false};
-        std::uint64_t select_call_count_ {0};
-        std::uint64_t reduce_call_count_ {0};
-        std::uint64_t flush_call_count_ {0};
-        std::uint64_t update_tiers_call_count_ {0};
-        std::uint64_t reduction_pass_count_ {0};
-        std::uint64_t last_selected_candidate_count_ {0};
-        std::uint64_t reduced_candidates_ {0};
-        std::uint64_t flushed_candidates_ {0};
+        bool retained_by_activity(const clause::database::quality& quality) const noexcept
+        {
+            return quality.glue <= 2u && quality.activity >= activity_retention_threshold_ && activity_retention_threshold_ > 0.0;
+        }
+
+        void trim_to_reduction_quota() noexcept
+        {
+            if (last_candidates_.empty() || reduction_fraction_percent_ >= 100u)
+            {
+                return;
+            }
+
+            const auto quota = std::max<std::size_t>(1u, (last_candidates_.size() * reduction_fraction_percent_ + 99u) / 100u);
+            if (quota < last_candidates_.size())
+            {
+                last_candidates_.resize(quota);
+            }
+        }
+
+        bool reduce_pending_ {};
+        std::uint64_t select_call_count_ {};
+        std::uint64_t reduce_call_count_ {};
+        std::uint64_t flush_call_count_ {};
+        std::uint64_t update_tiers_call_count_ {};
+        std::uint64_t reduction_pass_count_ {};
+        std::uint64_t last_selected_candidate_count_ {};
+        std::uint64_t reduced_candidates_ {};
+        std::uint64_t flushed_candidates_ {};
         std::vector<std::uint64_t> last_candidates_ {};
+        std::uint32_t reduction_fraction_percent_ {50u};
+        double activity_retention_threshold_ {2.0};
     };
 }

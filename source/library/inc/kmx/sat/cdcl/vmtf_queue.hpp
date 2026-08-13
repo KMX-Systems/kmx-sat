@@ -6,6 +6,7 @@
     #include <algorithm>
     #include <cstdint>
     #include <optional>
+    #include <unordered_map>
     #include <utility>
     #include <vector>
 #endif
@@ -36,12 +37,28 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void activate(const variable var) noexcept
         {
-            if (std::find_if(variables_.begin(), variables_.end(), [&](const auto& entry) noexcept { return entry == var; }) !=
-                variables_.end())
+            const auto variable_index = static_cast<std::size_t>(var.index());
+            if (nodes_.find(variable_index) != nodes_.end())
             {
                 return;
             }
-            variables_.push_back(var);
+
+            node node_value {var, npos, npos};
+            const auto node_index = nodes_storage_.size();
+            nodes_storage_.push_back(node_value);
+            nodes_.emplace(variable_index, node_index);
+            if (tail_ == npos)
+            {
+                head_ = node_index;
+                tail_ = node_index;
+            }
+            else
+            {
+                nodes_storage_[tail_].next = node_index;
+                nodes_storage_[node_index].previous = tail_;
+                tail_ = node_index;
+            }
+            ++size_;
         }
 
         /// @brief Moves a variable to the front of the queue after it participates in a conflict/learned clause.
@@ -49,12 +66,18 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void bump(const variable var) noexcept
         {
-            const auto it = std::find(variables_.begin(), variables_.end(), var);
-            if (it == variables_.end())
+            const auto it = nodes_.find(static_cast<std::size_t>(var.index()));
+            if (it == nodes_.end() || it->second == head_)
             {
                 return;
             }
-            std::rotate(variables_.begin(), it, it + 1);
+
+            const auto node_index = it->second;
+            unlink(node_index);
+            nodes_storage_[node_index].previous = npos;
+            nodes_storage_[node_index].next = head_;
+            nodes_storage_[head_].previous = node_index;
+            head_ = node_index;
         }
 
         /// @brief Returns the frontmost currently unassigned variable, the next branching candidate.
@@ -62,11 +85,11 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         std::optional<variable> front_candidate() const noexcept
         {
-            if (variables_.empty())
+            if (head_ == npos)
             {
                 return std::nullopt;
             }
-            return variables_.front();
+            return nodes_storage_[head_].value;
         }
 
         /// @brief Removes a variable from the queue, typically when eliminated by simplification.
@@ -74,10 +97,12 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void remove(const variable var) noexcept
         {
-            auto it = std::find(variables_.begin(), variables_.end(), var);
-            if (it != variables_.end())
+            const auto it = nodes_.find(static_cast<std::size_t>(var.index()));
+            if (it != nodes_.end())
             {
-                variables_.erase(it);
+                unlink(it->second);
+                nodes_.erase(it);
+                --size_;
             }
         }
 
@@ -90,14 +115,21 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void shuffle() noexcept
         {
-            if (variables_.size() <= 1u)
+            if (size_ <= 1u)
             {
                 return;
             }
 
-            const auto max_stride = static_cast<std::uint32_t>(variables_.size() - 1u);
+            const auto max_stride = static_cast<std::uint32_t>(size_ - 1u);
             const auto stride = static_cast<std::uint32_t>((shuffle_epoch_ % max_stride) + 1u);
-            std::rotate(variables_.begin(), variables_.begin() + stride, variables_.end());
+            std::vector<std::size_t> order {};
+            order.reserve(size_);
+            for (auto current = head_; current != npos; current = nodes_storage_[current].next)
+            {
+                order.push_back(current);
+            }
+            std::rotate(order.begin(), order.begin() + stride, order.end());
+            relink(order);
             last_shuffle_stride_ = stride;
             ++shuffle_epoch_;
         }
@@ -107,14 +139,14 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void shuffle(const std::uint32_t salt) noexcept
         {
-            if (variables_.size() <= 1u)
+            if (size_ <= 1u)
             {
                 return;
             }
 
-            if (variables_.size() > 2u)
+            if (size_ > 2u)
             {
-                const auto max_stride = static_cast<std::uint32_t>(variables_.size() - 1u);
+                const auto max_stride = static_cast<std::uint32_t>(size_ - 1u);
                 shuffle_epoch_ = (shuffle_epoch_ + salt) % max_stride;
             }
             shuffle();
@@ -122,13 +154,60 @@ namespace kmx::sat::cdcl
 
         /// @brief Returns the number of currently tracked variables in the queue.
         /// @return Number of active variables.
-        std::size_t size() const noexcept { return variables_.size(); }
+        std::size_t size() const noexcept { return size_; }
 
         std::uint32_t last_shuffle_stride() const noexcept { return last_shuffle_stride_; }
 
     private:
-        std::vector<variable> variables_ {};
-        std::uint32_t shuffle_epoch_ {0u};
-        std::uint32_t last_shuffle_stride_ {0u};
+        static constexpr std::size_t npos {static_cast<std::size_t>(-1)};
+
+        struct node final
+        {
+            variable value {};
+            std::size_t previous {npos};
+            std::size_t next {npos};
+        };
+
+        void unlink(const std::size_t node_index) noexcept
+        {
+            const auto previous = nodes_storage_[node_index].previous;
+            const auto next = nodes_storage_[node_index].next;
+            if (previous == npos)
+            {
+                head_ = next;
+            }
+            else
+            {
+                nodes_storage_[previous].next = next;
+            }
+            if (next == npos)
+            {
+                tail_ = previous;
+            }
+            else
+            {
+                nodes_storage_[next].previous = previous;
+            }
+        }
+
+        void relink(const std::vector<std::size_t>& order) noexcept
+        {
+            head_ = order.front();
+            tail_ = order.back();
+            for (std::size_t index {}; index < order.size(); ++index)
+            {
+                auto& current = nodes_storage_[order[index]];
+                current.previous = index == 0u ? npos : order[index - 1u];
+                current.next = index + 1u == order.size() ? npos : order[index + 1u];
+            }
+        }
+
+        std::vector<node> nodes_storage_ {};
+        std::unordered_map<std::size_t, std::size_t> nodes_ {};
+        std::size_t head_ {npos};
+        std::size_t tail_ {npos};
+        std::size_t size_ {};
+        std::uint32_t shuffle_epoch_ {};
+        std::uint32_t last_shuffle_stride_ {};
     };
 }

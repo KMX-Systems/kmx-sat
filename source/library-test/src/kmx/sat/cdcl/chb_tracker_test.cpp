@@ -21,6 +21,7 @@ namespace kmx::sat::cdcl
         REQUIRE(tracker.score_of(first) > 0.0);
         REQUIRE(tracker.score_of(second) > 0.0);
         REQUIRE(tracker.tracked_variable_count() == 2u);
+        REQUIRE(tracker.decay_count() == 1u);
     }
 
     TEST_CASE("chb tracker returns zero for untracked variables", "[sat]")
@@ -30,5 +31,24 @@ namespace kmx::sat::cdcl
 
         REQUIRE(tracker.score_of(untracked) == 0.0);
         REQUIRE(tracker.tracked_variable_count() == 0u);
+    }
+
+    TEST_CASE("chb tracker uses bounded reward updates", "[sat]")
+    {
+        chb_tracker tracker;
+        tracker.set_learning_rate(0.25);
+        tracker.set_decay_factor(0.5);
+        const variable var {81u};
+
+        for (int index {}; index < 20; ++index)
+        {
+            tracker.update_on_conflict(var);
+        }
+
+        REQUIRE(tracker.score_of(var) > 0.0);
+        REQUIRE(tracker.score_of(var) <= 1.0);
+        tracker.decay_step();
+        REQUIRE(tracker.score_of(var) < 1.0);
+        REQUIRE(tracker.decay_count() == 1u);
     }
 }

@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <array>
     #include <cstddef>
     #include <cstdint>
     #include <span>
@@ -37,6 +38,8 @@ namespace kmx::sat::cdcl
     class search_coordinator final
     {
     public:
+        using variable_selectable_predicate_t = engine::decision::selectable_predicate_t;
+
         /// @brief Terminal outcome produced by the current or most recent search epoch.
         enum class outcome
         {
@@ -48,6 +51,19 @@ namespace kmx::sat::cdcl
             unsatisfiable,
             /// @brief Search terminated because of limits or external cancellation.
             terminated
+        };
+
+        /// @brief Why the current episode terminated, if it terminated.
+        enum class termination_cause
+        {
+            /// @brief The episode did not terminate via handle_termination.
+            none,
+            /// @brief Termination was triggered by the conflict limit.
+            conflict_limit,
+            /// @brief Termination was triggered by the decision limit.
+            decision_limit,
+            /// @brief Termination was triggered by a non-limit source.
+            external
         };
 
         /// @brief Constructs a search coordinator with freshly constructed CDCL components.
@@ -104,6 +120,10 @@ namespace kmx::sat::cdcl
                         reduce_controller_.flush_redundant();
                     }
                     reduce_controller_.update_tiers();
+                    if (clause_database_ != nullptr)
+                    {
+                        clause_database_->decay_quality();
+                    }
                 }
 
                 const auto branch_literal = decision_engine_.pick_branch_literal();
@@ -117,7 +137,12 @@ namespace kmx::sat::cdcl
                 ++decision_count_;
                 if (decision_limit_ != 0 && decision_count_ >= decision_limit_)
                 {
-                    handle_termination();
+                    handle_termination(termination_cause::decision_limit);
+                    return;
+                }
+                if (restart_controller_.should_restart())
+                {
+                    handle_restart();
                 }
                 return;
             }
@@ -129,11 +154,20 @@ namespace kmx::sat::cdcl
         void apply_assumptions(const solve_request& request) noexcept
         {
             assumptions_.assign(request.assumptions.begin(), request.assumptions.end());
+            propagator_.reset_episode_state();
             propagator_.set_pending_assumption_count(assumptions_.size());
+            restart_controller_.reset();
+            reduce_controller_.reset();
             conflict_limit_ = request.conflict_limit;
             decision_limit_ = request.decision_limit;
             conflict_count_ = 0;
             decision_count_ = 0;
+            inprocess_epoch_notifications_ = 0u;
+            low_yield_inprocess_epoch_count_ = 0u;
+            low_yield_inprocess_streak_ = 0u;
+            deferred_inprocess_resync_count_ = 0u;
+            deferred_inprocess_streak_ = 0u;
+            termination_cause_ = termination_cause::none;
             outcome_ = outcome::in_progress;
         }
 
@@ -153,29 +187,23 @@ namespace kmx::sat::cdcl
         {
             conflict_analyzer_.analyze();
             conflict_analyzer_.build_resolution_chain();
+            finish_conflict_handling();
+        }
 
-            const auto learned_clause = conflict_analyzer_.learned_clause();
-            if (!learned_clause.empty())
-            {
-                clause_learner_.learn_clause(learned_clause);
-            }
-
-            const auto backjump_level = conflict_analyzer_.compute_backjump_level();
-            backtrack_engine_.backtrack_to_level(backjump_level);
-            backtrack_engine_.clear_transient_marks();
-
-            const auto asserting_literal = conflict_analyzer_.derive_first_uip();
-            if (asserting_literal.raw() != 0)
-            {
-                clause_learner_.assign_asserting_literal(asserting_literal);
-            }
-
-            restart_controller_.tick_conflict();
-            ++conflict_count_;
-            if (conflict_limit_ != 0 && conflict_count_ >= conflict_limit_)
-            {
-                handle_termination();
-            }
+        /// @brief Handles a detected conflict using real implication-graph first-UIP resolution.
+        /// @param trail_in_order Full assignment trail (decisions and implied literals) in chronological order.
+        /// @param current_level Decision level at which the conflict was detected.
+        /// @param level_of Callback returning a variable's current decision level.
+        /// @param reason_of Callback returning a variable's reason-clause literals.
+        /// @param context Opaque context forwarded to both callbacks.
+        /// @throws None (noexcept).
+        void handle_conflict_via_resolution(const std::span<const literal> trail_in_order, const std::uint32_t current_level,
+                                            const conflict_analyzer::level_lookup_t level_of,
+                                            const conflict_analyzer::reason_lookup_t reason_of, const void* context) noexcept
+        {
+            conflict_analyzer_.analyze_via_resolution(trail_in_order, current_level, level_of, reason_of, context);
+            conflict_analyzer_.build_resolution_chain();
+            finish_conflict_handling();
         }
 
         /// @brief Handles a triggered restart: unwind to decision level zero and resume branching.
@@ -189,20 +217,24 @@ namespace kmx::sat::cdcl
 
         /// @brief Handles the satisfiable terminal case (every variable consistently assigned).
         /// @throws None (noexcept).
-        void handle_sat() noexcept { outcome_ = outcome::satisfiable; }
+        void handle_sat() noexcept { termination_cause_ = termination_cause::none; outcome_ = outcome::satisfiable; }
 
         /// @brief Handles the unsatisfiable terminal case (empty clause derived, or assumption-level conflict).
         /// @throws None (noexcept).
-        void handle_unsat() noexcept { outcome_ = outcome::unsatisfiable; }
+        void handle_unsat() noexcept { termination_cause_ = termination_cause::none; outcome_ = outcome::unsatisfiable; }
 
         /// @brief Handles limit exhaustion or an external termination callback firing.
         /// @throws None (noexcept).
-        void handle_termination() noexcept { outcome_ = outcome::terminated; }
+        void handle_termination(const termination_cause cause = termination_cause::external) noexcept { termination_cause_ = cause; outcome_ = outcome::terminated; }
 
         /// @brief Returns the terminal state tracked by this coordinator.
         /// @return Current search-epoch outcome.
         /// @throws None (noexcept).
         outcome current_outcome() const noexcept { return outcome_; }
+
+        /// @brief Returns the cause of termination for the current episode.
+        /// @return Current termination cause, or none if not terminated by limits or callback.
+        termination_cause current_termination_cause() const noexcept { return termination_cause_; }
 
         /// @brief Stages a conflict that will be consumed by the next propagation step.
         /// @param ref Clause reference to report as conflicting.
@@ -227,6 +259,84 @@ namespace kmx::sat::cdcl
         /// @param var Variable index to return on the next branch pick.
         /// @throws None (noexcept).
         void set_next_decision_variable(const std::uint32_t var) noexcept { decision_engine_.set_next_variable(var); }
+
+        /// @brief Configures an optional branch-candidate selectability filter used by decision heuristics.
+        /// @param predicate Callback returning true when a candidate variable should be considered selectable.
+        /// @param context Opaque callback context (may be null).
+        void set_variable_selectability_filter(const variable_selectable_predicate_t predicate, const void* context) noexcept
+        {
+            decision_engine_.set_selectability_filter(predicate, context);
+        }
+
+        /// @brief Registers a formula variable with the active branch heuristics.
+        /// @param var Variable to make available for selection.
+        /// @throws None (noexcept).
+        void activate_variable(const variable var) noexcept { decision_engine_.activate_variable(var); }
+
+        /// @brief Clears any configured branch-candidate selectability filter.
+        void clear_variable_selectability_filter() noexcept { decision_engine_.clear_selectability_filter(); }
+
+        /// @brief Configures decision-heuristic maintenance intervals.
+        /// @param conflict_maintenance_interval EVSIDS rescale interval in conflicts (0 disables).
+        /// @param chb_decay_interval CHB decay interval in conflicts (0 disables).
+        /// @param restart_decay_interval CHB decay interval in restarts (0 disables).
+        void set_decision_maintenance_intervals(const std::uint32_t conflict_maintenance_interval,
+                                                const std::uint32_t chb_decay_interval,
+                                                const std::uint32_t restart_decay_interval) noexcept
+        {
+            decision_engine_.set_maintenance_intervals(conflict_maintenance_interval, chb_decay_interval, restart_decay_interval);
+        }
+
+        /// @brief Enables or disables the research-track CHB candidate source.
+        void set_chb_enabled(const bool enabled) noexcept { decision_engine_.set_chb_enabled(enabled); }
+
+        /// @brief Returns whether the CHB candidate source is enabled.
+        bool chb_enabled() const noexcept { return decision_engine_.chb_enabled(); }
+
+        /// @brief Returns how many EVSIDS rescale maintenance steps were executed.
+        std::uint32_t decision_evsids_rescale_count() const noexcept { return decision_engine_.evsids_rescale_count(); }
+
+        /// @brief Returns how many CHB decay maintenance steps were executed.
+        std::uint32_t decision_chb_decay_count() const noexcept { return decision_engine_.chb_decay_count(); }
+
+        /// @brief Returns configured decision maintenance intervals in conflict/conflict/restart order.
+        std::array<std::uint32_t, 3> decision_maintenance_intervals() const noexcept
+        {
+            return {decision_engine_.conflict_maintenance_interval(), decision_engine_.chb_decay_interval(),
+                    decision_engine_.restart_decay_interval()};
+        }
+
+        /// @brief Feeds unit-propagation implied variables into the decision-engine heuristic state.
+        /// @param variables Variables implied during recent propagation steps.
+        /// @throws None (noexcept).
+        void notify_propagated_variables(const std::span<const variable> variables) noexcept
+        {
+            decision_engine_.notify_propagated_variables(variables);
+        }
+
+        /// @brief Feeds newly learned-clause literals into the decision-engine heuristic state.
+        /// @param learned_clause Literals of the learned clause.
+        /// @throws None (noexcept).
+        void notify_learned_clause(const std::span<const literal> learned_clause) noexcept
+        {
+            decision_engine_.notify_learned_clause(learned_clause);
+        }
+
+        /// @brief Records an executed assignment literal in decision heuristics for saved-phase reuse.
+        /// @param assigned_literal Literal assigned by assumptions/propagation/branching.
+        /// @throws None (noexcept).
+        void notify_assignment_literal(const literal assigned_literal) noexcept
+        {
+            decision_engine_.notify_assignment_literal(assigned_literal);
+        }
+
+        /// @brief Feeds raw conflict-clause literals into decision heuristics for polarity and activity updates.
+        /// @param conflict_clause Literals from the conflicting clause.
+        /// @throws None (noexcept).
+        void notify_conflict_clause(const std::span<const literal> conflict_clause) noexcept
+        {
+            decision_engine_.notify_conflict_clause(conflict_clause);
+        }
 
         /// @brief Returns how many learned clauses were registered during this episode.
         /// @return Number of learned clauses in clause_learner.
@@ -253,7 +363,10 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         std::optional<literal> next_branch_literal(const std::uint32_t fallback_variable) noexcept
         {
-            decision_engine_.set_next_variable(fallback_variable);
+            if (fallback_variable != 0u)
+            {
+                decision_engine_.set_next_variable(fallback_variable);
+            }
             return decision_engine_.pick_branch_literal();
         }
 
@@ -288,9 +401,16 @@ namespace kmx::sat::cdcl
                     reduce_controller_.flush_redundant();
                 }
                 reduce_controller_.update_tiers();
+                if (clause_database_ != nullptr)
+                {
+                    clause_database_->decay_quality();
+                }
             }
 
-            decision_engine_.set_next_variable(fallback_variable);
+            if (fallback_variable != 0u)
+            {
+                decision_engine_.set_next_variable(fallback_variable);
+            }
             const auto branch_literal = decision_engine_.pick_branch_literal();
             if (!branch_literal.has_value())
             {
@@ -302,7 +422,7 @@ namespace kmx::sat::cdcl
             ++decision_count_;
             if (decision_limit_ != 0 && decision_count_ >= decision_limit_)
             {
-                handle_termination();
+                handle_termination(termination_cause::decision_limit);
             }
 
             return branch_literal;
@@ -335,9 +455,40 @@ namespace kmx::sat::cdcl
             restart_controller_.set_decision_restart_interval(interval);
         }
 
+        /// @brief Records learned-clause glue for the optional adaptive restart policy.
+        void notify_learned_glue(const std::uint32_t glue) noexcept { restart_controller_.observe_glue(glue); }
+
+        /// @brief Configures the optional fast/slow glue restart ratio.
+        void set_glue_restart_threshold(const double ratio) noexcept { restart_controller_.set_glue_restart_threshold(ratio); }
+
+        double fast_glue_ema() const noexcept { return restart_controller_.fast_glue_ema(); }
+        double slow_glue_ema() const noexcept { return restart_controller_.slow_glue_ema(); }
+        std::uint32_t glue_restart_threshold_percent() const noexcept
+        {
+            return restart_controller_.glue_restart_threshold_percent();
+        }
+
         /// @brief Forces the next search loop iteration to execute one reduction pass.
         /// @throws None (noexcept).
         void request_reduce() noexcept { reduce_controller_.request_reduce(); }
+
+        /// @brief Configures the percentage of ranked learned clauses eligible for reduction.
+        void set_reduction_fraction_percent(const std::uint32_t percent) noexcept
+        {
+            reduce_controller_.set_reduction_fraction_percent(percent);
+        }
+
+        /// @brief Returns the configured reduction quota percentage.
+        std::uint32_t reduction_fraction_percent() const noexcept { return reduce_controller_.reduction_fraction_percent(); }
+
+        /// @brief Configures activity protection for low-glue learned clauses.
+        void set_activity_retention_threshold(const double threshold) noexcept
+        {
+            reduce_controller_.set_activity_retention_threshold(threshold);
+        }
+
+        /// @brief Returns the activity threshold protecting low-glue learned clauses.
+        double activity_retention_threshold() const noexcept { return reduce_controller_.activity_retention_threshold(); }
 
         /// @brief Returns how many restart operations were performed.
         /// @return Number of completed restart operations.
@@ -358,6 +509,10 @@ namespace kmx::sat::cdcl
         /// @return Number of completed reduction passes.
         /// @throws None (noexcept).
         std::uint64_t reduction_pass_count() const noexcept { return reduce_controller_.reduction_pass_count(); }
+
+        std::uint64_t reduced_clause_count() const noexcept { return reduce_controller_.reduced_candidates(); }
+
+        std::uint64_t deleted_clause_count() const noexcept { return reduce_controller_.flushed_candidates(); }
 
         /// @brief Returns how many conflicts were handled in the current episode.
         /// @return Episode conflict count.
@@ -419,6 +574,44 @@ namespace kmx::sat::cdcl
         std::uint64_t deferred_inprocess_resync_count() const noexcept { return deferred_inprocess_resync_count_; }
 
     private:
+        /// @brief Shared post-analysis conflict handling: learn, backjump, heuristic feedback, and limit checks.
+        /// @throws None (noexcept).
+        void finish_conflict_handling() noexcept
+        {
+            const auto learned_clause = conflict_analyzer_.learned_clause();
+            bool learned_clause_registered = false;
+            if (!learned_clause.empty())
+            {
+                const auto learned_ref = clause_learner_.learn_clause(learned_clause);
+                if (learned_ref.valid())
+                {
+                    learned_clause_registered = true;
+                    decision_engine_.notify_learned_clause(clause_learner_.last_learned_clause());
+                }
+            }
+
+            const auto backjump_level = conflict_analyzer_.compute_backjump_level();
+            backtrack_engine_.backtrack_to_level(backjump_level);
+            backtrack_engine_.clear_transient_marks();
+
+            const auto asserting_literal = conflict_analyzer_.derive_first_uip();
+            if (learned_clause_registered && asserting_literal.raw() != 0)
+            {
+                clause_learner_.assign_asserting_literal(asserting_literal);
+                decision_engine_.notify_assignment_literal(asserting_literal);
+            }
+
+            decision_engine_.notify_conflict_variables(conflict_analyzer_.collect_bump_candidates());
+            decision_engine_.notify_conflict();
+
+            restart_controller_.tick_conflict();
+            ++conflict_count_;
+            if (conflict_limit_ != 0 && conflict_count_ >= conflict_limit_)
+            {
+                handle_termination(termination_cause::conflict_limit);
+            }
+        }
+
         static constexpr std::uint64_t max_deferred_inprocess_resync_streak {1u};
 
         propagator propagator_ {};
@@ -428,17 +621,18 @@ namespace kmx::sat::cdcl
         engine::decision decision_engine_ {};
         controller::restart restart_controller_ {};
         controller::reduce reduce_controller_ {};
-        clause::database* clause_database_ {nullptr};
+        clause::database* clause_database_ {};
         std::vector<literal> assumptions_ {};
-        std::uint64_t conflict_limit_ {0};
-        std::uint64_t decision_limit_ {0};
-        std::uint64_t conflict_count_ {0};
-        std::uint64_t decision_count_ {0};
-        std::uint64_t inprocess_epoch_notifications_ {0};
-        std::uint64_t low_yield_inprocess_epoch_count_ {0};
-        std::uint64_t low_yield_inprocess_streak_ {0};
-        std::uint64_t deferred_inprocess_resync_count_ {0};
-        std::uint64_t deferred_inprocess_streak_ {0};
+        std::uint64_t conflict_limit_ {};
+        std::uint64_t decision_limit_ {};
+        std::uint64_t conflict_count_ {};
+        std::uint64_t decision_count_ {};
+        std::uint64_t inprocess_epoch_notifications_ {};
+        std::uint64_t low_yield_inprocess_epoch_count_ {};
+        std::uint64_t low_yield_inprocess_streak_ {};
+        std::uint64_t deferred_inprocess_resync_count_ {};
+        std::uint64_t deferred_inprocess_streak_ {};
+        termination_cause termination_cause_ {termination_cause::none};
         outcome outcome_ {outcome::in_progress};
     };
 }

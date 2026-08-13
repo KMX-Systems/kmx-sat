@@ -40,19 +40,25 @@ namespace kmx::sat::cdcl::clause
                 return {};
             }
 
-            if (literals.size() == 1)
+            const auto normalized_clause = normalize_clause_literals(literals);
+            if (normalized_clause.empty())
             {
-                register_unit(literals.front());
+                return {};
+            }
+
+            if (normalized_clause.size() == 1)
+            {
+                register_unit(normalized_clause.front());
                 return last_learned_ref_;
             }
 
-            if (literals.size() == 2)
+            if (normalized_clause.size() == 2)
             {
-                register_binary(literals[0], literals[1]);
+                register_binary(normalized_clause[0], normalized_clause[1]);
                 return last_learned_ref_;
             }
 
-            return register_large(literals);
+            return register_large(std::span<const literal> {normalized_clause});
         }
 
         /// @brief Registers a learned unit clause using the specialized unit fast path.
@@ -120,7 +126,7 @@ namespace kmx::sat::cdcl::clause
         /// @return Number of learned clauses with the given size.
         std::size_t clause_count_for_size(const std::size_t size) const noexcept
         {
-            std::size_t count {0};
+            std::size_t count {};
             for (const auto& clause: learned_clauses_)
             {
                 if (clause.size() == size)
@@ -132,6 +138,40 @@ namespace kmx::sat::cdcl::clause
         }
 
     private:
+        static std::vector<literal> normalize_clause_literals(const std::span<const literal> literals) noexcept
+        {
+            std::vector<literal> normalized {};
+            normalized.reserve(literals.size());
+
+            for (const auto lit: literals)
+            {
+                const auto duplicate_it = std::find_if(normalized.begin(), normalized.end(),
+                                                       [lit](const literal existing) noexcept
+                                                       {
+                                                           return existing.raw() == lit.raw();
+                                                       });
+                if (duplicate_it != normalized.end())
+                {
+                    continue;
+                }
+
+                const auto opposite_it = std::find_if(normalized.begin(), normalized.end(),
+                                                      [lit](const literal existing) noexcept
+                                                      {
+                                                          return existing.variable_of().index() == lit.variable_of().index()
+                                                              && existing.is_negated() != lit.is_negated();
+                                                      });
+                if (opposite_it != normalized.end())
+                {
+                    return {};
+                }
+
+                normalized.push_back(lit);
+            }
+
+            return normalized;
+        }
+
         ref_t append_clause(const std::span<const literal> literals) noexcept
         {
             if (literals.empty())

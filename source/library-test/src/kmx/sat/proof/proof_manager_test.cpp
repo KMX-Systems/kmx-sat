@@ -325,6 +325,13 @@ namespace kmx::sat::proof
             REQUIRE(recorded[0].antecedent_id_values.size() == 2u);
             REQUIRE(recorded[0].antecedent_id_values[0] == 5u);
             REQUIRE(recorded[0].antecedent_id_values[1] == 7u);
+
+            frat_tracer.finalize();
+            frat_tracer.finalize();
+            REQUIRE(frat_tracer.emitted_count() == 2u);
+            frat_tracer.reset();
+            REQUIRE_FALSE(frat_tracer.finalized());
+            REQUIRE(frat_tracer.emitted_count() == 0u);
         }
 
         SECTION("lidrup tracer records epoch-scoped proof events")

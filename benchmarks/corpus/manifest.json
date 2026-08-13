@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "instances": [
+    {
+      "file": "branching_sat.cnf",
+      "sha256": "7583bbfd47c968ad480610fa5974d5086d6643a494221fd636cbd3a134962e3a",
+      "expected_status": "SATISFIABLE"
+    },
+    {
+      "file": "sat_unit.cnf",
+      "sha256": "8a3f04e8f347c791e22486daea0512e406fbe6d0a8f06d2ad167ca6e1cf4b10f",
+      "expected_status": "SATISFIABLE"
+    },
+    {
+      "file": "unsat_branching.cnf",
+      "sha256": "59f412915c182b7b659bbb01e63a0fd5fa3cebf27ffda6f7933e3f0634cd18b2",
+      "expected_status": "UNSATISFIABLE"
+    },
+    {
+      "file": "unsat_units.cnf",
+      "sha256": "b043434f7ba4a33555786beba54e44b4b0c7488c31a594551cb9314909c45a86",
+      "expected_status": "UNSATISFIABLE"
+    }
+  ]
+}

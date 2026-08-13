@@ -48,6 +48,6 @@ namespace kmx::sat::cdcl::store
     private:
         std::vector<literal> literals_ {};
         std::vector<literal> failed_assumptions_ {};
-        std::uint32_t trail_level_base_ {0};
+        std::uint32_t trail_level_base_ {};
     };
 }

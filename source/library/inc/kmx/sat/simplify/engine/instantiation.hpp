@@ -43,8 +43,8 @@ namespace kmx::sat::simplify::engine
         bool run_completed() const noexcept { return run_completed_; }
 
     private:
-        std::size_t candidate_count_ {0u};
-        std::size_t removal_count_ {0u};
-        bool run_completed_ {false};
+        std::size_t candidate_count_ {};
+        std::size_t removal_count_ {};
+        bool run_completed_ {};
     };
 }

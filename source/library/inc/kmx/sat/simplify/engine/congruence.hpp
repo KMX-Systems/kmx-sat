@@ -113,8 +113,8 @@ namespace kmx::sat::simplify::engine
     private:
         extractor::gate gate_ {};
         equivalence_substitutor equivalence_substitutor_ {};
-        std::size_t gate_constraint_count_ {0u};
-        std::size_t equivalence_count_ {0u};
-        bool run_completed_ {false};
+        std::size_t gate_constraint_count_ {};
+        std::size_t equivalence_count_ {};
+        bool run_completed_ {};
     };
 }

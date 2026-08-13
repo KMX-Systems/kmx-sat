@@ -112,8 +112,8 @@ namespace kmx::sat::io::fixture::binary
             request_.decision_limit = decision_limit_;
             request_.enabled_pass_mask = enabled_pass_mask_;
             request_.strict_mode = strict_mode_;
-            std::size_t parsed_clause_count {0u};
-            std::size_t parsed_assumption_count {0u};
+            std::size_t parsed_clause_count {};
+            std::size_t parsed_assumption_count {};
 
             const auto newline = raw_fixture_.find('\n');
             std::size_t line_start = newline == std::string::npos ? raw_fixture_.size() : newline + 1u;
@@ -271,7 +271,7 @@ namespace kmx::sat::io::fixture::binary
                 return false;
             }
 
-            std::uint64_t parsed {0u};
+            std::uint64_t parsed {};
             const auto result = std::from_chars(token.data(), token.data() + token.size(), parsed);
             if (result.ec != std::errc {} || result.ptr != token.data() + token.size())
             {
@@ -289,7 +289,7 @@ namespace kmx::sat::io::fixture::binary
                 return false;
             }
 
-            std::int64_t parsed {0};
+            std::int64_t parsed {};
             const auto result = std::from_chars(token.data(), token.data() + token.size(), parsed);
             if (result.ec != std::errc {} || result.ptr != token.data() + token.size())
             {
@@ -302,7 +302,7 @@ namespace kmx::sat::io::fixture::binary
         bool parse_header_line(const std::string_view header) noexcept
         {
             std::vector<std::string_view> tokens {};
-            std::size_t start {0};
+            std::size_t start {};
             while (start < header.size())
             {
                 while (start < header.size() && header[start] == ' ')
@@ -324,17 +324,17 @@ namespace kmx::sat::io::fixture::binary
                 return false;
             }
 
-            std::uint64_t parsed_version {0u};
-            std::uint64_t kind_value {0u};
-            std::uint64_t flags_value {0u};
-            std::uint64_t declared_vars {0u};
-            std::uint64_t parsed_clause_count {0u};
-            std::uint64_t parsed_assumption_count {0u};
-            std::uint64_t parsed_conflict_limit {0u};
-            std::uint64_t parsed_decision_limit {0u};
-            std::uint64_t parsed_pass_mask {0u};
-            std::uint64_t parsed_strict_mode {0u};
-            std::uint64_t parsed_checksum {0u};
+            std::uint64_t parsed_version {};
+            std::uint64_t kind_value {};
+            std::uint64_t flags_value {};
+            std::uint64_t declared_vars {};
+            std::uint64_t parsed_clause_count {};
+            std::uint64_t parsed_assumption_count {};
+            std::uint64_t parsed_conflict_limit {};
+            std::uint64_t parsed_decision_limit {};
+            std::uint64_t parsed_pass_mask {};
+            std::uint64_t parsed_strict_mode {};
+            std::uint64_t parsed_checksum {};
 
             if (tokens[0] != "SATB" || !parse_unsigned(tokens[1], parsed_version) || !parse_unsigned(tokens[2], kind_value) ||
                 !parse_unsigned(tokens[3], flags_value) || !parse_unsigned(tokens[4], declared_vars) ||
@@ -370,8 +370,8 @@ namespace kmx::sat::io::fixture::binary
         static std::optional<std::vector<literal>> parse_clause_line(const std::string_view line) noexcept
         {
             std::vector<literal> result {};
-            std::size_t start {0};
-            bool terminated {false};
+            std::size_t start {};
+            bool terminated {};
             while (start < line.size())
             {
                 while (start < line.size() && line[start] == ' ')
@@ -384,7 +384,7 @@ namespace kmx::sat::io::fixture::binary
                 }
                 const auto end = line.find(' ', start);
                 const auto token_end = end == std::string::npos ? line.size() : end;
-                std::int64_t value {0};
+                std::int64_t value {};
                 if (!parse_signed(line.substr(start, token_end - start), value))
                 {
                     return std::nullopt;

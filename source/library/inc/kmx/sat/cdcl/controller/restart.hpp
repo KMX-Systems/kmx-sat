@@ -36,6 +36,21 @@ namespace kmx::sat::cdcl::controller
         /// @return True if a restart has been requested or a scheduled trigger fired.
         [[nodiscard]] bool has_pending_restart() const noexcept { return restart_pending_; }
 
+        /// @brief Resets all restart scheduler counters and pending state for a fresh solve episode.
+        /// @throws None (noexcept).
+        void reset() noexcept
+        {
+            conflict_count_ = 0u;
+            decision_count_ = 0u;
+            restart_count_ = 0u;
+            next_scheduled_restart_at_ = restart_interval_;
+            next_scheduled_decision_restart_at_ = decision_restart_interval_;
+            restart_pending_ = false;
+            fast_glue_ema_ = 0.0;
+            slow_glue_ema_ = 0.0;
+            glue_observation_count_ = 0u;
+        }
+
         /// @brief Advances restart bookkeeping by one conflict.
         /// @throws None (noexcept).
         void tick_conflict() noexcept
@@ -53,6 +68,44 @@ namespace kmx::sat::cdcl::controller
                 next_scheduled_restart_at_ = conflict_count_ + restart_interval_;
             }
         }
+
+        /// @brief Records a learned-clause glue value for the optional EMA restart policy.
+        void observe_glue(const std::uint32_t glue) noexcept
+        {
+            const auto value = static_cast<double>(glue);
+            if (glue_observation_count_ == 0u)
+            {
+                fast_glue_ema_ = value;
+                slow_glue_ema_ = value;
+            }
+            else
+            {
+                fast_glue_ema_ = fast_glue_ema_ * fast_glue_alpha_ + value * (1.0 - fast_glue_alpha_);
+                slow_glue_ema_ = slow_glue_ema_ * slow_glue_alpha_ + value * (1.0 - slow_glue_alpha_);
+            }
+            ++glue_observation_count_;
+            if (glue_restart_threshold_ != 0.0 && glue_observation_count_ >= glue_restart_warmup_
+                && fast_glue_ema_ > slow_glue_ema_ * glue_restart_threshold_)
+            {
+                restart_pending_ = true;
+            }
+        }
+
+        /// @brief Configures the optional fast/slow glue ratio that requests a restart.
+        /// @param ratio Ratio above one; zero disables the EMA trigger.
+        void set_glue_restart_threshold(const double ratio) noexcept
+        {
+            glue_restart_threshold_ = ratio > 1.0 ? ratio : 0.0;
+        }
+
+        std::uint32_t glue_restart_threshold_percent() const noexcept
+        {
+            return static_cast<std::uint32_t>(glue_restart_threshold_ * 100.0);
+        }
+
+        double fast_glue_ema() const noexcept { return fast_glue_ema_; }
+        double slow_glue_ema() const noexcept { return slow_glue_ema_; }
+        std::uint64_t glue_observation_count() const noexcept { return glue_observation_count_; }
 
         /// @brief Advances restart bookkeeping by one decision.
         /// @throws None (noexcept).
@@ -177,13 +230,20 @@ namespace kmx::sat::cdcl::controller
         std::uint64_t restart_count() const noexcept { return restart_count_; }
 
     private:
-        std::uint64_t conflict_count_ {0};
-        std::uint64_t decision_count_ {0};
-        std::uint64_t restart_count_ {0};
-        std::uint64_t restart_interval_ {0};
-        std::uint64_t next_scheduled_restart_at_ {0};
-        std::uint64_t decision_restart_interval_ {0};
-        std::uint64_t next_scheduled_decision_restart_at_ {0};
-        bool restart_pending_ {false};
+        std::uint64_t conflict_count_ {};
+        std::uint64_t decision_count_ {};
+        std::uint64_t restart_count_ {};
+        std::uint64_t restart_interval_ {};
+        std::uint64_t next_scheduled_restart_at_ {};
+        std::uint64_t decision_restart_interval_ {};
+        std::uint64_t next_scheduled_decision_restart_at_ {};
+        bool restart_pending_ {};
+        double fast_glue_ema_ {};
+        double slow_glue_ema_ {};
+        double glue_restart_threshold_ {};
+        std::uint64_t glue_observation_count_ {};
+        static constexpr double fast_glue_alpha_ {0.5};
+        static constexpr double slow_glue_alpha_ {0.95};
+        static constexpr std::uint64_t glue_restart_warmup_ {4u};
     };
 }

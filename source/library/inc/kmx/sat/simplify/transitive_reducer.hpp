@@ -144,7 +144,7 @@ namespace kmx::sat::simplify
             std::unordered_map<literal::raw_t, bool> visited {};
             visited[source] = true;
 
-            for (std::size_t index {0u}; index < frontier.size(); ++index)
+            for (std::size_t index {}; index < frontier.size(); ++index)
             {
                 const auto current = frontier[index];
                 const auto it = adjacency.find(current);
@@ -176,9 +176,9 @@ namespace kmx::sat::simplify
             return false;
         }
 
-        cdcl::clause::database* database_ {nullptr};
-        kmx::sat::proof_manager* proof_manager_ {nullptr};
-        std::size_t removed_edge_count_ {0u};
-        bool pruned_ {false};
+        cdcl::clause::database* database_ {};
+        kmx::sat::proof_manager* proof_manager_ {};
+        std::size_t removed_edge_count_ {};
+        bool pruned_ {};
     };
 }

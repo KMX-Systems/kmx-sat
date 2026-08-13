@@ -48,3 +48,4 @@ tmp/
 .tmp/
 doc/
 reference/
+__pycache__/

@@ -44,7 +44,7 @@ namespace kmx::sat::telemetry
         struct event
         {
             event_kind kind {};
-            std::uint64_t ref_offset {0};
+            std::uint64_t ref_offset {};
             std::string phase_name {};
             literal literal_value {};
         };
@@ -117,6 +117,6 @@ namespace kmx::sat::telemetry
 
     private:
         std::vector<event> events_ {};
-        std::uint64_t last_ref_offset_ {0u};
+        std::uint64_t last_ref_offset_ {};
     };
 }

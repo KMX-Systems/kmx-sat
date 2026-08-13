@@ -3,11 +3,13 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <cstdint>
     #include <span>
     #include <string>
     #include <string_view>
 #endif
 #include <kmx/sat/literal.hpp>
+#include <kmx/sat/telemetry/report_formatter.hpp>
 
 namespace kmx::sat::io::writer
 {
@@ -23,6 +25,12 @@ namespace kmx::sat::io::writer
     class format final
     {
     public:
+        enum class statistics_detail : std::uint8_t
+        {
+            compact,
+            verbose
+        };
+
         /// @brief Constructs a format writer with no open output target.
         /// @throws None (noexcept).
         format() noexcept = default;
@@ -45,6 +53,22 @@ namespace kmx::sat::io::writer
         /// @brief Serializes a statistics snapshot to the output target.
         /// @throws None (noexcept).
         void write_statistics() noexcept { buffer_.append("statistics\n"); }
+
+        /// @brief Serializes one statistics snapshot as a formatted report line.
+        /// @param snapshot Statistics counters snapshot to serialize.
+        /// @param detail Controls compact vs verbose rendering.
+        /// @throws None (noexcept).
+        void write_statistics(const telemetry::solver_statistics::snapshot& snapshot,
+                              const statistics_detail detail = statistics_detail::compact) noexcept
+        {
+            const telemetry::report_formatter formatter {};
+            if (detail == statistics_detail::verbose)
+            {
+                write_report_line(formatter.format_statistics_line_verbose(snapshot));
+                return;
+            }
+            write_report_line(formatter.format_statistics_line(snapshot));
+        }
 
         /// @brief Writes one formatted diagnostic/progress report line.
         /// @param line Line content to write.

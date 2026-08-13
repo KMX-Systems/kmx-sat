@@ -68,7 +68,7 @@ namespace kmx::sat::simplify::eliminator::clause
         literal last_blocked_literal() const noexcept { return last_blocked_literal_; }
 
     private:
-        std::size_t blocked_count_ {0u};
+        std::size_t blocked_count_ {};
         literal last_blocked_literal_ {};
     };
 }
