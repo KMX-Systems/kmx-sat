@@ -528,8 +528,8 @@ namespace kmx::sat::simplify::scheduler
     private:
         static constexpr std::uint64_t default_conflict_trigger_window {32u};
         static constexpr std::uint64_t default_restart_trigger_window {1u};
-        static constexpr std::uint64_t max_conflict_trigger_window {128u};
-        static constexpr std::uint64_t max_restart_trigger_window {4u};
+        static constexpr std::uint64_t max_conflict_trigger_window {8192u};
+        static constexpr std::uint64_t max_restart_trigger_window {8u};
         static constexpr double telemetry_alpha {0.25};
         static constexpr double medium_conflict_density_threshold {0.10};
         static constexpr double high_conflict_density_threshold {0.25};

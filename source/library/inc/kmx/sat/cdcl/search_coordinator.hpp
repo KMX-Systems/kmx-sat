@@ -360,6 +360,12 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         literal last_asserting_literal() const noexcept { return clause_learner_.last_asserting_literal(); }
 
+        /// @brief Returns the backjump level computed during the most recent conflict analysis.
+        std::uint32_t last_backjump_level() const noexcept { return conflict_analyzer_.compute_backjump_level(); }
+
+        /// @brief Returns whether a restart is currently requested or due.
+        [[nodiscard]] bool should_restart() const noexcept { return restart_controller_.should_restart(); }
+
         /// @brief Returns the next branching literal selected by the decision engine.
         /// @param fallback_variable Variable index staged into the current lightweight heuristic path.
         /// @return Selected branch literal, or `std::nullopt` if no candidate remains.

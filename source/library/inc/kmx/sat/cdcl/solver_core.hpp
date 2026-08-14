@@ -198,18 +198,18 @@ namespace kmx::sat::cdcl
                 const auto assumption_clause = clause_database_.storage_of().literals_of(assumption_conflict);
                 const auto assumption_status =
                     handle_clause_conflict(assumption_conflict, assumption_clause, decision_levels, reasons, request, conflicts, trail, 0u);
-                if (assumption_status != status::satisfiable)
+                if (assumption_status.result_status != status::satisfiable)
                 {
                     failed_core_ = build_failed_core_from_reasons(request.assumptions, reasons);
                     if (failed_core_.empty())
                         failed_core_ = build_failed_core_from_conflict(request.assumptions);
                     if (failed_core_.empty() && !request.assumptions.empty())
                         failed_core_ = request.assumptions;
-                    return finalize_epoch(assumption_status);
+                    return finalize_epoch(assumption_status.result_status);
                 }
             }
 
-            status_ = solve_recursive(assignment, decision_levels, reasons, request, conflicts, 0u, trail, request.assumptions);
+            status_ = cdcl_search(assignment, decision_levels, reasons, request, conflicts, trail, request.assumptions);
 
             if (status_ == status::satisfiable)
                 build_internal_model(assignment);
@@ -606,8 +606,14 @@ namespace kmx::sat::cdcl
             std::vector<clause::ref_t> refs {};
             refs.reserve(stats.irredundant_count + stats.redundant_count);
 
-            clause_database_.iterate_irredundant([&](const clause::ref_t ref) noexcept { refs.push_back(ref); });
-            clause_database_.iterate_redundant([&](const clause::ref_t ref) noexcept { refs.push_back(ref); });
+            const auto process_clause = [&refs](const clause::ref_t ref) noexcept
+            {
+                if (ref.valid())
+                    refs.push_back(ref);
+            };
+
+            clause_database_.iterate_irredundant(process_clause);
+            clause_database_.iterate_redundant(process_clause);
 
             return refs;
         }
@@ -837,32 +843,32 @@ namespace kmx::sat::cdcl
             return core;
         }
 
-        status consume_staged_conflict(const decision_level_vector& decision_levels, const reason_vector& reasons,
-                                       const solve_request& request, std::uint64_t& conflicts, const trail_vector& trail,
-                                       const std::uint32_t current_level) noexcept
+        struct conflict_resolution final
         {
-            const auto staged_conflict = propagator_.propagate();
-            if (!staged_conflict.valid())
-                return status::satisfiable;
+            status result_status {status::satisfiable};
+            clause::ref_t learned_ref {};
+            literal asserting_literal {};
+            std::uint32_t backjump_level {};
+        };
 
-            const auto conflict_clause = clause_database_.storage_of().literals_of(staged_conflict);
-            if (conflict_clause.empty())
-            {
-                ++conflicts;
-                return conflict_limit_reached(request, conflicts) ? status::unknown : status::unsatisfiable;
-            }
-
-            return handle_clause_conflict(staged_conflict, conflict_clause, decision_levels, reasons, request, conflicts, trail,
-                                          current_level);
-        }
-
-        status handle_clause_conflict(const clause::ref_t ref, const std::span<const literal> conflict_clause,
-                                      const decision_level_vector& decision_levels, const reason_vector& reasons,
-                                      const solve_request& request, std::uint64_t& conflicts, const trail_vector& trail,
-                                      const std::uint32_t current_level) noexcept
+        conflict_resolution handle_clause_conflict(const clause::ref_t ref, const std::span<const literal> conflict_clause,
+                                                    const decision_level_vector& decision_levels, const reason_vector& reasons,
+                                                    const solve_request& request, std::uint64_t& conflicts, const trail_vector& trail,
+                                                    const std::uint32_t current_level) noexcept
         {
             record_last_conflict_clause(conflict_clause);
             search_coordinator_.notify_conflict_clause(conflict_clause);
+
+            if (conflict_clause.empty())
+            {
+                ++conflicts;
+                run_inprocess_if_due();
+                if (conflict_limit_reached(request, conflicts))
+                    search_coordinator_.handle_termination(search_coordinator::termination_cause::conflict_limit);
+                if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
+                    return conflict_resolution {.result_status = status::unknown};
+                return conflict_resolution {.result_status = status::unsatisfiable};
+            }
 
             const auto learned_clause_count_before = search_coordinator_.learned_clause_count();
 
@@ -871,7 +877,11 @@ namespace kmx::sat::cdcl
             search_coordinator_.handle_conflict_via_resolution(trail, current_level, &conflict_level_lookup, &conflict_reason_lookup,
                                                                &resolution_context);
 
-            if (search_coordinator_.learned_clause_count() != learned_clause_count_before)
+            clause::ref_t learned_ref {};
+            literal asserting_literal {};
+            const auto backjump_level = search_coordinator_.last_backjump_level();
+
+            if (current_level > 0u && search_coordinator_.learned_clause_count() != learned_clause_count_before)
             {
                 const auto learned_clause = search_coordinator_.last_learned_clause();
                 if (!learned_clause.empty())
@@ -880,12 +890,14 @@ namespace kmx::sat::cdcl
                     {
                         ++conflicts;
                         run_inprocess_if_due();
+                        if (conflict_limit_reached(request, conflicts))
+                            search_coordinator_.handle_termination(search_coordinator::termination_cause::conflict_limit);
                         if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
-                            return status::unknown;
-                        return conflict_limit_reached(request, conflicts) ? status::unknown : status::unsatisfiable;
+                            return conflict_resolution {.result_status = status::unknown};
+                        return conflict_resolution {.result_status = status::unsatisfiable};
                     }
 
-                    const auto learned_ref = clause_database_.add_clause(learned_clause, true);
+                    learned_ref = clause_database_.add_clause(learned_clause, true);
                     clause_minimizer_.minimize_learned_clause(learned_ref, &conflict_level_lookup, &conflict_reason_lookup,
                                                               &resolution_context);
                     clause_minimizer_.shrink_clause(learned_ref);
@@ -913,15 +925,28 @@ namespace kmx::sat::cdcl
                     const auto antecedents = build_conflict_antecedents(ref, ordered_reason_refs);
                     proof_manager_.on_add_derived(learned_ref, finalized_learned_clause, antecedents);
                     incremental_context_.retain_learned_clause();
+
+                    asserting_literal = finalized_learned_clause.empty() ? search_coordinator_.last_asserting_literal() :
+                                                                           finalized_learned_clause.front();
                 }
             }
 
             ++conflicts;
             run_inprocess_if_due();
 
+            if (conflict_limit_reached(request, conflicts))
+                search_coordinator_.handle_termination(search_coordinator::termination_cause::conflict_limit);
             if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
-                return status::unknown;
-            return conflict_limit_reached(request, conflicts) ? status::unknown : status::unsatisfiable;
+                return conflict_resolution {.result_status = status::unknown};
+            if (current_level == 0u || !learned_ref.valid())
+                return conflict_resolution {.result_status = status::unsatisfiable};
+
+            return conflict_resolution {
+                .result_status = status::satisfiable,
+                .learned_ref = learned_ref,
+                .asserting_literal = asserting_literal,
+                .backjump_level = backjump_level,
+            };
         }
 
         void run_inprocess_if_due() noexcept
@@ -952,15 +977,20 @@ namespace kmx::sat::cdcl
         /// assigned by the caller before this call and must still have their watch entries checked here; without
         /// this seed, a decision/assumption literal that immediately falsifies a watched clause would never be
         /// detected, since the watch-scan below only follows literals it discovers itself.
+        /// @return Reference to the conflicting clause, or an invalid reference if propagation reached fixpoint.
         /// @throws None (noexcept).
-        status propagate_units(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
-                               const solve_request& request, std::uint64_t& conflicts, const std::uint32_t current_level,
-                               trail_vector& trail, const std::span<const literal> seed_literals = {}) noexcept
+        clause::ref_t propagate_units(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
+                                      const solve_request& request, std::uint64_t& conflicts, const std::uint32_t current_level,
+                                      trail_vector& trail, const std::span<const literal> seed_literals = {}) noexcept
         {
+            (void) request;
+            (void) conflicts;
+
+            if (propagator_.has_staged_conflicts())
             {
-                const auto staged_status = consume_staged_conflict(decision_levels, reasons, request, conflicts, trail, current_level);
-                if (staged_status != status::satisfiable)
-                    return staged_status;
+                const auto staged = propagator_.propagate();
+                if (staged.valid())
+                    return staged;
             }
 
             propagation_queue_scratch_.clear();
@@ -992,7 +1022,7 @@ namespace kmx::sat::cdcl
                 if (literals.empty())
                 {
                     propagator_.stage_conflict(ref);
-                    continue;
+                    return propagator_.propagate();
                 }
 
                 const auto lit = literals.front();
@@ -1004,17 +1034,16 @@ namespace kmx::sat::cdcl
                 if (value == unassigned_value)
                 {
                     if (!enqueue_assignment(lit, ref))
+                    {
                         propagator_.stage_conflict(ref);
+                        return propagator_.propagate();
+                    }
                 }
                 else if (!literal_is_satisfied(lit, value))
+                {
                     propagator_.stage_conflict(ref);
-            }
-
-            {
-                const auto unit_conflict_status =
-                    consume_staged_conflict(decision_levels, reasons, request, conflicts, trail, current_level);
-                if (unit_conflict_status != status::satisfiable)
-                    return unit_conflict_status;
+                    return propagator_.propagate();
+                }
             }
 
             watch_snapshot_scratch_.clear();
@@ -1056,7 +1085,7 @@ namespace kmx::sat::cdcl
                         }
                         ++binary_watch_conflict_count_;
                         propagator_.stage_conflict(ref);
-                        return consume_staged_conflict(decision_levels, reasons, request, conflicts, trail, current_level);
+                        return propagator_.propagate();
                     }
 
                     const auto literals = clause_database_.storage_of().view_literals(ref);
@@ -1095,7 +1124,7 @@ namespace kmx::sat::cdcl
                     }
 
                     propagator_.stage_conflict(ref);
-                    return consume_staged_conflict(decision_levels, reasons, request, conflicts, trail, current_level);
+                    return propagator_.propagate();
                 }
             }
 
@@ -1108,7 +1137,7 @@ namespace kmx::sat::cdcl
                 search_coordinator_.notify_propagated_variables(propagated_variables_scratch_);
             }
 
-            return status::satisfiable;
+            return {};
         }
 
         static std::uint32_t pick_unassigned_variable(const assignment_vector& assignment) noexcept
@@ -1119,73 +1148,153 @@ namespace kmx::sat::cdcl
             return 0;
         }
 
-        status solve_recursive(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
-                               const solve_request& request, std::uint64_t& conflicts, const std::uint32_t current_level,
-                               trail_vector& trail, const std::span<const literal> seed_literals = {}) noexcept
+        struct search_step_result final
         {
-            const auto propagation_status =
-                propagate_units(assignment, decision_levels, reasons, request, conflicts, current_level, trail, seed_literals);
-            if (propagation_status != status::satisfiable)
-                return propagation_status;
+            status result_status {status::unknown};
+            std::uint32_t backjump_level {0u};
+            literal asserting_literal {};
+            clause::ref_t asserting_reason {};
+        };
 
-            bool has_unassigned_variable = false;
-            for (std::size_t index = 1u; index < assignment.size(); ++index)
+        search_step_result solve_level(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
+                                       const solve_request& request, std::uint64_t& conflicts, const std::uint32_t current_level,
+                                       trail_vector& trail, const std::span<const literal> seed_literals = {}) noexcept
+        {
+            const auto conflict_ref =
+                propagate_units(assignment, decision_levels, reasons, request, conflicts, current_level, trail, seed_literals);
+            if (conflict_ref.valid())
             {
-                if (assignment[index] == unassigned_value)
+                const auto conflict_clause = clause_database_.storage_of().literals_of(conflict_ref);
+                const auto resolution = handle_clause_conflict(conflict_ref, conflict_clause, decision_levels, reasons, request,
+                                                               conflicts, trail, current_level);
+                if (resolution.result_status != status::satisfiable)
+                    return search_step_result {.result_status = resolution.result_status};
+
+                return search_step_result {
+                    .result_status = status::unsatisfiable,
+                    .backjump_level = resolution.backjump_level,
+                    .asserting_literal = resolution.asserting_literal,
+                    .asserting_reason = resolution.learned_ref,
+                };
+            }
+
+            for (;;)
+            {
+                bool has_unassigned_variable = false;
+                for (std::size_t index = 1u; index < assignment.size(); ++index)
                 {
-                    has_unassigned_variable = true;
-                    break;
+                    if (assignment[index] == unassigned_value)
+                    {
+                        has_unassigned_variable = true;
+                        break;
+                    }
+                }
+                if (!has_unassigned_variable)
+                    return search_step_result {.result_status = status::satisfiable};
+
+                search_coordinator_.set_variable_selectability_filter(&solver_core::is_unassigned_candidate, &assignment);
+
+                const auto branch_literal = search_coordinator_.take_branch_literal(0u);
+                if (decision_limit_reached(request, search_coordinator_.decision_event_count()))
+                    return search_step_result {.result_status = status::unknown};
+                if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
+                    return search_step_result {.result_status = status::unknown};
+                if (!branch_literal.has_value())
+                {
+                    return search_step_result {
+                        .result_status = search_coordinator_.current_outcome() == search_coordinator::outcome::satisfiable ?
+                                             status::satisfiable :
+                                             status::unknown};
+                }
+
+                auto selected_branch_literal = branch_literal.value();
+                const auto selected_index = selected_branch_literal.variable_of().index();
+                if (selected_index >= assignment.size() || assignment[selected_index] != unassigned_value)
+                {
+                    const auto fallback_variable = pick_unassigned_variable(assignment);
+                    if (fallback_variable == 0u)
+                        return search_step_result {.result_status = status::satisfiable};
+                    selected_branch_literal = literal {variable {fallback_variable}, selected_branch_literal.is_negated()};
+                }
+
+                bool branch_asserted = false;
+                for (const auto candidate_literal: {selected_branch_literal, selected_branch_literal.negated()})
+                {
+                    const auto trail_mark = trail.size();
+                    if (!assign_literal(assignment, decision_levels, reasons, candidate_literal, current_level + 1u))
+                        continue;
+
+                    search_coordinator_.notify_assignment_literal(candidate_literal);
+                    trail.push_back(candidate_literal);
+
+                    const std::array<literal, 1> branch_seed {candidate_literal};
+                    auto child_result = solve_level(assignment, decision_levels, reasons, request, conflicts, current_level + 1u,
+                                                    trail, std::span<const literal> {branch_seed});
+
+                    if (child_result.result_status == status::satisfiable || child_result.result_status == status::unknown)
+                        return child_result;
+
+                    undo_trail_to(assignment, decision_levels, reasons, trail, trail_mark);
+
+                    if (child_result.backjump_level < current_level)
+                        return child_result;
+
+                    if (child_result.asserting_literal.raw() != 0)
+                    {
+                        if (!assign_literal(assignment, decision_levels, reasons, child_result.asserting_literal, current_level,
+                                            child_result.asserting_reason))
+                        {
+                            return search_step_result {.result_status = status::unsatisfiable};
+                        }
+
+                        if (child_result.asserting_reason.valid())
+                        {
+                            clause_database_.mark_reason_clause(child_result.asserting_reason);
+                            clause_database_.increment_used_count(child_result.asserting_reason);
+                        }
+                        search_coordinator_.notify_assignment_literal(child_result.asserting_literal);
+                        trail.push_back(child_result.asserting_literal);
+                        ++propagation_assignment_count_;
+
+                        const std::array<literal, 1> assert_seed {child_result.asserting_literal};
+                        const auto prop_conflict = propagate_units(assignment, decision_levels, reasons, request, conflicts,
+                                                                   current_level, trail, std::span<const literal> {assert_seed});
+                        if (prop_conflict.valid())
+                        {
+                            const auto conflict_clause = clause_database_.storage_of().literals_of(prop_conflict);
+                            const auto resolution = handle_clause_conflict(prop_conflict, conflict_clause, decision_levels, reasons,
+                                                                           request, conflicts, trail, current_level);
+                            if (resolution.result_status != status::satisfiable)
+                                return search_step_result {.result_status = resolution.result_status};
+
+                            return search_step_result {
+                                .result_status = status::unsatisfiable,
+                                .backjump_level = resolution.backjump_level,
+                                .asserting_literal = resolution.asserting_literal,
+                                .asserting_reason = resolution.learned_ref,
+                            };
+                        }
+
+                        branch_asserted = true;
+                        break;
+                    }
+                }
+
+                if (!branch_asserted)
+                {
+                    return search_step_result {
+                        .result_status = status::unsatisfiable,
+                        .backjump_level = current_level > 0u ? current_level - 1u : 0u,
+                    };
                 }
             }
-            if (!has_unassigned_variable)
-                return status::satisfiable;
+        }
 
-            search_coordinator_.set_variable_selectability_filter(&solver_core::is_unassigned_candidate, &assignment);
-
-            const auto branch_literal = search_coordinator_.take_branch_literal(0u);
-            if (decision_limit_reached(request, search_coordinator_.decision_event_count()))
-                return status::unknown;
-            if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
-                return status::unknown;
-            if (!branch_literal.has_value())
-            {
-                return search_coordinator_.current_outcome() == search_coordinator::outcome::satisfiable ? status::satisfiable :
-                                                                                                           status::unknown;
-            }
-
-            auto selected_branch_literal = branch_literal.value();
-            const auto selected_index = selected_branch_literal.variable_of().index();
-            if (selected_index >= assignment.size() || assignment[selected_index] != unassigned_value)
-            {
-                const auto fallback_variable = pick_unassigned_variable(assignment);
-                if (fallback_variable == 0u)
-                    return status::satisfiable;
-                selected_branch_literal = literal {variable {fallback_variable}, selected_branch_literal.is_negated()};
-            }
-
-            for (const auto candidate_literal: {selected_branch_literal, selected_branch_literal.negated()})
-            {
-                const auto trail_mark = trail.size();
-
-                if (!assign_literal(assignment, decision_levels, reasons, candidate_literal, current_level + 1u))
-                    continue;
-
-                search_coordinator_.notify_assignment_literal(candidate_literal);
-                trail.push_back(candidate_literal);
-
-                const std::array<literal, 1> branch_seed {candidate_literal};
-                const auto branch_status = solve_recursive(assignment, decision_levels, reasons, request, conflicts,
-                                                           current_level + 1u, trail, std::span<const literal> {branch_seed});
-                if (branch_status == status::satisfiable)
-                    return status::satisfiable;
-
-                undo_trail_to(assignment, decision_levels, reasons, trail, trail_mark);
-
-                if (branch_status == status::unknown)
-                    return status::unknown;
-            }
-
-            return status::unsatisfiable;
+        status cdcl_search(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
+                           const solve_request& request, std::uint64_t& conflicts, trail_vector& trail,
+                           const std::span<const literal> initial_seeds = {}) noexcept
+        {
+            return solve_level(assignment, decision_levels, reasons, request, conflicts, 0u, trail, initial_seeds).result_status;
         }
 
         static bool is_unassigned_candidate(const variable var, const void* context) noexcept
