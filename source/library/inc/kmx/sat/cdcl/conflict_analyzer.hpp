@@ -261,7 +261,8 @@ namespace kmx::sat::cdcl
                 {
                     const auto trail_literal = trail_in_order[static_cast<std::size_t>(trail_cursor)];
                     --trail_cursor;
-                    if (is_seen(trail_literal.variable_of()))
+                    if (is_seen(trail_literal.variable_of())
+                        && level_of(context, trail_literal.variable_of()) == current_level)
                     {
                         pivot = trail_literal;
                         have_pivot = true;
@@ -308,7 +309,35 @@ namespace kmx::sat::cdcl
             }
             backjump_level_ = highest_tail_level;
 
+            std::sort(tail_literals.begin(), tail_literals.end(),
+                      [level_of, context](const literal lhs, const literal rhs) noexcept
+                      {
+                          const auto lhs_level = level_of(context, lhs.variable_of());
+                          const auto rhs_level = level_of(context, rhs.variable_of());
+                          if (lhs_level != rhs_level)
+                          {
+                              return lhs_level > rhs_level;
+                          }
+                          return lhs.raw() < rhs.raw();
+                      });
+
             learned_literals_.insert(learned_literals_.end(), tail_literals.begin(), tail_literals.end());
+
+            std::vector<literal> canonical_literals {};
+            canonical_literals.reserve(learned_literals_.size());
+            for (const auto lit: learned_literals_)
+            {
+                const auto duplicate_it = std::find_if(canonical_literals.begin(), canonical_literals.end(),
+                                                       [lit](const literal existing) noexcept
+                                                       {
+                                                           return existing.variable_of().index() == lit.variable_of().index();
+                                                       });
+                if (duplicate_it == canonical_literals.end())
+                {
+                    canonical_literals.push_back(lit);
+                }
+            }
+            learned_literals_ = std::move(canonical_literals);
         }
 
         /// @brief Returns the first Unique Implication Point literal found by the last `analyze` call.

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import shlex
 import subprocess
@@ -35,12 +36,63 @@ def solver_status(command: str, instance: Path, assumptions: list[int], decision
     return "UNKNOWN"
 
 
-def replay(path: Path, command: str) -> list[str]:
+def satisfies_clause(clause: list[int], assignment: int) -> bool:
+    for literal in clause:
+        bit = (assignment >> (abs(literal) - 1)) & 1
+        if (literal > 0 and bit == 1) or (literal < 0 and bit == 0):
+            return True
+    return False
+
+
+def evaluate_assignment(clauses: list[list[int]], assumptions: list[int], variable_count: int, assignment: int) -> bool:
+    for clause in clauses:
+        if not satisfies_clause(clause, assignment):
+            return False
+    for literal in assumptions:
+        bit = (assignment >> (abs(literal) - 1)) & 1
+        if (literal > 0 and bit == 0) or (literal < 0 and bit == 1):
+            return False
+    return True
+
+
+def brute_force_model(clauses: list[list[int]], assumptions: list[int], variable_count: int) -> dict[int, bool] | None:
+    for assignment in range(1 << variable_count):
+        if evaluate_assignment(clauses, assumptions, variable_count, assignment):
+            return {variable_index: bool((assignment >> (variable_index - 1)) & 1) for variable_index in range(1, variable_count + 1)}
+    return None
+
+
+def failed_assumptions(clauses: list[list[int]], assumptions: list[int], variable_count: int) -> set[int]:
+    if not assumptions:
+        return set()
+    for size in range(1, len(assumptions) + 1):
+        for subset in itertools.combinations(range(len(assumptions)), size):
+            candidate = [assumptions[index] for index in subset]
+            if brute_force_model(clauses, candidate, variable_count) is None:
+                return set(candidate)
+    return set()
+
+
+def build_cnf(clauses: list[list[int]], variable_count: int) -> str:
+    content = [f"p cnf {variable_count} {len(clauses)}"]
+    content.extend(" ".join(str(literal) for literal in clause) + " 0" for clause in clauses)
+    return "\n".join(content) + "\n"
+
+
+def replay(path: Path, command: str) -> tuple[list[str], list[bool | None], list[bool]]:
     lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    if not lines:
+        return [], [], []
     clauses: list[list[int]] = []
     assumptions: list[int] = []
     statuses: list[str] = []
-    variable_count = lines[0]["variable_count"]
+    value_results: list[bool | None] = []
+    failed_results: list[bool] = []
+    option_values: dict[str, int] = {}
+    last_model: dict[int, bool] | None = None
+    last_failed: set[int] = set()
+    last_status = "UNKNOWN"
+    variable_count = int(lines[0]["variable_count"])
     with tempfile.TemporaryDirectory(prefix="kmx-sat-replay-") as temporary:
         instance = Path(temporary) / "replay.cnf"
         for operation in lines[1:]:
@@ -54,14 +106,36 @@ def replay(path: Path, command: str) -> list[str]:
             elif kind == "reset_session":
                 clauses.clear()
                 assumptions.clear()
+                last_model = None
+                last_failed = set()
+                last_status = "UNKNOWN"
+            elif kind == "set_option":
+                option_values[str(operation["option"])] = int(operation["value"])
+            elif kind == "value_of":
+                variable = int(operation["variable"])
+                if last_model is None or variable < 1 or variable > variable_count:
+                    value_results.append(None)
+                else:
+                    value_results.append(last_model.get(variable))
+            elif kind == "failed":
+                literal = int(operation["literal"])
+                failed_results.append(last_status == "UNSATISFIABLE" and literal in last_failed)
             elif kind == "solve":
-                content = [f"p cnf {variable_count} {len(clauses)}"]
-                content.extend(" ".join(str(literal) for literal in clause) + " 0" for clause in clauses)
-                instance.write_text("\n".join(content) + "\n", encoding="ascii")
-                statuses.append(
-                    solver_status(command, instance, assumptions, operation["decision_limit"], operation["conflict_limit"])
-                )
-        return statuses
+                instance.write_text(build_cnf(clauses, variable_count), encoding="ascii")
+                decision_limit = int(operation.get("decision_limit", option_values.get("decision_limit", 0)))
+                conflict_limit = int(operation.get("conflict_limit", option_values.get("conflict_limit", 0)))
+                last_status = solver_status(command, instance, assumptions, decision_limit, conflict_limit)
+                statuses.append(last_status)
+                if last_status == "SATISFIABLE":
+                    last_model = brute_force_model(clauses, assumptions, variable_count)
+                    last_failed = set()
+                elif last_status == "UNSATISFIABLE":
+                    last_model = None
+                    last_failed = failed_assumptions(clauses, assumptions, variable_count)
+                else:
+                    last_model = None
+                    last_failed = set()
+    return statuses, value_results, failed_results
 
 
 def main() -> int:
@@ -72,21 +146,46 @@ def main() -> int:
     args = parser.parse_args()
     failures: list[str] = []
     total_solves = 0
+    total_values = 0
+    total_failed = 0
     for trace in args.traces:
         errors = validate(trace)
         if errors:
             failures.extend(f"{trace}: {error}" for error in errors)
             continue
-        statuses = replay(trace, args.command)
+        statuses, value_results, failed_results = replay(trace, args.command)
         total_solves += len(statuses)
+        total_values += len(value_results)
+        total_failed += len(failed_results)
         if args.expect_status and (not statuses or statuses[-1] != args.expect_status):
             failures.append(f"{trace}: expected {args.expect_status}, got {statuses[-1] if statuses else 'no solve'}")
-        print(json.dumps({"trace": str(trace), "statuses": statuses}, sort_keys=True))
+        print(
+            json.dumps(
+                {
+                    "trace": str(trace),
+                    "statuses": statuses,
+                    "value_results": value_results,
+                    "failed_results": failed_results,
+                },
+                sort_keys=True,
+            )
+        )
     if failures:
         for failure in failures:
             print(f"error: {failure}")
         return 1
-    print(json.dumps({"traces": len(args.traces), "solve_operations": total_solves, "status": "passed"}, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "traces": len(args.traces),
+                "solve_operations": total_solves,
+                "value_queries": total_values,
+                "failed_queries": total_failed,
+                "status": "passed",
+            },
+            sort_keys=True,
+        )
+    )
     return 0
 
 

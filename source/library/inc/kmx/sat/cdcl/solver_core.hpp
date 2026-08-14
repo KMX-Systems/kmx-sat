@@ -433,6 +433,15 @@ namespace kmx::sat::cdcl
                                                                     restart_decay_interval);
         }
 
+        void set_restart_interval(const std::uint64_t interval) noexcept { search_coordinator_.set_restart_interval(interval); }
+
+        void set_reduction_interval(const std::uint64_t interval) noexcept { search_coordinator_.set_reduction_interval(interval); }
+
+        void set_decision_restart_interval(const std::uint64_t interval) noexcept
+        {
+            search_coordinator_.set_decision_restart_interval(interval);
+        }
+
         /// @brief Returns configured decision maintenance intervals in conflict/conflict/restart order.
         std::array<std::uint32_t, 3> decision_maintenance_intervals() const noexcept
         {

@@ -7,6 +7,7 @@ CppApplication {
     cpp.cxxLanguageVersion: "c++26"
     cpp.enableRtti: true
     cpp.enableExceptions: true
+    cpp.warningLevel: "all"
     files: [
         "cli/kmx-sat-main.cpp",
     ]

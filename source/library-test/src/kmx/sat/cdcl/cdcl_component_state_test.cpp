@@ -257,4 +257,46 @@ namespace kmx::sat::cdcl
         // removed std::cout: "cdcl component state test passed\n";
     }
 
+    TEST_CASE("first UIP preserves a nonzero multi-level backjump", "[sat]")
+    {
+        struct fixture final
+        {
+            std::array<std::uint32_t, 8> levels {};
+            std::array<std::vector<literal>, 8> reasons {};
+        } data;
+        data.levels[1] = 1u;
+        data.levels[2] = 2u;
+        data.levels[3] = 3u;
+        data.levels[4] = 2u;
+        data.reasons[3] = {literal {variable {2u}, true}, literal {variable {3u}, false}};
+        data.reasons[4] = {};
+
+        const auto level_of = [](const void* context, const variable var) noexcept -> std::uint32_t
+        {
+            const auto* value = static_cast<const fixture*>(context);
+            return value->levels[var.index()];
+        };
+        const auto reason_of = [](const void* context, const variable var) noexcept -> std::span<const literal>
+        {
+            const auto* value = static_cast<const fixture*>(context);
+            return value->reasons[var.index()];
+        };
+
+        const std::array<literal, 4> trail {
+            literal {variable {1u}, false}, literal {variable {2u}, false},
+            literal {variable {3u}, false}, literal {variable {4u}, false}};
+        conflict_analyzer analyzer;
+        const std::array<literal, 2> conflict {
+            literal {variable {3u}, true}, literal {variable {4u}, true}};
+        analyzer.seed_conflict_clause(conflict);
+        analyzer.analyze_via_resolution(trail, 3u, level_of, reason_of, &data);
+
+        REQUIRE(analyzer.learned_clause().size() == 2u);
+        REQUIRE(analyzer.derive_first_uip().raw() == literal {variable {3u}, true}.raw());
+        REQUIRE(analyzer.compute_backjump_level() == 2u);
+        REQUIRE(analyzer.learned_clause()[1].raw() == literal {variable {4u}, true}.raw());
+        analyzer.build_resolution_chain();
+        REQUIRE(analyzer.resolution_chain_step_count() == 1u);
+    }
+
 } // namespace

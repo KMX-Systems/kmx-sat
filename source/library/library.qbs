@@ -21,6 +21,7 @@ StaticLibrary {
         prefix: "api/kmx/sat/"
         files: [
             "c_api_adapter.hpp",
+            "ipasir.h",
             "proof_manager.hpp",
             "solve_result.hpp",
             "solver.hpp",
@@ -36,6 +37,7 @@ StaticLibrary {
     }
     cpp.cxxLanguageVersion: "c++26"
     cpp.enableRtti: false
+    cpp.warningLevel: "all"
     cpp.includePaths: ["api", "inc"]
 
     Export {

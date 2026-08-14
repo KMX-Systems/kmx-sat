@@ -1,23 +1,23 @@
 {
   "schema": 1,
   "status_counts": {
-    "SATISFIABLE": 2,
-    "UNSATISFIABLE": 2
+    "SATISFIABLE": 4,
+    "UNSATISFIABLE": 5
   },
   "kpi": {
-    "solver_propagations_per_second": 75.01286283065389,
-    "solver_conflicts_per_second": 30.005145132261557,
-    "solver_elapsed_ms_p95": 18.051109750000002,
-    "solver_peak_rss_kb_max": 11776,
-    "solver_learned_clause_glue_total": 2,
-    "solver_learned_clause_glue_samples": 2,
-    "solver_average_learned_clause_glue": 1.0
-    ,"solver_reduction_passes": 0
-    ,"solver_reduced_clauses": 0
-    ,"solver_deleted_clauses": 0
-    ,"solver_learned_clause_deletion_ratio": 0.0
-    ,"solver_proof_events": 12
-    ,"solver_proof_buffered_payload_bytes_max": 488
+    "solver_propagations_per_second": 142.43235709321198,
+    "solver_conflicts_per_second": 277.3682743394128,
+    "solver_elapsed_ms_p95": 18.3201458,
+    "solver_peak_rss_kb_max": 16000,
+    "solver_learned_clause_glue_total": 126,
+    "solver_learned_clause_glue_samples": 36,
+    "solver_average_learned_clause_glue": 3.5,
+    "solver_reduction_passes": 0,
+    "solver_reduced_clauses": 0,
+    "solver_deleted_clauses": 0,
+    "solver_learned_clause_deletion_ratio": 0.0,
+    "solver_proof_events": 138,
+    "solver_proof_buffered_payload_bytes_max": 3968
   },
   "budgets": {
     "solver_propagations_per_second_minimum_percent": 50,

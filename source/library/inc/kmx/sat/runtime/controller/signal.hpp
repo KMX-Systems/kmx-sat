@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <csignal>
     #include <cstdint>
 #endif
 
@@ -43,6 +44,8 @@ namespace kmx::sat::runtime::controller
         {
             if (!handlers_installed_)
             {
+                std::signal(SIGINT, &signal::handle_signal);
+                std::signal(SIGTERM, &signal::handle_signal);
                 handlers_installed_ = true;
                 ++install_count_;
             }
@@ -51,7 +54,7 @@ namespace kmx::sat::runtime::controller
         /// @brief Checks whether a termination request is currently pending.
         /// @return True if termination has been requested and not yet cleared.
         /// @throws None (noexcept).
-        bool termination_requested() const noexcept { return termination_requested_; }
+        bool termination_requested() const noexcept { return termination_requested_ || pending_signal_ != 0; }
 
         /// @brief Requests an orderly stop programmatically, without going through an OS signal.
         /// @throws None (noexcept).
@@ -78,6 +81,7 @@ namespace kmx::sat::runtime::controller
         void clear() noexcept
         {
             termination_requested_ = false;
+            pending_signal_ = 0;
             ++clear_count_;
         }
 
@@ -107,6 +111,7 @@ namespace kmx::sat::runtime::controller
         {
             handlers_installed_ = false;
             termination_requested_ = false;
+            pending_signal_ = 0;
             install_count_ = 0u;
             stop_request_count_ = 0u;
             os_signal_request_count_ = 0u;
@@ -122,6 +127,9 @@ namespace kmx::sat::runtime::controller
         }
 
     private:
+        static void handle_signal(const int) noexcept { pending_signal_ = 1; }
+
+        inline static volatile std::sig_atomic_t pending_signal_ {};
         bool handlers_installed_ {};
         bool termination_requested_ {};
         std::uint32_t install_count_ {};

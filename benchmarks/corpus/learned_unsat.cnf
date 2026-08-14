@@ -1,0 +1,10 @@
+c Pinned learned-clause-heavy no-unit UNSAT corpus case
+p cnf 3 8
+1 2 3 0
+-1 2 3 0
+1 -2 3 0
+-1 -2 3 0
+1 2 -3 0
+-1 2 -3 0
+1 -2 -3 0
+-1 -2 -3 0

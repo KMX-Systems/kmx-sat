@@ -198,6 +198,10 @@ namespace kmx::sat::io::fixture::binary
         /// @throws None (noexcept).
         void materialize_fixture_into_frontend(cdcl::external_frontend& frontend) noexcept
         {
+            if (!validate_payload())
+            {
+                return;
+            }
             frontend.clear_clauses();
             frontend.clear_assumptions();
             if (schema_.payload_kind_of() != schema::payload_kind::solve_request_fixture)

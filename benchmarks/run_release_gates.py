@@ -83,7 +83,11 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     corpus_manifest = ROOT / "benchmarks/corpus/manifest.json"
     corpus_glob = sorted((ROOT / "benchmarks/corpus").glob("*.cnf"))
-    solver_command = str(solver_path) + " {instance}"
+    solver_command = (
+        str(solver_path)
+        + " {instance} --restart-interval 1 --decision-restart-interval 1"
+        + " --reduction-interval 1 --reduction-fraction-percent 100"
+    )
     comparison_commands = []
     if args.cadical_command:
         comparison_commands.extend(["--compare-command", f"cadical={args.cadical_command}"])

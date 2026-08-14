@@ -52,6 +52,9 @@ namespace kmx::sat
         std::uint32_t configured_decision_conflict_maintenance_interval_ {};
         std::uint32_t configured_decision_chb_decay_interval_ {};
         std::uint32_t configured_decision_restart_decay_interval_ {};
+        std::uint64_t configured_restart_interval_ {};
+        std::uint64_t configured_decision_restart_interval_ {};
+        std::uint64_t configured_reduction_interval_ {};
         std::uint32_t configured_reduction_fraction_percent_ {50u};
         double configured_activity_retention_threshold_ {2.0};
         bool configured_chb_enabled_ {};
@@ -64,6 +67,9 @@ namespace kmx::sat
         bool has_configured_decision_conflict_maintenance_interval_ {};
         bool has_configured_decision_chb_decay_interval_ {};
         bool has_configured_decision_restart_decay_interval_ {};
+        bool has_configured_restart_interval_ {};
+        bool has_configured_decision_restart_interval_ {};
+        bool has_configured_reduction_interval_ {};
         bool has_configured_reduction_fraction_percent_ {};
         bool has_configured_activity_retention_threshold_ {};
         bool has_configured_chb_enabled_ {};
@@ -125,7 +131,9 @@ namespace kmx::sat
         {
             return has_configured_conflict_limit_ || has_configured_decision_limit_ || has_configured_enabled_pass_mask_
                 || has_configured_decision_conflict_maintenance_interval_ || has_configured_decision_chb_decay_interval_
-                || has_configured_decision_restart_decay_interval_ || has_configured_reduction_fraction_percent_ || has_configured_chb_enabled_
+                || has_configured_decision_restart_decay_interval_ || has_configured_restart_interval_
+                || has_configured_decision_restart_interval_ || has_configured_reduction_fraction_percent_ || has_configured_chb_enabled_
+                || has_configured_reduction_interval_
                 || has_configured_glue_restart_threshold_percent_
                 || has_configured_cold_storage_enabled_
                 || has_configured_activity_retention_threshold_
@@ -140,6 +148,9 @@ namespace kmx::sat
             configured_decision_conflict_maintenance_interval_ = 0u;
             configured_decision_chb_decay_interval_ = 0u;
             configured_decision_restart_decay_interval_ = 0u;
+            configured_restart_interval_ = 0u;
+            configured_decision_restart_interval_ = 0u;
+            configured_reduction_interval_ = 0u;
             configured_reduction_fraction_percent_ = 50u;
             configured_activity_retention_threshold_ = 2.0;
             configured_chb_enabled_ = false;
@@ -152,6 +163,9 @@ namespace kmx::sat
             has_configured_decision_conflict_maintenance_interval_ = false;
             has_configured_decision_chb_decay_interval_ = false;
             has_configured_decision_restart_decay_interval_ = false;
+            has_configured_restart_interval_ = false;
+            has_configured_decision_restart_interval_ = false;
+            has_configured_reduction_interval_ = false;
             has_configured_reduction_fraction_percent_ = false;
             has_configured_activity_retention_threshold_ = false;
             has_configured_chb_enabled_ = false;
@@ -176,6 +190,9 @@ namespace kmx::sat
             core_.set_decision_maintenance_intervals(conflict_maintenance_interval,
                                                      chb_decay_interval,
                                                      restart_decay_interval);
+            core_.set_restart_interval(has_configured_restart_interval_ ? configured_restart_interval_ : 0u);
+            core_.set_decision_restart_interval(has_configured_decision_restart_interval_ ? configured_decision_restart_interval_ : 0u);
+            core_.set_reduction_interval(has_configured_reduction_interval_ ? configured_reduction_interval_ : 0u);
             core_.set_chb_enabled(configured_chb_enabled_);
             core_.set_reduction_fraction_percent(has_configured_reduction_fraction_percent_ ? configured_reduction_fraction_percent_ : 50u);
             core_.set_activity_retention_threshold(has_configured_activity_retention_threshold_ ? configured_activity_retention_threshold_ : 2.0);
@@ -251,7 +268,14 @@ namespace kmx::sat
     {
         if (lit.raw() == 0)
         {
-            impl_->flush_pending_clause();
+            if (impl_->pending_clause_.empty())
+            {
+                impl_->core_.add_problem_clause(std::span<const literal> {});
+            }
+            else
+            {
+                impl_->flush_pending_clause();
+            }
             impl_->state_machine_.transition_to_adding();
             return;
         }
@@ -484,6 +508,24 @@ namespace kmx::sat
             recognized_option = true;
             impl_->has_configured_decision_restart_decay_interval_ = value >= 0;
             impl_->configured_decision_restart_decay_interval_ = value >= 0 ? static_cast<std::uint32_t>(value) : 0u;
+        }
+        else if (name == "restart_interval")
+        {
+            recognized_option = true;
+            impl_->has_configured_restart_interval_ = value >= 0;
+            impl_->configured_restart_interval_ = value >= 0 ? static_cast<std::uint64_t>(value) : 0u;
+        }
+        else if (name == "decision_restart_interval")
+        {
+            recognized_option = true;
+            impl_->has_configured_decision_restart_interval_ = value >= 0;
+            impl_->configured_decision_restart_interval_ = value >= 0 ? static_cast<std::uint64_t>(value) : 0u;
+        }
+        else if (name == "reduction_interval")
+        {
+            recognized_option = true;
+            impl_->has_configured_reduction_interval_ = value >= 0;
+            impl_->configured_reduction_interval_ = value >= 0 ? static_cast<std::uint64_t>(value) : 0u;
         }
         else if (name == "chb_enabled")
         {

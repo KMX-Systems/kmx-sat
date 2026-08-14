@@ -1,5 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <csignal>
+
 #include <kmx/sat/runtime/co_fsm_adapter.hpp>
 #include <kmx/sat/runtime/controller/portfolio.hpp>
 #include <kmx/sat/runtime/controller/signal.hpp>
@@ -73,6 +75,16 @@ namespace kmx::sat::runtime
             signal_controller.install_handlers();
             REQUIRE(signal_controller.install_count() == 1u);
 
+            REQUIRE(std::raise(SIGINT) == 0);
+            REQUIRE(signal_controller.termination_requested());
+            signal_controller.clear();
+            REQUIRE(!signal_controller.termination_requested());
+
+            REQUIRE(std::raise(SIGTERM) == 0);
+            REQUIRE(signal_controller.termination_requested());
+            signal_controller.clear();
+            REQUIRE(!signal_controller.termination_requested());
+
             signal_controller.notify_os_signal();
             REQUIRE(signal_controller.termination_requested());
             REQUIRE(signal_controller.stop_request_count() == 1u);
@@ -80,7 +92,7 @@ namespace kmx::sat::runtime
 
             signal_controller.clear();
             REQUIRE(!signal_controller.termination_requested());
-            REQUIRE(signal_controller.clear_count() == 1u);
+            REQUIRE(signal_controller.clear_count() == 3u);
 
             signal_controller.request_stop();
             REQUIRE(signal_controller.termination_requested());
@@ -88,14 +100,14 @@ namespace kmx::sat::runtime
 
             signal_controller.clear();
             REQUIRE(!signal_controller.termination_requested());
-            REQUIRE(signal_controller.clear_count() == 2u);
+            REQUIRE(signal_controller.clear_count() == 4u);
             const auto signal_after = signal_controller.metrics_snapshot();
             REQUIRE(signal_after.handlers_installed);
             REQUIRE(signal_after.termination_requested == false);
             REQUIRE(signal_after.install_count == 1u);
             REQUIRE(signal_after.stop_request_count == 2u);
             REQUIRE(signal_after.os_signal_request_count == 1u);
-            REQUIRE(signal_after.clear_count == 2u);
+            REQUIRE(signal_after.clear_count == 4u);
             REQUIRE(controller::signal::metrics_monotonic(signal_start, signal_after));
 
             signal_controller.reset_metrics();

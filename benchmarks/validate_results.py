@@ -67,6 +67,12 @@ def validate(document: dict) -> list[str]:
         for field in ("hash_matches_manifest", "status_matches_manifest", "repeats_deterministic"):
             if not isinstance(instance.get(field), bool):
                 errors.append(f"{prefix}.{field} must be boolean")
+        if instance.get("hash_matches_manifest") is not True:
+            errors.append(f"{prefix}.hash_matches_manifest must be true")
+        if instance.get("status_matches_manifest") is not True:
+            errors.append(f"{prefix}.status_matches_manifest must be true")
+        if instance.get("repeats_deterministic") is not True:
+            errors.append(f"{prefix}.repeats_deterministic must be true")
         solver = instance.get("solver")
         if isinstance(solver, dict):
             missing = required_result_fields - solver.keys()
@@ -75,6 +81,8 @@ def validate(document: dict) -> list[str]:
                 errors.append(f"{prefix}.solver elapsed_ns must be non-negative integer")
             if solver.get("status") not in valid_statuses:
                 errors.append(f"{prefix}.solver status must be one of {valid_statuses}")
+            if solver.get("timed_out") is not False:
+                errors.append(f"{prefix}.solver timed_out must be false")
             if not isinstance(solver.get("metrics"), dict) or not metric_names.issubset(solver["metrics"]):
                 errors.append(f"{prefix}.solver metrics must contain {sorted(metric_names)}")
         else:

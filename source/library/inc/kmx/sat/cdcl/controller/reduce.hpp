@@ -44,6 +44,7 @@ namespace kmx::sat::cdcl::controller
         void reset() noexcept
         {
             reduce_pending_ = false;
+            conflict_count_ = 0u;
             select_call_count_ = 0u;
             reduce_call_count_ = 0u;
             flush_call_count_ = 0u;
@@ -279,6 +280,17 @@ namespace kmx::sat::cdcl::controller
         /// @throws None (noexcept).
         void request_reduce() noexcept { reduce_pending_ = true; }
 
+        void tick_conflict() noexcept
+        {
+            ++conflict_count_;
+            if (reduction_interval_ != 0u && (conflict_count_ % reduction_interval_) == 0u)
+            {
+                reduce_pending_ = true;
+            }
+        }
+
+        void set_reduction_interval(const std::uint64_t interval) noexcept { reduction_interval_ = interval; }
+
         /// @brief Returns how many completed reduction passes have run.
         /// @return Number of completed reduction passes.
         /// @throws None (noexcept).
@@ -310,11 +322,13 @@ namespace kmx::sat::cdcl::controller
         std::uint64_t flush_call_count_ {};
         std::uint64_t update_tiers_call_count_ {};
         std::uint64_t reduction_pass_count_ {};
+        std::uint64_t conflict_count_ {};
         std::uint64_t last_selected_candidate_count_ {};
         std::uint64_t reduced_candidates_ {};
         std::uint64_t flushed_candidates_ {};
         std::vector<std::uint64_t> last_candidates_ {};
         std::uint32_t reduction_fraction_percent_ {50u};
         double activity_retention_threshold_ {2.0};
+        std::uint64_t reduction_interval_ {};
     };
 }

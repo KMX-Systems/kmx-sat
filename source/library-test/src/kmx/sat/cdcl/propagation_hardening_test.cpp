@@ -100,4 +100,28 @@ namespace kmx::sat::cdcl
             REQUIRE(solver.watch_entry_scan_count() > 0u);
         }
     }
+
+    TEST_CASE("live CDCL handles deep branching contradiction without units", "[sat]")
+    {
+        constexpr std::uint32_t variable_count {4u};
+        solver_core solver;
+
+        // Forbid every assignment with one 4-literal clause. No unit clause assists the root propagation phase.
+        for (std::uint32_t assignment {}; assignment < (std::uint32_t {1u} << variable_count); ++assignment)
+        {
+            std::array<literal, variable_count> forbidden {};
+            for (std::uint32_t index {}; index < variable_count; ++index)
+            {
+                const auto value = ((assignment >> index) & 1u) != 0u;
+                forbidden[index] = literal {variable {index + 1u}, value};
+            }
+            solver.add_problem_clause(std::span<const literal> {forbidden});
+        }
+
+        const auto result = solver.solve({});
+        REQUIRE(result == solver_core::status::unsatisfiable);
+        REQUIRE(solver.current_search_outcome() == search_coordinator::outcome::unsatisfiable);
+        REQUIRE(solver.propagator_call_count() > 0u);
+        REQUIRE(solver.learned_clause_count() > 0u);
+    }
 }

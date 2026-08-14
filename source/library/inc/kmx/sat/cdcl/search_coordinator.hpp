@@ -478,6 +478,8 @@ namespace kmx::sat::cdcl
             reduce_controller_.set_reduction_fraction_percent(percent);
         }
 
+        void set_reduction_interval(const std::uint64_t interval) noexcept { reduce_controller_.set_reduction_interval(interval); }
+
         /// @brief Returns the configured reduction quota percentage.
         std::uint32_t reduction_fraction_percent() const noexcept { return reduce_controller_.reduction_fraction_percent(); }
 
@@ -605,6 +607,7 @@ namespace kmx::sat::cdcl
             decision_engine_.notify_conflict();
 
             restart_controller_.tick_conflict();
+            reduce_controller_.tick_conflict();
             ++conflict_count_;
             if (conflict_limit_ != 0 && conflict_count_ >= conflict_limit_)
             {

@@ -15,6 +15,7 @@ CppApplication {
 
     cpp.cxxLanguageVersion: "c++26"
     cpp.enableRtti: false
+    cpp.warningLevel: "all"
     cpp.includePaths: [
         "inc",
         "inc_dep",

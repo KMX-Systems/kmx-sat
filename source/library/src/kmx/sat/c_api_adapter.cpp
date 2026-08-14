@@ -2,13 +2,63 @@
 /// @brief File-level API declarations and implementation details.
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #include <cstdlib>
+#include <limits>
 #include <kmx/sat/c_api_adapter.hpp>
+#include <kmx/sat/ipasir.h>
+
+struct kmx_sat_ipasir_solver final
+{
+    kmx::sat::c_api_adapter adapter {};
+};
+
+extern "C"
+{
+    kmx_sat_ipasir_solver* ipasir_init(void) { return new kmx_sat_ipasir_solver {}; }
+
+    void ipasir_release(kmx_sat_ipasir_solver* solver) { delete solver; }
+
+    void ipasir_add(kmx_sat_ipasir_solver* solver, const int lit)
+    {
+        if (solver != nullptr)
+        {
+            solver->adapter.ipasir_add(lit);
+        }
+    }
+
+    void ipasir_assume(kmx_sat_ipasir_solver* solver, const int lit)
+    {
+        if (solver != nullptr)
+        {
+            solver->adapter.ipasir_assume(lit);
+        }
+    }
+
+    int ipasir_solve(kmx_sat_ipasir_solver* solver)
+    {
+        return solver == nullptr ? 0 : solver->adapter.ipasir_solve();
+    }
+
+    int ipasir_val(const kmx_sat_ipasir_solver* solver, const int lit)
+    {
+        return solver == nullptr ? 0 : solver->adapter.ipasir_val(lit);
+    }
+
+    int ipasir_failed(const kmx_sat_ipasir_solver* solver, const int lit)
+    {
+        return solver != nullptr && solver->adapter.ipasir_failed(lit) ? 1 : 0;
+    }
+}
 
 namespace kmx::sat
 {
+    static bool is_valid_ipasir_literal(const std::int32_t lit) noexcept
+    {
+        return lit != 0 && lit != std::numeric_limits<std::int32_t>::min();
+    }
+
     static literal from_ipasir_literal(const std::int32_t lit) noexcept
     {
-        if (lit == 0)
+        if (!is_valid_ipasir_literal(lit))
         {
             return {};
         }
@@ -36,6 +86,10 @@ namespace kmx::sat
     /// @throws None (noexcept).
     void c_api_adapter::ipasir_add(const std::int32_t lit) noexcept
     {
+        if (lit == std::numeric_limits<std::int32_t>::min())
+        {
+            return;
+        }
         solver_.add_literal(from_ipasir_literal(lit));
     }
 
@@ -44,7 +98,7 @@ namespace kmx::sat
     /// @throws None (noexcept).
     void c_api_adapter::ipasir_assume(const std::int32_t lit) noexcept
     {
-        if (lit == 0)
+        if (!is_valid_ipasir_literal(lit))
         {
             return;
         }
@@ -76,7 +130,7 @@ namespace kmx::sat
     /// @throws None (noexcept).
     std::int32_t c_api_adapter::ipasir_val(const std::int32_t lit) const noexcept
     {
-        if (lit == 0)
+        if (!is_valid_ipasir_literal(lit))
         {
             return 0;
         }
@@ -98,7 +152,7 @@ namespace kmx::sat
     /// @throws None (noexcept).
     bool c_api_adapter::ipasir_failed(const std::int32_t lit) const noexcept
     {
-        if (lit == 0)
+        if (!is_valid_ipasir_literal(lit))
         {
             return false;
         }

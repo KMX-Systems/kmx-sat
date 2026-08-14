@@ -1,10 +1,13 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cstdint>
+#include <limits>
 #include <span>
 #include <vector>
 
 #include <kmx/sat/c_api_adapter.hpp>
+#include <kmx/sat/ipasir.h>
 #include <kmx/sat/literal.hpp>
 #include <kmx/sat/solver.hpp>
 #include <kmx/sat/solver_state_machine.hpp>
@@ -580,7 +583,111 @@ namespace kmx::sat
             REQUIRE(adapter.ipasir_val(0) == 0);
         }
 
+        SECTION("public IPASIR C ABI handles edge cases")
+        {
+            auto* c_solver = ipasir_init();
+            REQUIRE(c_solver != nullptr);
+            ipasir_add(c_solver, 1);
+            ipasir_add(c_solver, 1);
+            ipasir_add(c_solver, -1);
+            ipasir_add(c_solver, 1);
+            ipasir_add(c_solver, 0);
+            ipasir_add(c_solver, 1);
+            ipasir_add(c_solver, 0);
+            ipasir_add(c_solver, -1);
+            ipasir_add(c_solver, 0);
+            REQUIRE(ipasir_solve(c_solver) == 20);
+            REQUIRE(ipasir_failed(c_solver, 1) == 0);
+            REQUIRE(ipasir_val(c_solver, 0) == 0);
+            ipasir_assume(c_solver, 1);
+            REQUIRE(ipasir_solve(c_solver) == 20);
+            ipasir_release(c_solver);
+            REQUIRE(ipasir_solve(nullptr) == 0);
+            REQUIRE(ipasir_val(nullptr, 1) == 0);
+            REQUIRE(ipasir_failed(nullptr, 1) == 0);
+        }
+
         // removed std::cout: "solver facade test passed\n";
+    }
+
+    TEST_CASE("solver facade drives deterministic restart and reduction schedules", "[sat]")
+    {
+        solver configured_solver;
+        configured_solver.set_option("restart_interval", 1);
+        configured_solver.set_option("decision_restart_interval", 1);
+        configured_solver.set_option("reduction_interval", 1);
+        configured_solver.set_option("reduction_fraction_percent", 100);
+
+        const std::array<std::array<literal, 3>, 8> clauses {
+            std::array<literal, 3> {literal {variable {1u}, true}, literal {variable {2u}, true}, literal {variable {3u}, true}},
+            std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, true}, literal {variable {3u}, true}},
+            std::array<literal, 3> {literal {variable {1u}, true}, literal {variable {2u}, false}, literal {variable {3u}, true}},
+            std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, true}},
+            std::array<literal, 3> {literal {variable {1u}, true}, literal {variable {2u}, true}, literal {variable {3u}, false}},
+            std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, true}, literal {variable {3u}, false}},
+            std::array<literal, 3> {literal {variable {1u}, true}, literal {variable {2u}, false}, literal {variable {3u}, false}},
+            std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}},
+        };
+        for (const auto& clause: clauses)
+        {
+            configured_solver.add_clause(std::span<const literal> {clause});
+        }
+
+        const auto result = configured_solver.solve(solve_request {});
+        const auto statistics = configured_solver.statistics();
+
+        REQUIRE(result.status_of() == solve_result::status::unsatisfiable);
+        REQUIRE(statistics.conflicts > 0u);
+        REQUIRE(statistics.learned_clauses > 0u);
+        REQUIRE(statistics.restarts > 0u);
+        REQUIRE(statistics.reduction_passes > 0u);
+    }
+
+    TEST_CASE("public IPASIR compatibility matrix", "[sat]")
+    {
+        REQUIRE(ipasir_solve(nullptr) == 0);
+        ipasir_add(nullptr, 1);
+        ipasir_assume(nullptr, 1);
+        REQUIRE(ipasir_val(nullptr, 1) == 0);
+        REQUIRE(ipasir_failed(nullptr, 1) == 0);
+        ipasir_release(nullptr);
+
+        auto* empty_solver = ipasir_init();
+        REQUIRE(empty_solver != nullptr);
+        REQUIRE(ipasir_solve(empty_solver) == 10);
+        REQUIRE(ipasir_val(empty_solver, 1) == 0);
+        ipasir_release(empty_solver);
+
+        auto* empty_clause_solver = ipasir_init();
+        ipasir_add(empty_clause_solver, 0);
+        REQUIRE(ipasir_solve(empty_clause_solver) == 20);
+        ipasir_release(empty_clause_solver);
+
+        auto* tautology_solver = ipasir_init();
+        ipasir_add(tautology_solver, 1);
+        ipasir_add(tautology_solver, 1);
+        ipasir_add(tautology_solver, -1);
+        ipasir_add(tautology_solver, 0);
+        REQUIRE(ipasir_solve(tautology_solver) == 10);
+        ipasir_release(tautology_solver);
+
+        auto* assumption_solver = ipasir_init();
+        ipasir_add(assumption_solver, 1);
+        ipasir_add(assumption_solver, 0);
+        ipasir_assume(assumption_solver, -1);
+        REQUIRE(ipasir_solve(assumption_solver) == 20);
+        REQUIRE(ipasir_failed(assumption_solver, -1) == 1);
+        REQUIRE(ipasir_failed(assumption_solver, 1) == 0);
+        ipasir_release(assumption_solver);
+
+        auto* invalid_literal_solver = ipasir_init();
+        constexpr auto invalid_literal = std::numeric_limits<std::int32_t>::min();
+        ipasir_add(invalid_literal_solver, invalid_literal);
+        ipasir_assume(invalid_literal_solver, invalid_literal);
+        REQUIRE(ipasir_val(invalid_literal_solver, invalid_literal) == 0);
+        REQUIRE(ipasir_failed(invalid_literal_solver, invalid_literal) == 0);
+        REQUIRE(ipasir_solve(invalid_literal_solver) == 10);
+        ipasir_release(invalid_literal_solver);
     }
 
 } // namespace

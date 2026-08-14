@@ -36,6 +36,21 @@ def validate(path: Path) -> list[str]:
             literals = operation.get("literals")
             if not isinstance(literals, list) or not literals or any(not isinstance(value, int) or value == 0 for value in literals):
                 errors.append(f"line {index}: invalid literals")
+        if operation.get("kind") == "set_option":
+            option = operation.get("option")
+            value = operation.get("value")
+            if not isinstance(option, str) or not option:
+                errors.append(f"line {index}: invalid option name")
+            if not isinstance(value, int):
+                errors.append(f"line {index}: invalid option value")
+        if operation.get("kind") == "value_of":
+            variable = operation.get("variable")
+            if not isinstance(variable, int) or variable <= 0:
+                errors.append(f"line {index}: invalid variable")
+        if operation.get("kind") == "failed":
+            literal = operation.get("literal")
+            if not isinstance(literal, int) or literal == 0:
+                errors.append(f"line {index}: invalid failed literal")
         if operation.get("kind") == "solve" and any(
             not isinstance(operation.get(field), int) or operation[field] < 0 for field in ("conflict_limit", "decision_limit")
         ):

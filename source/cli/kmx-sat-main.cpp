@@ -67,7 +67,9 @@ int main(int argc, char* argv[])
 {
     if (argc < 2) {
         std::cerr << "usage: " << argv[0] << " <cnf-file> [--assume <lit>]... [--decision-limit <n>]"
-                  << " [--conflict-limit <n>]\n";
+                  << " [--conflict-limit <n>] [--restart-interval <n>]"
+                  << " [--decision-restart-interval <n>] [--reduction-interval <n>]"
+                  << " [--reduction-fraction-percent <n>]\n";
         return 1;
     }
 
@@ -98,6 +100,14 @@ int main(int argc, char* argv[])
             request.decision_limit = std::strtoull(argv[++index], nullptr, 10);
         } else if (option == "--conflict-limit" && index + 1 < argc) {
             request.conflict_limit = std::strtoull(argv[++index], nullptr, 10);
+        } else if (option == "--restart-interval" && index + 1 < argc) {
+            solver.set_option("restart_interval", std::strtoull(argv[++index], nullptr, 10));
+        } else if (option == "--decision-restart-interval" && index + 1 < argc) {
+            solver.set_option("decision_restart_interval", std::strtoull(argv[++index], nullptr, 10));
+        } else if (option == "--reduction-interval" && index + 1 < argc) {
+            solver.set_option("reduction_interval", std::strtoull(argv[++index], nullptr, 10));
+        } else if (option == "--reduction-fraction-percent" && index + 1 < argc) {
+            solver.set_option("reduction_fraction_percent", std::strtoull(argv[++index], nullptr, 10));
         } else {
             std::cerr << "Error: unknown or incomplete option: " << option << "\n";
             return 1;

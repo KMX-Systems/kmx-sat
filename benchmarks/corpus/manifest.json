@@ -7,6 +7,16 @@
       "expected_status": "SATISFIABLE"
     },
     {
+      "file": "deep_implication.cnf",
+      "sha256": "43ae8f7749a3fa77d6cc335cba6750721ebee928fccbf19e7228445666776931",
+      "expected_status": "SATISFIABLE"
+    },
+    {
+      "file": "learned_unsat.cnf",
+      "sha256": "bf7f6522b567210fb8538de68352e4fb167c4d0ea9739d9ebcea988f7e5b2cd3",
+      "expected_status": "UNSATISFIABLE"
+    },
+    {
       "file": "sat_unit.cnf",
       "sha256": "8a3f04e8f347c791e22486daea0512e406fbe6d0a8f06d2ad167ca6e1cf4b10f",
       "expected_status": "SATISFIABLE"
@@ -17,9 +27,24 @@
       "expected_status": "UNSATISFIABLE"
     },
     {
+      "file": "proof_unsat.cnf",
+      "sha256": "7ca1c7d1fdf79d659efd79d9d2f2f7083380b4273cf8bb54464eb95cdd7d7a96",
+      "expected_status": "UNSATISFIABLE"
+    },
+    {
+      "file": "restart_reduction_unsat.cnf",
+      "sha256": "766e4d9d1a1d7fc25671e79f52f993e9fdeab3fe9e42366f5f1f8f355fcd7d53",
+      "expected_status": "UNSATISFIABLE"
+    },
+    {
       "file": "unsat_units.cnf",
       "sha256": "b043434f7ba4a33555786beba54e44b4b0c7488c31a594551cb9314909c45a86",
       "expected_status": "UNSATISFIABLE"
+    },
+    {
+      "file": "wide_clause_sat.cnf",
+      "sha256": "5bc6bb04b0c1520f5f6794f4a5ff53768c887fde50d067217f2ffb5536e47705",
+      "expected_status": "SATISFIABLE"
     }
   ]
 }

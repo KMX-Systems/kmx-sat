@@ -10,5 +10,6 @@ Project {
         "runtime-test.qbs",
         "io-test.qbs",
         "lib-test.qbs",
+        "c_api_smoke.qbs",
     ]
 }
