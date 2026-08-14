@@ -77,10 +77,11 @@ namespace kmx::sat::simplify
             pending_shrink_ref_ = {};
             pending_target_size_ = 0u;
 
-            if (database_ == nullptr || !ref.valid() || !database_->storage_of().is_alive(ref))
+            auto& storage = database_->storage_of();
+            if (database_ == nullptr || !ref.valid() || !storage.is_alive(ref))
                 return;
 
-            const auto current_size = database_->storage_of().literal_count(ref);
+            const auto current_size = storage.literal_count(ref);
             if (current_size <= 1u)
                 return;
         }

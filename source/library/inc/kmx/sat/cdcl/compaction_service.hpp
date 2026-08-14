@@ -90,6 +90,7 @@ namespace kmx::sat::cdcl
                     auto literals = clause_database_->storage_of().literals_of(ref);
                     for (auto& lit: literals)
                         lit = remap_literal(lit);
+
                     const auto relocated_ref = clause_database_->storage_of().relocate_clause(ref);
                     if (relocated_ref.valid() && relocated_ref != ref)
                     {

@@ -55,7 +55,7 @@ namespace kmx::sat::simplify
 
             auto& storage = database_->storage_of();
             clauses_.clear();
-            const auto append_clause = [&](const cdcl::clause::ref_t ref) noexcept
+            const auto append_clause = [&storage, this](const cdcl::clause::ref_t ref) noexcept
             {
                 const auto literals = storage.view_literals(ref);
                 clauses_.push_back(indexed_clause {ref, literals, signature_of(literals), true});
@@ -132,10 +132,10 @@ namespace kmx::sat::simplify
         /// @throws None (noexcept).
         bool is_subsumed(const cdcl::clause::ref_t ref) const noexcept
         {
-            if (database_ == nullptr || !ref.valid() || !database_->storage_of().is_alive(ref))
+            auto& storage = database_->storage_of();
+            if (database_ == nullptr || !ref.valid() || !storage.is_alive(ref))
                 return false;
 
-            auto& storage = database_->storage_of();
             const auto candidate_size = storage.literal_count(ref);
             const auto candidate_clause = storage.view_literals(ref);
             bool subsumed {};
@@ -155,16 +155,17 @@ namespace kmx::sat::simplify
         /// @throws None (noexcept).
         void strengthen_subsumed_clause(const cdcl::clause::ref_t ref) noexcept
         {
-            if (database_ == nullptr || !ref.valid() || !database_->storage_of().is_alive(ref))
+            auto& storage = database_->storage_of();
+            if (database_ == nullptr || !ref.valid() || !storage.is_alive(ref))
                 return;
 
-            auto literals = database_->storage_of().literals_of(ref);
+            auto literals = storage.literals_of(ref);
             if (literals.size() <= 1u)
                 return;
 
             literals.pop_back();
-            database_->storage_of().rewrite_clause_literals(ref, std::span<const literal> {literals.data(), literals.size()});
-            database_->storage_of().shrink_clause(ref, static_cast<std::uint32_t>(literals.size()));
+            storage.rewrite_clause_literals(ref, std::span<const literal> {literals.data(), literals.size()});
+            storage.shrink_clause(ref, static_cast<std::uint32_t>(literals.size()));
             if (proof_manager_ != nullptr)
                 proof_manager_->on_shrink_clause(ref, literals);
             ++strengthened_count_;

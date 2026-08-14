@@ -137,6 +137,11 @@ namespace kmx::sat::cdcl::clause
             return arena_.view_literals(resolve_ref(ref));
         }
 
+        [[nodiscard]] std::span<literal> mutable_literals(const ref_t ref) noexcept
+        {
+            return arena_.mutable_literals(resolve_ref(ref));
+        }
+
         /// @brief Returns the number of literals currently stored for a clause.
         /// @param ref Reference to the clause to query.
         /// @return Literal count, or zero for an invalid reference.

@@ -118,23 +118,19 @@ namespace kmx::sat::simplify::extractor
                 return false;
 
             bool found = false;
-            database_->iterate_irredundant(
-                [&](const cdcl::clause::ref_t ref) noexcept
-                {
-                    const auto literals = database_->storage_of().view_literals(ref);
-                    if (literals.size() == 1u && literals.front() == lit)
+            const auto& storage = database_->storage_of();
+            const auto search_ref = [&found, &storage, lit](const cdcl::clause::ref_t ref) noexcept
+            {
+                const auto literals = storage.view_literals(ref);
+                 if (literals.size() == 1u && literals.front() == lit)
                         found = true;
-                });
+            };
+
+            database_->iterate_irredundant(search_ref);
             if (found)
                 return true;
 
-            database_->iterate_redundant(
-                [&](const cdcl::clause::ref_t ref) noexcept
-                {
-                    const auto literals = database_->storage_of().view_literals(ref);
-                    if (literals.size() == 1u && literals.front() == lit)
-                        found = true;
-                });
+            database_->iterate_redundant(search_ref);
             return found;
         }
 

@@ -108,6 +108,15 @@ namespace kmx::sat::cdcl::bank
             return {reinterpret_cast<const literal*>(active_.data() + payload_offset), count};
         }
 
+        [[nodiscard]] std::span<literal> mutable_literals(const clause::ref_t ref) noexcept
+        {
+            const auto count = literal_count(ref);
+            if (count == 0u)
+                return {};
+            const auto payload_offset = static_cast<std::size_t>(ref.offset()) + sizeof(std::uint32_t);
+            return {reinterpret_cast<literal*>(active_.data() + payload_offset), count};
+        }
+
         /// @brief Truncates a clause's stored literal count in place, without moving or reallocating its bytes.
         /// @param ref Reference to the clause to shrink.
         /// @param new_count New literal count, which must not exceed the clause's current stored count.

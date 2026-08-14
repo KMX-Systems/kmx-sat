@@ -62,12 +62,13 @@ namespace kmx::sat::simplify::engine
                 {
                     changed = false;
                     auto assignments = collect_unit_assignments();
+                    auto& storage = database_->storage_of();
                     for (const auto ref: active_refs())
                     {
-                        if (!ref.valid() || database_->is_garbage(ref) || !database_->storage_of().is_alive(ref))
+                        if (!ref.valid() || database_->is_garbage(ref) || !storage.is_alive(ref))
                             continue;
 
-                        const auto clause = database_->storage_of().view_literals(ref);
+                        const auto clause = storage.view_literals(ref);
                         if (clause.size() <= 1u)
                             continue;
 
@@ -93,8 +94,8 @@ namespace kmx::sat::simplify::engine
                         if (satisfied || survivors.size() != 1u || survivors.size() >= clause.size())
                             continue;
 
-                        database_->storage_of().rewrite_clause_literals(ref, survivors);
-                        database_->storage_of().shrink_clause(ref, 1u);
+                        storage.rewrite_clause_literals(ref, survivors);
+                        storage.shrink_clause(ref, 1u);
                         if (proof_manager_ != nullptr)
                             proof_manager_->on_shrink_clause(ref, survivors);
 

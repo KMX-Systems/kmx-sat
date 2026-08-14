@@ -35,6 +35,8 @@ namespace kmx::sat::cdcl
 
         void set_binary_literal(const literal lit) noexcept { binary_literal_ = lit; }
 
+        void set_blocking_literal(const literal lit) noexcept { blocking_literal_ = lit; }
+
         /// @brief Compares two watch entries by the clause reference they identify.
         /// @return True if both entries refer to the same clause.
         /// @throws None (noexcept).
