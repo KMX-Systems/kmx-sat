@@ -7,6 +7,7 @@
     #include <array>
     #include <cstddef>
     #include <cstdint>
+    #include <unordered_set>
     #include <vector>
 #endif
 #include <kmx/sat/cdcl/clause/database.hpp>
@@ -178,24 +179,15 @@ namespace kmx::sat::simplify::extractor
             return {inputs[1], inputs[0]};
         }
 
-        bool has_binary_implication_clause(const std::vector<std::vector<literal>>& binary_clauses, const std::uint32_t antecedent,
-                                           const std::uint32_t output) const noexcept
+        static std::uint64_t implication_key(const std::uint32_t antecedent, const std::uint32_t output) noexcept
         {
-            return std::find_if(binary_clauses.begin(), binary_clauses.end(),
-                                [&](const std::vector<literal>& clause) noexcept
-                                {
-                                    if (clause.size() != 2u)
-                                        return false;
+            return (static_cast<std::uint64_t>(antecedent) << 32u) | output;
+        }
 
-                                    const auto& first = clause[0];
-                                    const auto& second = clause[1];
-
-                                    const bool first_pattern = first.variable_of().index() == antecedent && !first.is_negated() &&
-                                                               second.variable_of().index() == output && second.is_negated();
-                                    const bool second_pattern = second.variable_of().index() == antecedent && !second.is_negated() &&
-                                                                first.variable_of().index() == output && first.is_negated();
-                                    return first_pattern || second_pattern;
-                                }) != binary_clauses.end();
+        bool has_binary_implication_clause(const std::unordered_set<std::uint64_t>& binary_implications,
+                                           const std::uint32_t antecedent, const std::uint32_t output) const noexcept
+        {
+            return binary_implications.contains(implication_key(antecedent, output));
         }
 
         void collect_clauses(std::vector<std::vector<literal>>& out) const noexcept
@@ -224,13 +216,22 @@ namespace kmx::sat::simplify::extractor
             if (clauses.empty())
                 return;
 
-            std::vector<std::vector<literal>> binary_clauses {};
             std::vector<std::vector<literal>> ternary_clauses {};
+            std::unordered_set<std::uint64_t> binary_implications {};
             for (const auto& clause: clauses)
+            {
                 if (clause.size() == 2u)
-                    binary_clauses.push_back(clause);
+                {
+                    const auto& first = clause[0];
+                    const auto& second = clause[1];
+                    if (!first.is_negated() && second.is_negated())
+                        binary_implications.insert(implication_key(first.variable_of().index(), second.variable_of().index()));
+                    else if (first.is_negated() && !second.is_negated())
+                        binary_implications.insert(implication_key(second.variable_of().index(), first.variable_of().index()));
+                }
                 else if (clause.size() == 3u)
                     ternary_clauses.push_back(clause);
+            }
 
             for (const auto& clause: ternary_clauses)
             {
@@ -258,8 +259,8 @@ namespace kmx::sat::simplify::extractor
                 if (output == 0u || negative_count != 2u)
                     continue;
 
-                const bool has_left = has_binary_implication_clause(binary_clauses, negative_inputs[0], output);
-                const bool has_right = has_binary_implication_clause(binary_clauses, negative_inputs[1], output);
+                const bool has_left = has_binary_implication_clause(binary_implications, negative_inputs[0], output);
+                const bool has_right = has_binary_implication_clause(binary_implications, negative_inputs[1], output);
                 if (!has_left || !has_right)
                     continue;
 

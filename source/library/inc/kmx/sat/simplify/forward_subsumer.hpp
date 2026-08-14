@@ -54,19 +54,22 @@ namespace kmx::sat::simplify
             database_->iterate_irredundant([&](const cdcl::clause::ref_t ref) noexcept { refs.push_back(ref); });
             database_->iterate_redundant([&](const cdcl::clause::ref_t ref) noexcept { refs.push_back(ref); });
 
+            auto& storage = database_->storage_of();
             for (std::size_t left_index {}; left_index < refs.size(); ++left_index)
             {
                 if (database_->is_garbage(refs[left_index]))
                     continue;
 
-                const auto left_clause = database_->storage_of().literals_of(refs[left_index]);
+                const auto left_size = storage.literal_count(refs[left_index]);
+                const auto left_clause = storage.literals_of(refs[left_index]);
                 for (std::size_t right_index {left_index + 1u}; right_index < refs.size(); ++right_index)
                 {
                     if (database_->is_garbage(refs[right_index]))
                         continue;
 
-                    const auto right_clause = database_->storage_of().literals_of(refs[right_index]);
-                    if (clause_subsumes(left_clause, right_clause))
+                    const auto right_size = storage.literal_count(refs[right_index]);
+                    const auto right_clause = storage.literals_of(refs[right_index]);
+                    if (left_size <= right_size && clause_subsumes(left_clause, right_clause))
                     {
                         if (proof_manager_ != nullptr)
                             proof_manager_->on_delete_clause(refs[right_index]);
@@ -74,7 +77,7 @@ namespace kmx::sat::simplify
                         last_subsumed_ref_ = refs[right_index];
                         ++subsumed_count_;
                     }
-                    else if (clause_subsumes(right_clause, left_clause))
+                    else if (right_size <= left_size && clause_subsumes(right_clause, left_clause))
                     {
                         if (proof_manager_ != nullptr)
                             proof_manager_->on_delete_clause(refs[left_index]);
@@ -98,13 +101,17 @@ namespace kmx::sat::simplify
             if (database_ == nullptr || !ref.valid() || !database_->storage_of().is_alive(ref))
                 return false;
 
-            const auto candidate_clause = database_->storage_of().literals_of(ref);
+            auto& storage = database_->storage_of();
+            const auto candidate_size = storage.literal_count(ref);
+            const auto candidate_clause = storage.literals_of(ref);
             bool subsumed {};
             const auto scan = [&](const cdcl::clause::ref_t other_ref) noexcept
             {
                 if (subsumed || other_ref == ref)
                     return;
-                const auto other_clause = database_->storage_of().literals_of(other_ref);
+                if (storage.literal_count(other_ref) > candidate_size)
+                    return;
+                const auto other_clause = storage.literals_of(other_ref);
                 if (clause_subsumes(other_clause, candidate_clause))
                     subsumed = true;
             };

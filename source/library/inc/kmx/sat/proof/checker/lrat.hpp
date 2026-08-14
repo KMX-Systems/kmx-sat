@@ -124,13 +124,6 @@ namespace kmx::sat::proof::checker
         }
 
     private:
-        /// @brief Checks whether `lit` is currently satisfied under `assigned`.
-        [[nodiscard]] static bool is_satisfied(const literal lit, const std::unordered_map<variable::index_t, bool>& assigned) noexcept
-        {
-            const auto entry = assigned.find(lit.variable_of().index());
-            return entry != assigned.end() && entry->second != lit.is_negated();
-        }
-
         /// @brief Performs reverse unit propagation: assumes `derived` false and replays `chain` looking for a
         /// conflict, exactly as an LRAT replay checker would.
         [[nodiscard]] bool verify_chain(const std::vector<literal>& derived, const std::vector<clause::id::value_t>& chain) const noexcept

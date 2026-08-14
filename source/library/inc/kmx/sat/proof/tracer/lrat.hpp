@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <algorithm>
     #include <cstdint>
     #include <vector>
 #endif
@@ -80,8 +81,9 @@ namespace kmx::sat::proof::tracer
             record.clause_id_value = event.clause_id.value();
             record.literals = event.literals;
             record.antecedent_id_values.reserve(event.antecedent_ids.size());
-            for (const auto antecedent: event.antecedent_ids)
-                record.antecedent_id_values.push_back(antecedent.value());
+            std::transform(event.antecedent_ids.begin(), event.antecedent_ids.end(),
+                           std::back_inserter(record.antecedent_id_values),
+                           [](const auto antecedent) { return antecedent.value(); });
             emitted_events_.push_back(record);
         }
 

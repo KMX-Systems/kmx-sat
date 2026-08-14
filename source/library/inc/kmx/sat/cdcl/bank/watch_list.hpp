@@ -42,12 +42,13 @@ namespace kmx::sat::cdcl::bank
         void watch_literal(const literal lit, const watch entry) noexcept
         {
             auto& list = ensure_list(lit);
-            const auto existing = std::find_if(list.begin(), list.end(),
-                                               [&](const watch& current) noexcept { return current.clause_ref() == entry.clause_ref(); });
-            if (existing != list.end())
+            for (auto& existing : list)
             {
-                *existing = entry;
-                return;
+                if (existing.clause_ref() == entry.clause_ref())
+                {
+                    existing = entry;
+                    return;
+                }
             }
             list.push_back(entry);
         }

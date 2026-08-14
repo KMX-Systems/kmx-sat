@@ -49,3 +49,6 @@ tmp/
 doc/
 reference/
 __pycache__/
+clean-checkout-gates/
+tools/bin/
+tools/veripb-venv/

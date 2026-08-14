@@ -61,7 +61,12 @@ namespace kmx::sat::telemetry
         /// @brief Logs a literal-related event (for example assignment or watch change).
         /// @param lit Literal being logged.
         /// @throws None (noexcept).
-        void log_literal(const literal lit) noexcept { events_.push_back({event_kind::literal, last_ref_offset_, {}, lit}); }
+        void log_literal(const literal lit) noexcept
+        {
+            events_.push_back({event_kind::literal, last_ref_offset_, {}, lit});
+            last_literal_index_ = events_.size() - 1u;
+            has_last_literal_ = true;
+        }
 
         /// @brief Logs a gate-extraction event from `extractor::gate`.
         /// @throws None (noexcept).
@@ -93,22 +98,17 @@ namespace kmx::sat::telemetry
 
         const event& last_literal() const noexcept
         {
-            for (auto it = events_.rbegin(); it != events_.rend(); ++it)
-                if (it->kind == event_kind::literal)
-                    return *it;
+            if (has_last_literal_)
+                return events_[last_literal_index_];
             return last_event();
         }
 
-        std::uint64_t last_clause_ref() const noexcept
-        {
-            for (auto it = events_.rbegin(); it != events_.rend(); ++it)
-                if (it->kind == event_kind::clause)
-                    return it->ref_offset;
-            return last_ref_offset_;
-        }
+        std::uint64_t last_clause_ref() const noexcept { return last_ref_offset_; }
 
     private:
         std::vector<event> events_ {};
         std::uint64_t last_ref_offset_ {};
+        std::size_t last_literal_index_ {};
+        bool has_last_literal_ {};
     };
 }

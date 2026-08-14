@@ -3,6 +3,9 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <algorithm>
+    #include <charconv>
+    #include <cstdint>
     #include <span>
     #include <string>
     #include <vector>
@@ -47,12 +50,17 @@ namespace kmx::sat::io::fixture::binary
             serialized_fixture_.clear();
             format_.clear();
             checksum_ = 0u;
+            max_variable_index_ = 0u;
         }
 
         /// @brief Appends one normalized clause's literals to the fixture payload.
         /// @param literals Literals composing the clause.
         /// @throws None (noexcept).
-        void append_clause(const literal_span literals) noexcept { clauses_.emplace_back(literals.begin(), literals.end()); }
+        void append_clause(const literal_span literals) noexcept
+        {
+            clauses_.emplace_back(literals.begin(), literals.end());
+            update_max_variable_index(literals);
+        }
 
         /// @brief Appends assumption literals to a `solve_request_fixture` payload.
         /// @param assumption_literals Assumption literals to append.
@@ -61,6 +69,7 @@ namespace kmx::sat::io::fixture::binary
         {
             assumptions_.insert(assumptions_.end(), assumption_literals.begin(), assumption_literals.end());
             request_.assumptions = assumptions_;
+            update_max_variable_index(assumption_literals);
         }
 
         /// @brief Records the full solve-request limits payload for a `solve_request_fixture`.
@@ -70,6 +79,10 @@ namespace kmx::sat::io::fixture::binary
         {
             request_ = request;
             assumptions_ = request.assumptions;
+            max_variable_index_ = 0u;
+            for (const auto& clause: clauses_)
+                update_max_variable_index(clause);
+            update_max_variable_index(assumptions_);
         }
 
         /// @brief Completes the fixture payload and finalizes envelope metadata.
@@ -80,13 +93,31 @@ namespace kmx::sat::io::fixture::binary
                 write_checksum();
 
             format_.clear();
-            format_.write_report_line("SATB " + std::to_string(schema_.current_version()) + " " +
-                                      std::to_string(static_cast<int>(schema_.payload_kind_of())) + " " +
-                                      std::to_string(schema_.feature_flags()) + " " + std::to_string(max_variable_index()) + " " +
-                                      std::to_string(clauses_.size()) + " " + std::to_string(assumptions_.size()) + " " +
-                                      std::to_string(request_.conflict_limit) + " " + std::to_string(request_.decision_limit) + " " +
-                                      std::to_string(request_.enabled_pass_mask) + " " + std::to_string(request_.strict_mode ? 1 : 0) +
-                                      " " + std::to_string(checksum_));
+            std::string header {};
+            header.reserve(128u);
+            header.append("SATB ");
+            append_number(header, schema_.current_version());
+            header.push_back(' ');
+            append_number(header, static_cast<std::uint64_t>(schema_.payload_kind_of()));
+            header.push_back(' ');
+            append_number(header, schema_.feature_flags());
+            header.push_back(' ');
+            append_number(header, max_variable_index_);
+            header.push_back(' ');
+            append_number(header, clauses_.size());
+            header.push_back(' ');
+            append_number(header, assumptions_.size());
+            header.push_back(' ');
+            append_number(header, request_.conflict_limit);
+            header.push_back(' ');
+            append_number(header, request_.decision_limit);
+            header.push_back(' ');
+            append_number(header, request_.enabled_pass_mask);
+            header.push_back(' ');
+            append_number(header, request_.strict_mode ? 1u : 0u);
+            header.push_back(' ');
+            append_number(header, checksum_);
+            format_.write_report_line(header);
 
             for (const auto& clause: clauses_)
             {
@@ -108,7 +139,7 @@ namespace kmx::sat::io::fixture::binary
         void write_checksum() noexcept
         {
             validator fixture_validator {};
-            fixture_validator.set_declared_variable_count(max_variable_index());
+            fixture_validator.set_declared_variable_count(max_variable_index_);
             fixture_validator.set_clauses(clauses_);
             fixture_validator.set_assumptions(assumptions_);
             fixture_validator.set_limits_payload(request_);
@@ -127,21 +158,17 @@ namespace kmx::sat::io::fixture::binary
         std::uint64_t checksum() const noexcept { return checksum_; }
 
     private:
-        std::uint32_t max_variable_index() const noexcept
+        static void append_number(std::string& output, const std::uint64_t value) noexcept
         {
-            std::uint32_t max_index {};
-            const auto update = [&max_index](const literal lit) noexcept
-            {
-                if (lit.variable_of().index() > max_index)
-                    max_index = lit.variable_of().index();
-            };
+            char number[32] {};
+            const auto result = std::to_chars(number, number + sizeof(number), value);
+            output.append(number, static_cast<std::size_t>(result.ptr - number));
+        }
 
-            for (const auto& clause: clauses_)
-                for (const auto lit: clause)
-                    update(lit);
-            for (const auto lit: assumptions_)
-                update(lit);
-            return max_index;
+        void update_max_variable_index(const literal_span literals) noexcept
+        {
+            for (const auto lit: literals)
+                max_variable_index_ = std::max(max_variable_index_, lit.variable_of().index());
         }
 
         io::writer::format format_ {};
@@ -151,5 +178,6 @@ namespace kmx::sat::io::fixture::binary
         solve_request request_ {};
         std::string serialized_fixture_ {};
         std::uint64_t checksum_ {};
+        std::uint32_t max_variable_index_ {};
     };
 }

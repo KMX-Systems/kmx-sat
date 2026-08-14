@@ -2,9 +2,6 @@
 /// @brief Moving averages for restart, reduce, and focused/stable modes.
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
-#ifndef PCH
-#endif
-#include <kmx/sat/telemetry/solver_statistics.hpp>
 
 namespace kmx::sat::telemetry
 {
@@ -51,7 +48,6 @@ namespace kmx::sat::telemetry
         double fast_vs_slow_margin() const noexcept { return glue_fast_ - glue_slow_; }
 
     private:
-        solver_statistics solver_statistics_ {};
         double glue_fast_ {0.0};
         double glue_slow_ {0.0};
         double decision_rate_ {0.0};

@@ -5,6 +5,7 @@
 #ifndef PCH
     #include <cstddef>
     #include <span>
+    #include <unordered_set>
     #include <vector>
 #endif
 
@@ -134,14 +135,13 @@ namespace kmx::sat::simplify
             if (to_flush.empty())
                 return;
 
+            std::unordered_set<cdcl::clause::ref_t::offset_t> to_flush_offsets {};
+            to_flush_offsets.reserve(to_flush.size());
+            for (const auto ref: to_flush)
+                to_flush_offsets.insert(ref.offset());
+
             database.flush_satisfied(
-                [&](const cdcl::clause::ref_t ref) noexcept
-                {
-                    for (const auto candidate: to_flush)
-                        if (candidate == ref)
-                            return true;
-                    return false;
-                });
+                [&](const cdcl::clause::ref_t ref) noexcept { return to_flush_offsets.contains(ref.offset()); });
             last_flush_removed_count_ += to_flush.size();
         }
 

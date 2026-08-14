@@ -100,6 +100,7 @@ namespace kmx::sat::cdcl::clause
         ref_t resolve_ref(const ref_t ref) const noexcept
         {
             auto resolved = ref;
+            const auto original = ref.offset();
             while (resolved.valid())
             {
                 const auto it = relocated_refs_.find(resolved.offset());
@@ -107,6 +108,8 @@ namespace kmx::sat::cdcl::clause
                     break;
                 resolved = ref_t {it->second};
             }
+            if (resolved.offset() != original)
+                relocated_refs_[original] = resolved.offset();
             return resolved;
         }
 
@@ -130,6 +133,12 @@ namespace kmx::sat::cdcl::clause
         /// @return Literals currently stored for `ref`.
         /// @throws None (noexcept).
         [[nodiscard]] std::vector<literal> literals_of(const ref_t ref) const noexcept { return arena_.read_literals(resolve_ref(ref)); }
+
+        /// @brief Returns the number of literals currently stored for a clause.
+        /// @param ref Reference to the clause to query.
+        /// @return Literal count, or zero for an invalid reference.
+        /// @throws None (noexcept).
+        [[nodiscard]] std::uint32_t literal_count(const ref_t ref) const noexcept { return arena_.literal_count(resolve_ref(ref)); }
 
         /// @brief Rewrites a clause's stored literal payload in place after compaction or substitution.
         /// @param ref Reference to the clause whose literal payload should be replaced.
@@ -179,6 +188,6 @@ namespace kmx::sat::cdcl::clause
         proof::clause::id_allocator id_allocator_ {};
         std::unordered_set<ref_t::offset_t> redundant_ {};
         std::unordered_set<ref_t::offset_t> alive_ {};
-        std::unordered_map<ref_t::offset_t, ref_t::offset_t> relocated_refs_ {};
+        mutable std::unordered_map<ref_t::offset_t, ref_t::offset_t> relocated_refs_ {};
     };
 }

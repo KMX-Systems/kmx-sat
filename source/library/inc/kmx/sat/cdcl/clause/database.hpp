@@ -85,9 +85,10 @@ namespace kmx::sat::cdcl::clause
         [[nodiscard]] quality quality_of(const ref_t ref) const noexcept
         {
             const auto resolved = storage_.resolve_ref(ref);
-            const auto glue_it = glue_.find(resolved.offset());
-            const auto used_it = used_counts_.find(resolved.offset());
-            const auto activity_it = activities_.find(resolved.offset());
+            const auto offset = resolved.offset();
+            const auto glue_it = glue_.find(offset);
+            const auto used_it = used_counts_.find(offset);
+            const auto activity_it = activities_.find(offset);
             return quality {tier_of(resolved), glue_it != glue_.end() ? glue_it->second : 0u,
                             used_it != used_counts_.end() ? used_it->second : 0u,
                             static_cast<std::uint32_t>(storage_.literals_of(resolved).size()),

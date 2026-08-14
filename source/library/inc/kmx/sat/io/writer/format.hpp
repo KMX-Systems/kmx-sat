@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <charconv>
     #include <cstdint>
     #include <span>
     #include <string>
@@ -42,9 +43,11 @@ namespace kmx::sat::io::writer
         {
             for (const auto lit: clause)
             {
-                const auto signed_value =
-                    lit.is_negated() ? -static_cast<int>(lit.variable_of().index()) : static_cast<int>(lit.variable_of().index());
-                buffer_.append(std::to_string(signed_value));
+                const auto variable_index = static_cast<std::int64_t>(lit.variable_of().index());
+                const auto signed_value = lit.is_negated() ? -variable_index : variable_index;
+                char number[32] {};
+                const auto result = std::to_chars(number, number + sizeof(number), signed_value);
+                buffer_.append(number, static_cast<std::size_t>(result.ptr - number));
                 buffer_.push_back(' ');
             }
             buffer_.append("0\n");

@@ -98,7 +98,12 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void detach_clause(const clause::ref_t ref) noexcept
         {
-            watched_.erase(std::remove(watched_.begin(), watched_.end(), ref), watched_.end());
+            const auto it = std::find(watched_.begin(), watched_.end(), ref);
+            if (it != watched_.end())
+            {
+                std::swap(*it, watched_.back());
+                watched_.pop_back();
+            }
         }
 
         /// @brief Selects and registers the initial pair of watched literals for a newly created clause.
