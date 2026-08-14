@@ -31,17 +31,13 @@ namespace kmx::sat::cdcl::store
         void flip_all() noexcept
         {
             for (std::size_t i = 0; i < saved_phases_.size(); ++i)
-            {
                 saved_phases_[i] = saved_phases_[i] == 0u ? 1u : 0u;
-            }
         }
 
         void randomize_subset() noexcept
         {
             for (std::size_t i = 0; i < saved_phases_.size(); ++i)
-            {
                 saved_phases_[i] = (saved_phases_[i] + 1u) & 1u;
-            }
         }
 
         /// @brief Returns how many saved-phase slots are currently tracked.
@@ -56,9 +52,7 @@ namespace kmx::sat::cdcl::store
         {
             const auto index = index_of(var);
             if (index >= storage.size())
-            {
                 return false;
-            }
             return storage[index] != 0u;
         }
 
@@ -66,9 +60,7 @@ namespace kmx::sat::cdcl::store
         {
             const auto index = index_of(var);
             if (index >= storage.size())
-            {
                 storage.resize(index + 1, 0u);
-            }
             storage[index] = value ? 1u : 0u;
         }
 

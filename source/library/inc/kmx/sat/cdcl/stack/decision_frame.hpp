@@ -49,27 +49,21 @@ namespace kmx::sat::cdcl::stack
         literal decision_literal(const std::uint32_t level) const noexcept
         {
             if (level == 0 || level > frames_.size())
-            {
                 return {};
-            }
             return frames_[level - 1].decision;
         }
 
         std::uint32_t trail_base_of_level(const std::uint32_t level) const noexcept
         {
             if (level == 0 || level > frames_.size())
-            {
                 return 0;
-            }
             return frames_[level - 1].trail_base;
         }
 
         void reuse_trail_metadata() noexcept
         {
             if (!frames_.empty())
-            {
                 frames_.back().trail_base = current_trail_base_;
-            }
         }
 
         void set_current_trail_base(const std::uint32_t base) noexcept { current_trail_base_ = base; }

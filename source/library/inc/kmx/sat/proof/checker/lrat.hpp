@@ -41,9 +41,7 @@ namespace kmx::sat::proof::checker
         void record_clause(const clause::id clause_id, const std::span<const literal> literals) noexcept
         {
             if (!clause_id.valid())
-            {
                 return;
-            }
             clauses_[clause_id.value()] = std::vector<literal> {literals.begin(), literals.end()};
         }
 
@@ -54,16 +52,12 @@ namespace kmx::sat::proof::checker
         void record_antecedents(const clause::id clause_id, const std::span<const clause::id> antecedents) noexcept
         {
             if (!clause_id.valid())
-            {
                 return;
-            }
             auto& chain = antecedents_[clause_id.value()];
             chain.clear();
             chain.reserve(antecedents.size());
             for (const auto& antecedent: antecedents)
-            {
                 chain.push_back(antecedent.value());
-            }
         }
 
         /// @brief Forgets a clause's recorded literals and antecedent chain once it is permanently deleted.
@@ -72,9 +66,7 @@ namespace kmx::sat::proof::checker
         void forget_clause(const clause::id clause_id) noexcept
         {
             if (!clause_id.valid())
-            {
                 return;
-            }
             clauses_.erase(clause_id.value());
             antecedents_.erase(clause_id.value());
         }
@@ -90,16 +82,12 @@ namespace kmx::sat::proof::checker
         [[nodiscard]] bool check_chain() const noexcept
         {
             if (antecedents_.empty())
-            {
                 return false;
-            }
             for (const auto& [clause_key, chain]: antecedents_)
             {
                 const auto clause_it = clauses_.find(clause_key);
                 if (clause_it == clauses_.end() || !verify_chain(clause_it->second, chain))
-                {
                     return false;
-                }
             }
             return true;
         }
@@ -111,15 +99,11 @@ namespace kmx::sat::proof::checker
         [[nodiscard]] bool validate_clause(const clause::id clause_id) const noexcept
         {
             if (!clause_id.valid())
-            {
                 return false;
-            }
             const auto clause_it = clauses_.find(clause_id.value());
             const auto chain_it = antecedents_.find(clause_id.value());
             if (clause_it == clauses_.end() || chain_it == antecedents_.end())
-            {
                 return false;
-            }
             return verify_chain(clause_it->second, chain_it->second);
         }
 
@@ -131,14 +115,10 @@ namespace kmx::sat::proof::checker
             for (const auto& [clause_key, literals]: clauses_)
             {
                 if (!literals.empty())
-                {
                     continue;
-                }
                 const auto chain_it = antecedents_.find(clause_key);
                 if (chain_it != antecedents_.end() && verify_chain(literals, chain_it->second))
-                {
                     return true;
-                }
             }
             return false;
         }
@@ -157,17 +137,13 @@ namespace kmx::sat::proof::checker
         {
             std::unordered_map<variable::index_t, bool> assigned {};
             for (const auto lit: derived)
-            {
                 assigned[lit.variable_of().index()] = lit.is_negated();
-            }
 
             for (const auto antecedent_key: chain)
             {
                 const auto it = clauses_.find(antecedent_key);
                 if (it == clauses_.end())
-                {
                     return false;
-                }
 
                 bool satisfied {};
                 std::size_t unassigned_count {};
@@ -189,17 +165,11 @@ namespace kmx::sat::proof::checker
                 }
 
                 if (satisfied)
-                {
                     return false;
-                }
                 if (unassigned_count == 0)
-                {
                     return true;
-                }
                 if (unassigned_count > 1)
-                {
                     return false;
-                }
                 assigned[pending.variable_of().index()] = !pending.is_negated();
             }
 

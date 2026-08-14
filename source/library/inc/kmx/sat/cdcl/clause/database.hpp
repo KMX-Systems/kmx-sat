@@ -68,18 +68,12 @@ namespace kmx::sat::cdcl::clause
         {
             const auto ref = redundant ? storage_.create_learned_clause(literals) : storage_.create_original_clause(literals);
             if (!ref.valid())
-            {
                 return ref;
-            }
 
             if (redundant)
-            {
                 redundant_refs_.push_back(ref);
-            }
             else
-            {
                 irredundant_refs_.push_back(ref);
-            }
             tiers_[ref.offset()] = redundant ? default_tier : 0u;
             glue_[ref.offset()] = static_cast<std::uint32_t>(literals.size());
             used_counts_[ref.offset()] = 0u;
@@ -104,27 +98,21 @@ namespace kmx::sat::cdcl::clause
         void set_glue(const ref_t ref, const std::uint32_t glue) noexcept
         {
             if (ref.valid())
-            {
                 glue_[storage_.resolve_ref(ref).offset()] = glue;
-            }
         }
 
         /// @brief Records one use of a clause as an implication reason.
         void increment_used_count(const ref_t ref) noexcept
         {
             if (ref.valid())
-            {
                 ++used_counts_[storage_.resolve_ref(ref).offset()];
-            }
         }
 
         /// @brief Adds conflict-derived activity to a clause's retention score.
         void increment_activity(const ref_t ref, const double amount = 1.0) noexcept
         {
             if (ref.valid())
-            {
                 activities_[storage_.resolve_ref(ref).offset()] += amount;
-            }
         }
 
         /// @brief Ages activity and usage metadata so old conflict history cannot dominate indefinitely.
@@ -132,13 +120,9 @@ namespace kmx::sat::cdcl::clause
         {
             const auto bounded_factor = factor < 0.0 ? 0.0 : (factor > 1.0 ? 1.0 : factor);
             for (auto& entry: activities_)
-            {
                 entry.second *= bounded_factor;
-            }
             for (auto& entry: used_counts_)
-            {
                 entry.second = static_cast<std::uint32_t>(static_cast<double>(entry.second) * bounded_factor);
-            }
         }
 
         /// @brief Marks a clause as garbage, making it eligible for physical reclamation by the garbage collector.
@@ -147,9 +131,7 @@ namespace kmx::sat::cdcl::clause
         void mark_garbage(const ref_t ref) noexcept
         {
             if (ref.valid())
-            {
                 garbage_.insert(ref.offset());
-            }
         }
 
         /// @brief Marks a clause as currently serving as an implication reason on the trail.
@@ -158,9 +140,7 @@ namespace kmx::sat::cdcl::clause
         void mark_reason_clause(const ref_t ref) noexcept
         {
             if (ref.valid())
-            {
                 reasons_.insert(ref.offset());
-            }
         }
 
         /// @brief Clears all transient implication-reason marks for a fresh solve episode.
@@ -170,9 +150,7 @@ namespace kmx::sat::cdcl::clause
         void rewrite_ref_after_gc(const ref_t old_ref, const ref_t new_ref) noexcept
         {
             if (!old_ref.valid() || !new_ref.valid() || old_ref == new_ref)
-            {
                 return;
-            }
             rewrite_ref_in_vector(irredundant_refs_, old_ref, new_ref);
             rewrite_ref_in_vector(redundant_refs_, old_ref, new_ref);
             migrate_set_entry(garbage_, old_ref, new_ref);
@@ -208,9 +186,7 @@ namespace kmx::sat::cdcl::clause
         [[nodiscard]] tier_t tier_of(const ref_t ref) const noexcept
         {
             if (const auto it = tiers_.find(ref.offset()); it != tiers_.end())
-            {
                 return it->second;
-            }
             return default_tier;
         }
 
@@ -220,14 +196,10 @@ namespace kmx::sat::cdcl::clause
         void promote_clause(const ref_t ref) noexcept
         {
             if (!ref.valid())
-            {
                 return;
-            }
             auto& tier = tiers_[ref.offset()];
             if (tier > 0u)
-            {
                 --tier;
-            }
         }
 
         /// @brief Moves a clause to a lower-quality tier, typically after prolonged inactivity.
@@ -236,14 +208,10 @@ namespace kmx::sat::cdcl::clause
         void demote_clause(const ref_t ref) noexcept
         {
             if (!ref.valid())
-            {
                 return;
-            }
             auto& tier = tiers_[ref.offset()];
             if (tier < lowest_tier)
-            {
                 ++tier;
-            }
         }
 
         /// @brief Visits every irredundant (original) clause currently in the database.
@@ -302,26 +270,19 @@ namespace kmx::sat::cdcl::clause
         static void rewrite_ref_in_vector(std::vector<ref_t>& refs, const ref_t old_ref, const ref_t new_ref) noexcept
         {
             for (auto& ref: refs)
-            {
                 if (ref == old_ref)
-                {
                     ref = new_ref;
-                }
-            }
         }
 
-        static void migrate_set_entry(std::unordered_set<ref_t::offset_t>& entries, const ref_t old_ref,
-                                       const ref_t new_ref) noexcept
+        static void migrate_set_entry(std::unordered_set<ref_t::offset_t>& entries, const ref_t old_ref, const ref_t new_ref) noexcept
         {
             if (entries.erase(old_ref.offset()) != 0u)
-            {
                 entries.insert(new_ref.offset());
-            }
         }
 
         template <typename value_t>
         static void migrate_map_entry(std::unordered_map<ref_t::offset_t, value_t>& entries, const ref_t old_ref,
-                                       const ref_t new_ref) noexcept
+                                      const ref_t new_ref) noexcept
         {
             const auto it = entries.find(old_ref.offset());
             if (it != entries.end())
@@ -336,12 +297,8 @@ namespace kmx::sat::cdcl::clause
         void iterate(const std::vector<ref_t>& refs, visitor_t&& visitor) const noexcept
         {
             for (const auto ref: refs)
-            {
                 if (!is_garbage(ref))
-                {
                     visitor(ref);
-                }
-            }
         }
 
         template <typename predicate_t>

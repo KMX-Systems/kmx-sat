@@ -36,15 +36,11 @@ namespace kmx::sat::cdcl::clause
         ref_t learn_clause(const std::span<const literal> literals) noexcept
         {
             if (literals.empty())
-            {
                 return {};
-            }
 
             const auto normalized_clause = normalize_clause_literals(literals);
             if (normalized_clause.empty())
-            {
                 return {};
-            }
 
             if (normalized_clause.size() == 1)
             {
@@ -106,9 +102,7 @@ namespace kmx::sat::cdcl::clause
         std::span<const literal> last_learned_clause() const noexcept
         {
             if (learned_clauses_.empty())
-            {
                 return {};
-            }
             return learned_clauses_.back();
         }
 
@@ -128,12 +122,8 @@ namespace kmx::sat::cdcl::clause
         {
             std::size_t count {};
             for (const auto& clause: learned_clauses_)
-            {
                 if (clause.size() == size)
-                {
                     ++count;
-                }
-            }
             return count;
         }
 
@@ -146,25 +136,15 @@ namespace kmx::sat::cdcl::clause
             for (const auto lit: literals)
             {
                 const auto duplicate_it = std::find_if(normalized.begin(), normalized.end(),
-                                                       [lit](const literal existing) noexcept
-                                                       {
-                                                           return existing.raw() == lit.raw();
-                                                       });
+                                                       [lit](const literal existing) noexcept { return existing.raw() == lit.raw(); });
                 if (duplicate_it != normalized.end())
-                {
                     continue;
-                }
 
-                const auto opposite_it = std::find_if(normalized.begin(), normalized.end(),
-                                                      [lit](const literal existing) noexcept
-                                                      {
-                                                          return existing.variable_of().index() == lit.variable_of().index()
-                                                              && existing.is_negated() != lit.is_negated();
-                                                      });
+                const auto opposite_it = std::find_if(
+                    normalized.begin(), normalized.end(), [lit](const literal existing) noexcept
+                    { return existing.variable_of().index() == lit.variable_of().index() && existing.is_negated() != lit.is_negated(); });
                 if (opposite_it != normalized.end())
-                {
                     return {};
-                }
 
                 normalized.push_back(lit);
             }
@@ -175,9 +155,7 @@ namespace kmx::sat::cdcl::clause
         ref_t append_clause(const std::span<const literal> literals) noexcept
         {
             if (literals.empty())
-            {
                 return {};
-            }
 
             learned_clauses_.emplace_back(literals.begin(), literals.end());
             return ref_t {next_clause_offset_++};

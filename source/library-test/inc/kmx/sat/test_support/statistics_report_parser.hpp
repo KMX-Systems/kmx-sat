@@ -20,9 +20,7 @@ namespace kmx::sat::test_support
         {
             const auto equals_position = token.find('=');
             if (equals_position == std::string::npos || equals_position == 0u || equals_position + 1u >= token.size())
-            {
                 continue;
-            }
 
             const auto key = token.substr(0u, equals_position);
             const auto value_text = token.substr(equals_position + 1u);

@@ -20,14 +20,11 @@ namespace kmx::sat::cdcl
     static bool allow_variable_except_blocked(const variable var, const void* raw_context) noexcept
     {
         if (raw_context == nullptr)
-        {
             return true;
-        }
 
         const auto& context = *static_cast<const coordinator_filter_context*>(raw_context);
         return var.index() != context.blocked_variable;
     }
-
 
     TEST_CASE("search coordinator flow", "[sat]")
     {
@@ -100,9 +97,8 @@ namespace kmx::sat::cdcl
             // first occurrence; a variable that appears with both polarities therefore collapses to a single
             // (non-tautological) occurrence before clause::learner ever sees it, so this can never actually reach
             // clause::learner's own tautology guard. This verifies that safe, non-tautological collapse.
-            const std::vector<literal> duplicate_variable_conflict_clause {
-                literal {variable {51}, false}, literal {variable {51}, true}, literal {variable {52}, false}
-            };
+            const std::vector<literal> duplicate_variable_conflict_clause {literal {variable {51}, false}, literal {variable {51}, true},
+                                                                           literal {variable {52}, false}};
             coordinator.seed_conflict_clause(std::span<const literal> {duplicate_variable_conflict_clause});
             coordinator.set_decision_level(variable {51}, 4u);
             coordinator.set_decision_level(variable {52}, 2u);
@@ -316,10 +312,9 @@ namespace kmx::sat::cdcl
             search_coordinator coordinator;
             coordinator.apply_assumptions({});
 
-            const std::array<literal, 5> broad_clause {
-                literal {variable {71u}, false}, literal {variable {72u}, false}, literal {variable {73u}, false},
-                literal {variable {74u}, false}, literal {variable {75u}, false}
-            };
+            const std::array<literal, 5> broad_clause {literal {variable {71u}, false}, literal {variable {72u}, false},
+                                                       literal {variable {73u}, false}, literal {variable {74u}, false},
+                                                       literal {variable {75u}, false}};
             const std::array<literal, 2> short_clause {literal {variable {81u}, false}, literal {variable {82u}, false}};
 
             coordinator.notify_learned_clause(broad_clause);
@@ -334,9 +329,8 @@ namespace kmx::sat::cdcl
             search_coordinator coordinator;
             coordinator.apply_assumptions({});
 
-            const std::array<literal, 3> learned_clause {
-                literal {variable {111u}, true}, literal {variable {112u}, false}, literal {variable {113u}, false}
-            };
+            const std::array<literal, 3> learned_clause {literal {variable {111u}, true}, literal {variable {112u}, false},
+                                                         literal {variable {113u}, false}};
 
             coordinator.notify_learned_clause(learned_clause);
 
@@ -376,9 +370,8 @@ namespace kmx::sat::cdcl
             search_coordinator coordinator;
             coordinator.apply_assumptions({});
 
-            const std::array<literal, 3> duplicate_conflict_clause {
-                literal {variable {191u}, true}, literal {variable {191u}, false}, literal {variable {192u}, false}
-            };
+            const std::array<literal, 3> duplicate_conflict_clause {literal {variable {191u}, true}, literal {variable {191u}, false},
+                                                                    literal {variable {192u}, false}};
             coordinator.notify_conflict_clause(duplicate_conflict_clause);
 
             const auto branch = coordinator.next_branch_literal(0u);
@@ -448,9 +441,8 @@ namespace kmx::sat::cdcl
             REQUIRE(intervals[1] == 1u);
             REQUIRE(intervals[2] == 1u);
 
-            const std::array<literal, 3> conflict_clause {
-                literal {variable {171u}, true}, literal {variable {172u}, false}, literal {variable {173u}, false}
-            };
+            const std::array<literal, 3> conflict_clause {literal {variable {171u}, true}, literal {variable {172u}, false},
+                                                          literal {variable {173u}, false}};
             coordinator.seed_conflict_clause(conflict_clause);
             coordinator.set_decision_level(variable {171u}, 3u);
             coordinator.set_decision_level(variable {172u}, 2u);

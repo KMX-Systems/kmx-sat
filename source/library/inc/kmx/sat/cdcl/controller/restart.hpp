@@ -58,9 +58,7 @@ namespace kmx::sat::cdcl::controller
             ++conflict_count_;
 
             if (restart_interval_ == 0)
-            {
                 return;
-            }
 
             if (conflict_count_ >= next_scheduled_restart_at_)
             {
@@ -84,8 +82,8 @@ namespace kmx::sat::cdcl::controller
                 slow_glue_ema_ = slow_glue_ema_ * slow_glue_alpha_ + value * (1.0 - slow_glue_alpha_);
             }
             ++glue_observation_count_;
-            if (glue_restart_threshold_ != 0.0 && glue_observation_count_ >= glue_restart_warmup_
-                && fast_glue_ema_ > slow_glue_ema_ * glue_restart_threshold_)
+            if (glue_restart_threshold_ != 0.0 && glue_observation_count_ >= glue_restart_warmup_ &&
+                fast_glue_ema_ > slow_glue_ema_ * glue_restart_threshold_)
             {
                 restart_pending_ = true;
             }
@@ -93,10 +91,7 @@ namespace kmx::sat::cdcl::controller
 
         /// @brief Configures the optional fast/slow glue ratio that requests a restart.
         /// @param ratio Ratio above one; zero disables the EMA trigger.
-        void set_glue_restart_threshold(const double ratio) noexcept
-        {
-            glue_restart_threshold_ = ratio > 1.0 ? ratio : 0.0;
-        }
+        void set_glue_restart_threshold(const double ratio) noexcept { glue_restart_threshold_ = ratio > 1.0 ? ratio : 0.0; }
 
         std::uint32_t glue_restart_threshold_percent() const noexcept
         {
@@ -114,9 +109,7 @@ namespace kmx::sat::cdcl::controller
             ++decision_count_;
 
             if (decision_restart_interval_ == 0)
-            {
                 return;
-            }
 
             if (decision_count_ >= next_scheduled_decision_restart_at_)
             {
@@ -130,20 +123,14 @@ namespace kmx::sat::cdcl::controller
         void reset_after_inprocess() noexcept
         {
             if (restart_pending_)
-            {
                 ++restart_count_;
-            }
             restart_pending_ = false;
 
             if (restart_interval_ != 0)
-            {
                 next_scheduled_restart_at_ = conflict_count_ + restart_interval_;
-            }
 
             if (decision_restart_interval_ != 0)
-            {
                 next_scheduled_decision_restart_at_ = decision_count_ + decision_restart_interval_;
-            }
         }
 
         /// @brief Returns the remaining conflict budget before the next scheduled restart.
@@ -152,19 +139,13 @@ namespace kmx::sat::cdcl::controller
         std::uint64_t current_restart_budget() const noexcept
         {
             if (restart_interval_ == 0)
-            {
                 return 0;
-            }
 
             if (restart_pending_)
-            {
                 return 0;
-            }
 
             if (conflict_count_ >= next_scheduled_restart_at_)
-            {
                 return 0;
-            }
 
             return next_scheduled_restart_at_ - conflict_count_;
         }
@@ -197,19 +178,13 @@ namespace kmx::sat::cdcl::controller
         std::uint64_t current_decision_restart_budget() const noexcept
         {
             if (decision_restart_interval_ == 0)
-            {
                 return 0;
-            }
 
             if (restart_pending_)
-            {
                 return 0;
-            }
 
             if (decision_count_ >= next_scheduled_decision_restart_at_)
-            {
                 return 0;
-            }
 
             return next_scheduled_decision_restart_at_ - decision_count_;
         }

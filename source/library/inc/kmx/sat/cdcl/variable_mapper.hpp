@@ -43,9 +43,7 @@ namespace kmx::sat::cdcl
         {
             const auto it = external_to_internal_.find(var.index());
             if (it != external_to_internal_.end())
-            {
                 return it->second;
-            }
 
             const variable internal {next_internal_index_};
             ++next_internal_index_;
@@ -62,9 +60,7 @@ namespace kmx::sat::cdcl
         {
             const auto it = external_to_internal_.find(lit.variable_of().index());
             if (it == external_to_internal_.end())
-            {
                 return lit;
-            }
             return literal {it->second, lit.is_negated()};
         }
 
@@ -76,9 +72,7 @@ namespace kmx::sat::cdcl
         {
             const auto it = internal_to_external_.find(lit.variable_of().index());
             if (it == internal_to_external_.end())
-            {
                 return lit;
-            }
             return literal {it->second, lit.is_negated()};
         }
 
@@ -87,16 +81,12 @@ namespace kmx::sat::cdcl
         void rebuild_after_compaction() noexcept
         {
             if (external_to_internal_.empty())
-            {
                 return;
-            }
 
             std::unordered_map<std::uint32_t, variable> rebuilt_external_to_internal = external_to_internal_;
             std::unordered_map<std::uint32_t, variable> rebuilt_internal_to_external;
             for (const auto& [external_index, internal_var]: rebuilt_external_to_internal)
-            {
                 rebuilt_internal_to_external[internal_var.index()] = variable {external_index};
-            }
 
             external_to_internal_ = std::move(rebuilt_external_to_internal);
             internal_to_external_ = std::move(rebuilt_internal_to_external);
@@ -108,9 +98,7 @@ namespace kmx::sat::cdcl
         void rebuild_after_compaction(const std::unordered_map<std::uint32_t, variable>& permutation) noexcept
         {
             if (external_to_internal_.empty())
-            {
                 return;
-            }
 
             std::unordered_map<std::uint32_t, variable> rebuilt_external_to_internal = external_to_internal_;
             std::unordered_map<std::uint32_t, variable> rebuilt_internal_to_external;
@@ -119,9 +107,7 @@ namespace kmx::sat::cdcl
             for (auto& [external_index, internal_var]: rebuilt_external_to_internal)
             {
                 if (const auto it = permutation.find(internal_var.index()); it != permutation.end())
-                {
                     internal_var = it->second;
-                }
 
                 rebuilt_internal_to_external[internal_var.index()] = variable {external_index};
                 highest_internal_index = std::max(highest_internal_index, internal_var.index());
@@ -139,9 +125,7 @@ namespace kmx::sat::cdcl
             std::vector<std::pair<variable, variable>> entries {};
             entries.reserve(external_to_internal_.size());
             for (const auto& [external_index, internal_var]: external_to_internal_)
-            {
                 entries.emplace_back(variable {external_index}, internal_var);
-            }
             return entries;
         }
 

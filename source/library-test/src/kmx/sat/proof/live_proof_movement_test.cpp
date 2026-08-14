@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <array>
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
@@ -43,9 +43,7 @@ namespace kmx::sat
             std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}},
         };
         for (const auto& clause: clauses)
-        {
             solver.add_clause(std::span<const literal> {clause});
-        }
 
         const auto result = solver.solve(solve_request {});
         REQUIRE(result.status_of() == solve_result::status::unsatisfiable);
@@ -59,9 +57,7 @@ namespace kmx::sat
         {
             const auto& event = events[index];
             if (event.kind != proof::event_kind::add_derived)
-            {
                 continue;
-            }
             ++derived_count;
             REQUIRE(!event.antecedent_ids.empty());
             for (const auto antecedent: event.antecedent_ids)
@@ -69,9 +65,8 @@ namespace kmx::sat
                 bool appeared_earlier = false;
                 for (std::size_t prior {}; prior < index; ++prior)
                 {
-                    if ((events[prior].kind == proof::event_kind::add_original
-                         || events[prior].kind == proof::event_kind::add_derived)
-                        && events[prior].clause_id.equals(antecedent))
+                    if ((events[prior].kind == proof::event_kind::add_original || events[prior].kind == proof::event_kind::add_derived) &&
+                        events[prior].clause_id.equals(antecedent))
                     {
                         appeared_earlier = true;
                         break;
@@ -82,9 +77,8 @@ namespace kmx::sat
         }
         REQUIRE(derived_count > 0u);
 
-        const auto original = std::find_if(events.begin(), events.end(), [](const proof::proof_event& event) noexcept {
-            return event.kind == proof::event_kind::add_original;
-        });
+        const auto original = std::find_if(events.begin(), events.end(), [](const proof::proof_event& event) noexcept
+                                           { return event.kind == proof::event_kind::add_original; });
         REQUIRE(original != events.end());
 
         proof_manager movement_manager;
@@ -112,7 +106,8 @@ namespace kmx::sat
                 antecedent_count += event.antecedent_ids.size();
             }
             std::ofstream report {report_path, std::ios::out | std::ios::trunc};
-            report << "{\"schema\":1,\"status\":\"" << (result.status_of() == solve_result::status::unsatisfiable ? "UNSATISFIABLE" : "OTHER")
+            report << "{\"schema\":1,\"status\":\""
+                   << (result.status_of() == solve_result::status::unsatisfiable ? "UNSATISFIABLE" : "OTHER")
                    << "\",\"proof_checked\":" << (result.proof_summary_of().proof_checked ? "true" : "false")
                    << ",\"original_events\":" << original_count << ",\"derived_events\":" << derived_count_reported
                    << ",\"conclusion_events\":" << conclusion_count << ",\"antecedent_ids\":" << antecedent_count

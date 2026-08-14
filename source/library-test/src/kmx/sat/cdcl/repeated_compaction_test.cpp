@@ -7,9 +7,9 @@
 #include <kmx/sat/cdcl/compaction_service.hpp>
 #include <kmx/sat/cdcl/store/assignment.hpp>
 #include <kmx/sat/cdcl/store/clause_cold.hpp>
+#include <kmx/sat/cdcl/variable_mapper.hpp>
 #include <kmx/sat/cdcl/watch.hpp>
 #include <kmx/sat/proof_manager.hpp>
-#include <kmx/sat/cdcl/variable_mapper.hpp>
 
 namespace kmx::sat::cdcl
 {

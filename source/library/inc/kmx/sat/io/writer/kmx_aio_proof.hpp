@@ -42,9 +42,7 @@ namespace kmx::sat::io::writer
         void submit_buffer(const std::span<const std::byte> buffer) noexcept
         {
             if (!opened_ || closed_)
-            {
                 return;
-            }
             submitted_count_ += 1u;
             last_buffer_size_ = buffer.size();
         }
@@ -54,9 +52,7 @@ namespace kmx::sat::io::writer
         void await_flush() noexcept
         {
             if (opened_ && !closed_)
-            {
                 flushed_ = true;
-            }
         }
 
         /// @brief Closes the output channel, releasing its resources.
@@ -64,9 +60,7 @@ namespace kmx::sat::io::writer
         void close_sink() noexcept
         {
             if (opened_)
-            {
                 closed_ = true;
-            }
         }
 
         [[nodiscard]] bool opened() const noexcept { return opened_; }

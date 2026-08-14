@@ -41,9 +41,7 @@ namespace kmx::sat::cdcl
         const variable var {81u};
 
         for (int index {}; index < 20; ++index)
-        {
             tracker.update_on_conflict(var);
-        }
 
         REQUIRE(tracker.score_of(var) > 0.0);
         REQUIRE(tracker.score_of(var) <= 1.0);

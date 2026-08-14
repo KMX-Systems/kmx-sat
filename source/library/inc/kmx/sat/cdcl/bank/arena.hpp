@@ -45,20 +45,14 @@ namespace kmx::sat::cdcl::bank
         void write_literals(const clause::ref_t ref, const std::span<const literal> literals) noexcept
         {
             if (!ref.valid())
-            {
                 return;
-            }
             const auto offset = static_cast<std::size_t>(ref.offset());
             if (offset + sizeof(std::uint32_t) > active_.size())
-            {
                 return;
-            }
             const auto payload_offset = offset + sizeof(std::uint32_t);
             const auto payload_bytes = literals.size() * sizeof(literal::raw_t);
             if (payload_offset + payload_bytes > active_.size())
-            {
                 return;
-            }
             for (std::size_t index {}; index < literals.size(); ++index)
             {
                 const auto raw = literals[index].raw();
@@ -73,14 +67,10 @@ namespace kmx::sat::cdcl::bank
         [[nodiscard]] std::uint32_t literal_count(const clause::ref_t ref) const noexcept
         {
             if (!ref.valid())
-            {
                 return 0u;
-            }
             const auto offset = static_cast<std::size_t>(ref.offset());
             if (offset + sizeof(std::uint32_t) > active_.size())
-            {
                 return 0u;
-            }
             std::uint32_t count {};
             std::memcpy(&count, active_.data() + offset, sizeof(count));
             return count;
@@ -95,15 +85,11 @@ namespace kmx::sat::cdcl::bank
             std::vector<literal> result {};
             const auto count = literal_count(ref);
             if (count == 0u)
-            {
                 return result;
-            }
             const auto payload_offset = static_cast<std::size_t>(ref.offset()) + sizeof(std::uint32_t);
             const auto payload_bytes = static_cast<std::size_t>(count) * sizeof(literal::raw_t);
             if (payload_offset + payload_bytes > active_.size())
-            {
                 return result;
-            }
             result.reserve(count);
             for (std::uint32_t index {}; index < count; ++index)
             {
@@ -121,9 +107,7 @@ namespace kmx::sat::cdcl::bank
         void truncate_literals(const clause::ref_t ref, const std::uint32_t new_count) noexcept
         {
             if (!ref.valid() || new_count > literal_count(ref))
-            {
                 return;
-            }
             const auto offset = static_cast<std::size_t>(ref.offset());
             std::memcpy(active_.data() + offset, &new_count, sizeof(new_count));
         }
@@ -131,20 +115,14 @@ namespace kmx::sat::cdcl::bank
         void materialize_clause(const clause::ref_t ref) noexcept
         {
             if (!ref.valid())
-            {
                 return;
-            }
             const auto offset = static_cast<std::size_t>(ref.offset());
             const auto byte_count = clause_byte_count(ref);
             if (byte_count == 0u || offset + byte_count > active_.size())
-            {
                 return;
-            }
 
             if (survivor_.size() < offset + byte_count)
-            {
                 survivor_.resize(offset + byte_count, 0u);
-            }
 
             std::memcpy(survivor_.data() + offset, active_.data() + offset, byte_count);
         }
@@ -152,9 +130,7 @@ namespace kmx::sat::cdcl::bank
         bool contains(const clause::ref_t ref) const noexcept
         {
             if (!ref.valid())
-            {
                 return false;
-            }
             return static_cast<std::size_t>(ref.offset()) < active_.size();
         }
 

@@ -63,9 +63,7 @@ namespace kmx::sat::cdcl
 
         restart.set_glue_restart_threshold(1.1);
         for (std::uint32_t index {}; index < 4u; ++index)
-        {
             restart.observe_glue(2u);
-        }
         REQUIRE_FALSE(restart.should_restart());
 
         restart.observe_glue(20u);

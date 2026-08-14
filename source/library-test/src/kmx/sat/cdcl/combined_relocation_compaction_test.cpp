@@ -70,8 +70,8 @@ namespace kmx::sat::cdcl
 
         for (std::uint32_t cycle {}; cycle < 64u; ++cycle)
         {
-            const auto garbage_ref = database.add_clause(
-                std::array<literal, 1> {literal {variable {static_cast<std::uint32_t>(1300u + cycle)}, false}}, true);
+            const auto garbage_ref =
+                database.add_clause(std::array<literal, 1> {literal {variable {static_cast<std::uint32_t>(1300u + cycle)}, false}}, true);
             database.mark_garbage(garbage_ref);
 
             collector.collect();

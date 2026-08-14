@@ -8,8 +8,8 @@
 #include <kmx/sat/cdcl/store/assignment.hpp>
 #include <kmx/sat/cdcl/store/clause_cold.hpp>
 #include <kmx/sat/cdcl/watch.hpp>
-#include <kmx/sat/proof_manager.hpp>
 #include <kmx/sat/literal.hpp>
+#include <kmx/sat/proof_manager.hpp>
 #include <kmx/sat/variable.hpp>
 
 namespace kmx::sat::cdcl
@@ -51,8 +51,8 @@ namespace kmx::sat::cdcl
 
         for (std::uint32_t cycle {}; cycle < 5u; ++cycle)
         {
-            const auto garbage_ref = database.add_clause(
-                std::array<literal, 1> {literal {variable {static_cast<std::uint32_t>(800u + cycle)}, false}}, true);
+            const auto garbage_ref =
+                database.add_clause(std::array<literal, 1> {literal {variable {static_cast<std::uint32_t>(800u + cycle)}, false}}, true);
             database.mark_garbage(garbage_ref);
 
             collector.collect();

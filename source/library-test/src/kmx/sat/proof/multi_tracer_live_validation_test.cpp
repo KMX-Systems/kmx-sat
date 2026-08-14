@@ -36,12 +36,9 @@ namespace kmx::sat
         proof::tracer::lidrup lidrup;
         proof::tracer::veripb veripb;
         std::array<tracer_case, 6> tracers {
-            tracer_case {"drat", proof::tracer::view {drat}},
-            tracer_case {"lrat", proof::tracer::view {lrat}},
-            tracer_case {"frat", proof::tracer::view {frat}},
-            tracer_case {"idrup", proof::tracer::view {idrup}},
-            tracer_case {"lidrup", proof::tracer::view {lidrup}},
-            tracer_case {"veripb", proof::tracer::view {veripb}},
+            tracer_case {"drat", proof::tracer::view {drat}},     tracer_case {"lrat", proof::tracer::view {lrat}},
+            tracer_case {"frat", proof::tracer::view {frat}},     tracer_case {"idrup", proof::tracer::view {idrup}},
+            tracer_case {"lidrup", proof::tracer::view {lidrup}}, tracer_case {"veripb", proof::tracer::view {veripb}},
         };
 
         for (auto& tracer: tracers)

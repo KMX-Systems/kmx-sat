@@ -60,9 +60,7 @@ namespace kmx::sat::simplify::eliminator::variable
                 const auto occurrences = std::count_if(clause.begin(), clause.end(), [var](const literal lit) noexcept
                                                        { return lit.variable_of().index() == var.index(); });
                 if (occurrences > 0)
-                {
                     ++score;
-                }
             }
             return score - 2;
         }

@@ -34,9 +34,7 @@ namespace kmx::sat::cdcl
         void record_epoch_outcome() noexcept
         {
             if (trail_reuse_depth_ < max_depth_)
-            {
                 ++trail_reuse_depth_;
-            }
         }
 
         /// @brief Proposes an assumption ordering for the next episode that favors trail-prefix reuse.

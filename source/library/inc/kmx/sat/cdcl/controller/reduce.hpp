@@ -78,16 +78,12 @@ namespace kmx::sat::cdcl::controller
                 [&](const clause::ref_t candidate) noexcept
                 {
                     if (!candidate.valid() || database.is_reason_clause(candidate))
-                    {
                         return;
-                    }
 
                     const auto tier = database.tier_of(candidate);
                     const auto quality = database.quality_of(candidate);
                     if (tier >= clause::database::default_tier && !retained_by_activity(quality))
-                    {
                         last_candidates_.push_back(candidate.offset());
-                    }
                 });
 
             std::sort(last_candidates_.begin(), last_candidates_.end(),
@@ -96,25 +92,15 @@ namespace kmx::sat::cdcl::controller
                           const auto left = database.quality_of(clause::ref_t {static_cast<clause::ref_t::offset_t>(left_offset)});
                           const auto right = database.quality_of(clause::ref_t {static_cast<clause::ref_t::offset_t>(right_offset)});
                           if (left.tier != right.tier)
-                          {
                               return left.tier > right.tier;
-                          }
                           if (left.glue != right.glue)
-                          {
                               return left.glue > right.glue;
-                          }
                           if (left.used_count != right.used_count)
-                          {
                               return left.used_count < right.used_count;
-                          }
                           if (left.activity != right.activity)
-                          {
                               return left.activity < right.activity;
-                          }
                           if (left.size != right.size)
-                          {
                               return left.size > right.size;
-                          }
                           return left_offset < right_offset;
                       });
 
@@ -137,16 +123,12 @@ namespace kmx::sat::cdcl::controller
             for (const auto candidate: candidates)
             {
                 if (!candidate.valid() || database.is_reason_clause(candidate))
-                {
                     continue;
-                }
 
                 const auto tier = database.tier_of(candidate);
                 const auto quality = database.quality_of(candidate);
                 if (tier >= clause::database::default_tier && !retained_by_activity(quality))
-                {
                     last_candidates_.push_back(candidate.offset());
-                }
             }
 
             std::sort(last_candidates_.begin(), last_candidates_.end(),
@@ -155,17 +137,11 @@ namespace kmx::sat::cdcl::controller
                           const auto left = database.quality_of(clause::ref_t {static_cast<clause::ref_t::offset_t>(left_offset)});
                           const auto right = database.quality_of(clause::ref_t {static_cast<clause::ref_t::offset_t>(right_offset)});
                           if (left.glue != right.glue)
-                          {
                               return left.glue > right.glue;
-                          }
                           if (left.used_count != right.used_count)
-                          {
                               return left.used_count < right.used_count;
-                          }
                           if (left.activity != right.activity)
-                          {
                               return left.activity < right.activity;
-                          }
                           return left_offset < right_offset;
                       });
 
@@ -194,9 +170,7 @@ namespace kmx::sat::cdcl::controller
             {
                 const auto ref = clause::ref_t {static_cast<clause::ref_t::offset_t>(offset)};
                 if (!ref.valid() || database.is_reason_clause(ref) || database.is_garbage(ref))
-                {
                     continue;
-                }
                 database.mark_garbage(ref);
                 ++reduced_candidates_;
             }
@@ -228,9 +202,7 @@ namespace kmx::sat::cdcl::controller
         {
             ++update_tiers_call_count_;
             if (reduce_pending_)
-            {
                 ++reduction_pass_count_;
-            }
             reduce_pending_ = false;
         }
 
@@ -284,9 +256,7 @@ namespace kmx::sat::cdcl::controller
         {
             ++conflict_count_;
             if (reduction_interval_ != 0u && (conflict_count_ % reduction_interval_) == 0u)
-            {
                 reduce_pending_ = true;
-            }
         }
 
         void set_reduction_interval(const std::uint64_t interval) noexcept { reduction_interval_ = interval; }
@@ -305,15 +275,11 @@ namespace kmx::sat::cdcl::controller
         void trim_to_reduction_quota() noexcept
         {
             if (last_candidates_.empty() || reduction_fraction_percent_ >= 100u)
-            {
                 return;
-            }
 
             const auto quota = std::max<std::size_t>(1u, (last_candidates_.size() * reduction_fraction_percent_ + 99u) / 100u);
             if (quota < last_candidates_.size())
-            {
                 last_candidates_.resize(quota);
-            }
         }
 
         bool reduce_pending_ {};

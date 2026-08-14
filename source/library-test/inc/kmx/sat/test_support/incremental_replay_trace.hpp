@@ -1,8 +1,9 @@
 #pragma once
 
-#include <cstdint>
+#include <algorithm>
 #include <array>
 #include <charconv>
+#include <cstdint>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -50,8 +51,8 @@ namespace kmx::sat::test_support
         std::string serialize_json_lines() const
         {
             std::ostringstream output;
-            output << "{\"schema\":" << schema_version << ",\"seed\":" << seed
-                   << ",\"variable_count\":" << variable_count << ",\"kind\":\"header\"}\n";
+            output << "{\"schema\":" << schema_version << ",\"seed\":" << seed << ",\"variable_count\":" << variable_count
+                   << ",\"kind\":\"header\"}\n";
             for (const auto& operation: operations)
             {
                 output << "{\"kind\":\"" << kind_name(operation.kind) << "\"";
@@ -61,31 +62,19 @@ namespace kmx::sat::test_support
                     for (std::size_t index {}; index < operation.literals.size(); ++index)
                     {
                         if (index != 0u)
-                        {
                             output << ',';
-                        }
                         output << dimacs_value(operation.literals[index]);
                     }
                     output << ']';
                 }
                 if (operation.kind == replay_operation_kind::solve)
-                {
-                    output << ",\"conflict_limit\":" << operation.conflict_limit
-                           << ",\"decision_limit\":" << operation.decision_limit;
-                }
+                    output << ",\"conflict_limit\":" << operation.conflict_limit << ",\"decision_limit\":" << operation.decision_limit;
                 if (operation.kind == replay_operation_kind::set_option)
-                {
-                    output << ",\"option\":\"" << escaped(operation.option_name) << "\",\"value\":"
-                           << operation.option_value;
-                }
+                    output << ",\"option\":\"" << escaped(operation.option_name) << "\",\"value\":" << operation.option_value;
                 if (operation.kind == replay_operation_kind::value_of)
-                {
                     output << ",\"variable\":" << operation.variable_operand.index();
-                }
                 if (operation.kind == replay_operation_kind::failed)
-                {
                     output << ",\"literal\":" << dimacs_value(operation.literal_operand);
-                }
                 output << "}\n";
             }
             return output.str();
@@ -100,91 +89,80 @@ namespace kmx::sat::test_support
             while (std::getline(input, line))
             {
                 if (line.empty())
-                {
                     continue;
-                }
                 const auto kind = string_field(line, "kind");
                 if (!kind.has_value())
-                {
-                    return std::nullopt;
-                }
+                    return {};
                 if (kind.value() == "header")
                 {
                     if (header_seen || number_field(line, "schema") != schema_version)
-                    {
-                        return std::nullopt;
-                    }
+                        return {};
                     const auto seed = number_field(line, "seed");
                     const auto variables = number_field(line, "variable_count");
                     if (!seed.has_value() || !variables.has_value())
-                    {
-                        return std::nullopt;
-                    }
+                        return {};
                     trace.seed = static_cast<std::uint32_t>(seed.value());
                     trace.variable_count = static_cast<std::uint32_t>(variables.value());
                     header_seen = true;
                     continue;
                 }
                 if (!header_seen)
-                {
-                    return std::nullopt;
-                }
+                    return {};
 
                 incremental_replay_operation operation;
                 const auto parsed_kind = parse_kind(kind.value());
                 if (!parsed_kind.has_value())
-                {
-                    return std::nullopt;
-                }
+                    return {};
                 operation.kind = parsed_kind.value();
-                if (operation.kind == replay_operation_kind::add_clause || operation.kind == replay_operation_kind::assume)
+                switch (operation.kind)
                 {
-                    const auto literals = literal_array_field(line, "literals");
-                    if (!literals.has_value() || literals->empty())
+                    case replay_operation_kind::add_clause:
+                    case replay_operation_kind::assume:
                     {
-                        return std::nullopt;
+                        const auto literals = literal_array_field(line, "literals");
+                        if (!literals.has_value() || literals->empty())
+                            return {};
+                        operation.literals = literals.value();
+                        break;
                     }
-                    operation.literals = literals.value();
-                }
-                if (operation.kind == replay_operation_kind::solve)
-                {
-                    const auto conflicts = number_field(line, "conflict_limit");
-                    const auto decisions = number_field(line, "decision_limit");
-                    if (!conflicts.has_value() || !decisions.has_value())
+                    case replay_operation_kind::solve:
                     {
-                        return std::nullopt;
+                        const auto conflicts = number_field(line, "conflict_limit");
+                        const auto decisions = number_field(line, "decision_limit");
+                        if (!conflicts.has_value() || !decisions.has_value())
+                            return {};
+                        operation.conflict_limit = conflicts.value();
+                        operation.decision_limit = decisions.value();
+                        break;
                     }
-                    operation.conflict_limit = conflicts.value();
-                    operation.decision_limit = decisions.value();
-                }
-                if (operation.kind == replay_operation_kind::set_option)
-                {
-                    const auto option = string_field(line, "option");
-                    const auto value = signed_number_field(line, "value");
-                    if (!option.has_value() || !value.has_value())
+                    case replay_operation_kind::set_option:
                     {
-                        return std::nullopt;
+                        const auto option = string_field(line, "option");
+                        const auto value = signed_number_field(line, "value");
+                        if (!option.has_value() || !value.has_value())
+                            return {};
+                        operation.option_name = option.value();
+                        operation.option_value = static_cast<std::int64_t>(value.value());
+                        break;
                     }
-                    operation.option_name = option.value();
-                    operation.option_value = static_cast<std::int64_t>(value.value());
-                }
-                if (operation.kind == replay_operation_kind::value_of)
-                {
-                    const auto variable_value = number_field(line, "variable");
-                    if (!variable_value.has_value())
+                    case replay_operation_kind::value_of:
                     {
-                        return std::nullopt;
+                        const auto variable_value = number_field(line, "variable");
+                        if (!variable_value.has_value())
+                            return {};
+                        operation.variable_operand = variable {static_cast<variable::index_t>(variable_value.value())};
+                        break;
                     }
-                    operation.variable_operand = variable {static_cast<variable::index_t>(variable_value.value())};
-                }
-                if (operation.kind == replay_operation_kind::failed)
-                {
-                    const auto literal_value = signed_number_field(line, "literal");
-                    if (!literal_value.has_value() || literal_value.value() == 0)
+                    case replay_operation_kind::failed:
                     {
-                        return std::nullopt;
+                        const auto literal_value = signed_number_field(line, "literal");
+                        if (!literal_value.has_value() || literal_value.value() == 0)
+                            return {};
+                        operation.literal_operand = from_dimacs(literal_value.value());
+                        break;
                     }
-                    operation.literal_operand = from_dimacs(literal_value.value());
+                    default:
+                        break;
                 }
                 trace.operations.push_back(std::move(operation));
             }
@@ -194,24 +172,21 @@ namespace kmx::sat::test_support
     private:
         static std::optional<replay_operation_kind> parse_kind(const std::string_view value) noexcept
         {
-            const std::array<std::pair<std::string_view, replay_operation_kind>, 8> kinds {{
+            static constexpr std::array<std::pair<std::string_view, replay_operation_kind>, 8> kinds {{
                 {"add_clause", replay_operation_kind::add_clause},
                 {"assume", replay_operation_kind::assume},
+                {"failed", replay_operation_kind::failed},
                 {"release_assumptions", replay_operation_kind::release_assumptions},
-                {"solve", replay_operation_kind::solve},
                 {"reset_session", replay_operation_kind::reset_session},
                 {"set_option", replay_operation_kind::set_option},
+                {"solve", replay_operation_kind::solve},
                 {"value_of", replay_operation_kind::value_of},
-                {"failed", replay_operation_kind::failed},
             }};
-            for (const auto& [name, kind]: kinds)
-            {
-                if (name == value)
-                {
-                    return kind;
-                }
-            }
-            return std::nullopt;
+            const auto it = std::lower_bound(kinds.begin(), kinds.end(), value,
+                [](const auto& pair, const std::string_view v) { return pair.first < v; });
+            if (it != kinds.end() && it->first == value)
+                return it->second;
+            return {};
         }
 
         static std::optional<std::uint64_t> number_field(const std::string_view line, const std::string_view field) noexcept
@@ -219,9 +194,7 @@ namespace kmx::sat::test_support
             const std::string marker = "\"" + std::string {field} + "\":";
             const auto start = line.find(marker);
             if (start == std::string_view::npos)
-            {
-                return std::nullopt;
-            }
+                return {};
             const auto first = start + marker.size();
             const auto last = line.find_first_of(",}", first);
             const auto token = line.substr(first, last == std::string_view::npos ? line.size() - first : last - first);
@@ -235,9 +208,7 @@ namespace kmx::sat::test_support
             const std::string marker = "\"" + std::string {field} + "\":";
             const auto start = line.find(marker);
             if (start == std::string_view::npos)
-            {
-                return std::nullopt;
-            }
+                return {};
             const auto first = start + marker.size();
             const auto last = line.find_first_of(",}", first);
             const auto token = line.substr(first, last == std::string_view::npos ? line.size() - first : last - first);
@@ -251,9 +222,7 @@ namespace kmx::sat::test_support
             const std::string marker = "\"" + std::string {field} + "\":\"";
             const auto start = line.find(marker);
             if (start == std::string_view::npos)
-            {
-                return std::nullopt;
-            }
+                return {};
             const auto first = start + marker.size();
             const auto last = line.find('"', first);
             return last == std::string_view::npos ? std::nullopt : std::optional {std::string {line.substr(first, last - first)}};
@@ -264,15 +233,11 @@ namespace kmx::sat::test_support
             const std::string marker = "\"" + std::string {field} + "\":[";
             const auto start = line.find(marker);
             if (start == std::string_view::npos)
-            {
-                return std::nullopt;
-            }
+                return {};
             const auto first = start + marker.size();
             const auto last = line.find(']', first);
             if (last == std::string_view::npos)
-            {
-                return std::nullopt;
-            }
+                return {};
             std::vector<literal> literals;
             std::string values {line.substr(first, last - first)};
             std::istringstream tokens {values};
@@ -282,9 +247,7 @@ namespace kmx::sat::test_support
                 std::int64_t value {};
                 const auto result = std::from_chars(token.data(), token.data() + token.size(), value);
                 if (result.ec != std::errc {} || result.ptr != token.data() + token.size() || value == 0)
-                {
-                    return std::nullopt;
-                }
+                    return {};
                 literals.push_back(from_dimacs(value));
             }
             return literals;
@@ -300,14 +263,22 @@ namespace kmx::sat::test_support
         {
             switch (kind)
             {
-                case replay_operation_kind::add_clause: return "add_clause";
-                case replay_operation_kind::assume: return "assume";
-                case replay_operation_kind::release_assumptions: return "release_assumptions";
-                case replay_operation_kind::solve: return "solve";
-                case replay_operation_kind::reset_session: return "reset_session";
-                case replay_operation_kind::set_option: return "set_option";
-                case replay_operation_kind::value_of: return "value_of";
-                case replay_operation_kind::failed: return "failed";
+                case replay_operation_kind::add_clause:
+                    return "add_clause";
+                case replay_operation_kind::assume:
+                    return "assume";
+                case replay_operation_kind::release_assumptions:
+                    return "release_assumptions";
+                case replay_operation_kind::solve:
+                    return "solve";
+                case replay_operation_kind::reset_session:
+                    return "reset_session";
+                case replay_operation_kind::set_option:
+                    return "set_option";
+                case replay_operation_kind::value_of:
+                    return "value_of";
+                case replay_operation_kind::failed:
+                    return "failed";
             }
             return "unknown";
         }
@@ -325,9 +296,7 @@ namespace kmx::sat::test_support
             for (const char character: value)
             {
                 if (character == '\\' || character == '"')
-                {
                     result.push_back('\\');
-                }
                 result.push_back(character);
             }
             return result;

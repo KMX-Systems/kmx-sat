@@ -62,9 +62,7 @@ namespace kmx::sat::cdcl
         literal export_internal_literal(const literal lit) noexcept
         {
             if (mapper_ != nullptr)
-            {
                 return mapper_->to_external_literal(lit);
-            }
             return lit;
         }
 
@@ -75,9 +73,7 @@ namespace kmx::sat::cdcl
         void freeze_variable(const variable var) noexcept
         {
             if (mapper_ != nullptr)
-            {
                 mapper_->mark_inactive(var);
-            }
         }
 
         /// @brief Releases a previously frozen variable, allowing simplification passes to eliminate it again.
@@ -86,9 +82,7 @@ namespace kmx::sat::cdcl
         void melt_variable(const variable var) noexcept
         {
             if (mapper_ != nullptr)
-            {
                 mapper_->mark_active(var);
-            }
         }
 
         /// @brief Stages one assumption literal for the next solve episode, kept separate from the clause database.
@@ -108,9 +102,7 @@ namespace kmx::sat::cdcl
             auto& stored_clause = clauses_.emplace_back();
             stored_clause.reserve(clause.size());
             for (const auto lit: clause)
-            {
                 stored_clause.push_back(import_external_literal(lit));
-            }
         }
 
         /// @brief Clears all staged clauses.
@@ -164,9 +156,7 @@ namespace kmx::sat::cdcl
         void apply_compaction_mapping() noexcept
         {
             if (mapper_ != nullptr)
-            {
                 mapper_->rebuild_after_compaction();
-            }
         }
 
         std::vector<literal> assumptions() const noexcept { return assumptions_; }

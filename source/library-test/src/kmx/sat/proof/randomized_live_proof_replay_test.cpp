@@ -24,8 +24,7 @@ namespace kmx::sat
             const auto first = variable {100u + episode * 3u + 1u};
             const auto second = variable {100u + episode * 3u + 2u};
             const auto third = variable {100u + episode * 3u + 3u};
-            solver.add_clause(std::array<literal, 3> {
-                literal {first, false}, literal {second, false}, literal {third, false}});
+            solver.add_clause(std::array<literal, 3> {literal {first, false}, literal {second, false}, literal {third, false}});
             solver.add_clause(std::array<literal, 1> {literal {first, true}});
             solver.add_clause(std::array<literal, 1> {literal {second, true}});
             solver.add_clause(std::array<literal, 1> {literal {third, true}});
@@ -42,9 +41,7 @@ namespace kmx::sat
             {
                 const auto& event = events[index];
                 if (event.kind != proof::event_kind::add_derived)
-                {
                     continue;
-                }
                 REQUIRE(!event.antecedent_ids.empty());
                 for (const auto antecedent: event.antecedent_ids)
                 {
@@ -52,9 +49,8 @@ namespace kmx::sat
                     for (std::size_t prior {}; prior < index; ++prior)
                     {
                         const auto& prior_event = events[prior];
-                        if ((prior_event.kind == proof::event_kind::add_original
-                             || prior_event.kind == proof::event_kind::add_derived)
-                            && prior_event.clause_id.equals(antecedent))
+                        if ((prior_event.kind == proof::event_kind::add_original || prior_event.kind == proof::event_kind::add_derived) &&
+                            prior_event.clause_id.equals(antecedent))
                         {
                             appeared_earlier = true;
                             break;

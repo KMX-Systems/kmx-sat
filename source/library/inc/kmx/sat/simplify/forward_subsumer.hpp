@@ -48,9 +48,7 @@ namespace kmx::sat::simplify
             last_subsumed_ref_ = {};
 
             if (database_ == nullptr)
-            {
                 return;
-            }
 
             std::vector<cdcl::clause::ref_t> refs {};
             database_->iterate_irredundant([&](const cdcl::clause::ref_t ref) noexcept { refs.push_back(ref); });
@@ -59,25 +57,19 @@ namespace kmx::sat::simplify
             for (std::size_t left_index {}; left_index < refs.size(); ++left_index)
             {
                 if (database_->is_garbage(refs[left_index]))
-                {
                     continue;
-                }
 
                 const auto left_clause = database_->storage_of().literals_of(refs[left_index]);
                 for (std::size_t right_index {left_index + 1u}; right_index < refs.size(); ++right_index)
                 {
                     if (database_->is_garbage(refs[right_index]))
-                    {
                         continue;
-                    }
 
                     const auto right_clause = database_->storage_of().literals_of(refs[right_index]);
                     if (clause_subsumes(left_clause, right_clause))
                     {
                         if (proof_manager_ != nullptr)
-                        {
                             proof_manager_->on_delete_clause(refs[right_index]);
-                        }
                         database_->mark_garbage(refs[right_index]);
                         last_subsumed_ref_ = refs[right_index];
                         ++subsumed_count_;
@@ -85,9 +77,7 @@ namespace kmx::sat::simplify
                     else if (clause_subsumes(right_clause, left_clause))
                     {
                         if (proof_manager_ != nullptr)
-                        {
                             proof_manager_->on_delete_clause(refs[left_index]);
-                        }
                         database_->mark_garbage(refs[left_index]);
                         last_subsumed_ref_ = refs[left_index];
                         ++subsumed_count_;
@@ -106,23 +96,17 @@ namespace kmx::sat::simplify
         bool is_subsumed(const cdcl::clause::ref_t ref) const noexcept
         {
             if (database_ == nullptr || !ref.valid() || !database_->storage_of().is_alive(ref))
-            {
                 return false;
-            }
 
             const auto candidate_clause = database_->storage_of().literals_of(ref);
             bool subsumed {};
             const auto scan = [&](const cdcl::clause::ref_t other_ref) noexcept
             {
                 if (subsumed || other_ref == ref)
-                {
                     return;
-                }
                 const auto other_clause = database_->storage_of().literals_of(other_ref);
                 if (clause_subsumes(other_clause, candidate_clause))
-                {
                     subsumed = true;
-                }
             };
 
             database_->iterate_irredundant(scan);
@@ -136,23 +120,17 @@ namespace kmx::sat::simplify
         void strengthen_subsumed_clause(const cdcl::clause::ref_t ref) noexcept
         {
             if (database_ == nullptr || !ref.valid() || !database_->storage_of().is_alive(ref))
-            {
                 return;
-            }
 
             auto literals = database_->storage_of().literals_of(ref);
             if (literals.size() <= 1u)
-            {
                 return;
-            }
 
             literals.pop_back();
             database_->storage_of().rewrite_clause_literals(ref, std::span<const literal> {literals.data(), literals.size()});
             database_->storage_of().shrink_clause(ref, static_cast<std::uint32_t>(literals.size()));
             if (proof_manager_ != nullptr)
-            {
                 proof_manager_->on_shrink_clause(ref, literals);
-            }
             ++strengthened_count_;
         }
 
@@ -168,18 +146,14 @@ namespace kmx::sat::simplify
         static bool clause_subsumes(const std::vector<literal>& left, const std::vector<literal>& right) noexcept
         {
             if (left.empty() || left.size() > right.size())
-            {
                 return false;
-            }
 
             for (const auto left_lit: left)
             {
                 const auto found = std::find_if(right.begin(), right.end(),
                                                 [left_lit](const literal right_lit) noexcept { return right_lit.raw() == left_lit.raw(); });
                 if (found == right.end())
-                {
                     return false;
-                }
             }
 
             return true;

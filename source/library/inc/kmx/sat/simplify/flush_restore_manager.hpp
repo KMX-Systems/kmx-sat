@@ -42,9 +42,7 @@ namespace kmx::sat::simplify
         {
             ++flush_count_;
             if (database_ == nullptr)
-            {
                 return;
-            }
 
             flush_matching([&](const cdcl::clause::ref_t ref) noexcept { return database_->is_garbage(ref); });
         }
@@ -55,9 +53,7 @@ namespace kmx::sat::simplify
         {
             ++restore_count_;
             if (database_ == nullptr)
-            {
                 return;
-            }
 
             restore_matching([](const flushed_clause&) noexcept { return true; });
         }
@@ -68,9 +64,7 @@ namespace kmx::sat::simplify
         {
             ++restore_count_;
             if (database_ == nullptr)
-            {
                 return;
-            }
 
             restore_matching([](const flushed_clause& record) noexcept { return !record.redundant; });
         }
@@ -87,9 +81,7 @@ namespace kmx::sat::simplify
         {
             ++satisfied_removed_count_;
             if (database_ == nullptr)
-            {
                 return;
-            }
 
             flush_matching([&](const cdcl::clause::ref_t ref) noexcept { return is_satisfied(ref); });
         }
@@ -117,9 +109,7 @@ namespace kmx::sat::simplify
         void flush_matching(predicate_t&& should_flush) noexcept
         {
             if (database_ == nullptr)
-            {
                 return;
-            }
 
             last_flush_removed_count_ = 0u;
             capture_and_remove(*database_, true, should_flush);
@@ -142,20 +132,14 @@ namespace kmx::sat::simplify
             }
 
             if (to_flush.empty())
-            {
                 return;
-            }
 
             database.flush_satisfied(
                 [&](const cdcl::clause::ref_t ref) noexcept
                 {
                     for (const auto candidate: to_flush)
-                    {
                         if (candidate == ref)
-                        {
                             return true;
-                        }
-                    }
                     return false;
                 });
             last_flush_removed_count_ += to_flush.size();
@@ -165,9 +149,7 @@ namespace kmx::sat::simplify
         void restore_matching(predicate_t&& should_restore) noexcept
         {
             if (database_ == nullptr)
-            {
                 return;
-            }
 
             std::vector<flushed_clause> remaining {};
             remaining.reserve(flushed_clauses_.size());

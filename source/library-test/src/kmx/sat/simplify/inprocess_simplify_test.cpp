@@ -187,9 +187,7 @@ namespace kmx::sat::simplify
         scheduler.attach_proof_manager(proof_manager);
 
         for (const auto pass_name: scheduler::inprocess::baseline_passes)
-        {
             scheduler.disable_pass(pass_name);
-        }
         scheduler.enable_pass("congruence");
 
         scheduler.set_conflicts_seen(64u);
@@ -231,9 +229,7 @@ namespace kmx::sat::simplify
         scheduler.attach_clause_database(database);
 
         for (const auto pass_name: scheduler::inprocess::baseline_passes)
-        {
             scheduler.disable_pass(pass_name);
-        }
         scheduler.enable_pass("vivifier");
         scheduler.enable_pass("forward_subsumer");
 
@@ -328,9 +324,7 @@ namespace kmx::sat::simplify
         scheduler.attach_clause_database(database);
 
         for (const auto pass_name: scheduler::inprocess::baseline_passes)
-        {
             scheduler.disable_pass(pass_name);
-        }
         scheduler.enable_pass("forward_subsumer");
 
         scheduler.set_conflicts_seen(64u);
@@ -375,9 +369,7 @@ namespace kmx::sat::simplify
         scheduler.attach_clause_database(database);
 
         for (const auto pass_name: scheduler::inprocess::baseline_passes)
-        {
             scheduler.disable_pass(pass_name);
-        }
         scheduler.enable_pass("forward_subsumer");
 
         const std::array<literal, 1> clause_a {literal {variable {91u}, false}};
@@ -415,9 +407,7 @@ namespace kmx::sat::simplify
         scheduler.attach_clause_database(database);
 
         for (const auto pass_name: scheduler::inprocess::baseline_passes)
-        {
             scheduler.disable_pass(pass_name);
-        }
         scheduler.enable_pass("forward_subsumer");
 
         scheduler.set_conflicts_seen(64u);
@@ -457,9 +447,7 @@ namespace kmx::sat::simplify
         scheduler.attach_clause_database(database);
 
         for (const auto pass_name: scheduler::inprocess::baseline_passes)
-        {
             scheduler.disable_pass(pass_name);
-        }
         scheduler.enable_pass("forward_subsumer");
 
         scheduler.set_conflicts_seen(64u);

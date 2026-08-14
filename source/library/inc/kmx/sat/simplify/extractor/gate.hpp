@@ -72,9 +72,7 @@ namespace kmx::sat::simplify::extractor
             }
 
             if (!synthetic_discovery_enabled_)
-            {
                 return;
-            }
             add_gate(gate_kind::and_gate, next_synthetic_output_++, {next_synthetic_input_++, next_synthetic_input_++});
         }
 
@@ -93,9 +91,7 @@ namespace kmx::sat::simplify::extractor
         void find_xor_gate() noexcept
         {
             if (!synthetic_discovery_enabled_)
-            {
                 return;
-            }
             add_gate(gate_kind::xor_gate, next_synthetic_output_++, {next_synthetic_input_++, next_synthetic_input_++});
         }
 
@@ -114,9 +110,7 @@ namespace kmx::sat::simplify::extractor
         void find_ite_gate() noexcept
         {
             if (!synthetic_discovery_enabled_)
-            {
                 return;
-            }
             add_gate(gate_kind::ite_gate, next_synthetic_output_++, {next_synthetic_input_++, next_synthetic_input_++});
         }
 
@@ -135,9 +129,7 @@ namespace kmx::sat::simplify::extractor
         void find_definition_gate() noexcept
         {
             if (!synthetic_discovery_enabled_)
-            {
                 return;
-            }
             add_gate(gate_kind::definition_gate, next_synthetic_output_++, {next_synthetic_input_++, next_synthetic_input_++});
         }
 
@@ -178,14 +170,10 @@ namespace kmx::sat::simplify::extractor
         static std::array<std::uint32_t, 2> normalize_inputs(const gate_kind kind, const std::array<std::uint32_t, 2> inputs) noexcept
         {
             if (kind != gate_kind::and_gate && kind != gate_kind::xor_gate)
-            {
                 return inputs;
-            }
 
             if (inputs[0] <= inputs[1])
-            {
                 return inputs;
-            }
 
             return {inputs[1], inputs[0]};
         }
@@ -197,9 +185,7 @@ namespace kmx::sat::simplify::extractor
                                 [&](const std::vector<literal>& clause) noexcept
                                 {
                                     if (clause.size() != 2u)
-                                    {
                                         return false;
-                                    }
 
                                     const auto& first = clause[0];
                                     const auto& second = clause[1];
@@ -215,9 +201,7 @@ namespace kmx::sat::simplify::extractor
         void collect_clauses(std::vector<std::vector<literal>>& out) const noexcept
         {
             if (clause_database_ == nullptr)
-            {
                 return;
-            }
 
             out.clear();
             out.reserve(clause_database_->stats_snapshot().irredundant_count + clause_database_->stats_snapshot().redundant_count);
@@ -225,9 +209,7 @@ namespace kmx::sat::simplify::extractor
             const auto collect_one = [&](const cdcl::clause::ref_t ref) noexcept
             {
                 if (!ref.valid() || clause_database_->is_garbage(ref))
-                {
                     return;
-                }
                 out.push_back(clause_database_->storage_of().literals_of(ref));
             };
 
@@ -240,23 +222,15 @@ namespace kmx::sat::simplify::extractor
             std::vector<std::vector<literal>> clauses {};
             collect_clauses(clauses);
             if (clauses.empty())
-            {
                 return;
-            }
 
             std::vector<std::vector<literal>> binary_clauses {};
             std::vector<std::vector<literal>> ternary_clauses {};
             for (const auto& clause: clauses)
-            {
                 if (clause.size() == 2u)
-                {
                     binary_clauses.push_back(clause);
-                }
                 else if (clause.size() == 3u)
-                {
                     ternary_clauses.push_back(clause);
-                }
-            }
 
             for (const auto& clause: ternary_clauses)
             {
@@ -269,9 +243,7 @@ namespace kmx::sat::simplify::extractor
                     if (lit.is_negated())
                     {
                         if (negative_count < negative_inputs.size())
-                        {
                             negative_inputs[negative_count++] = lit.variable_of().index();
-                        }
                         continue;
                     }
 
@@ -284,16 +256,12 @@ namespace kmx::sat::simplify::extractor
                 }
 
                 if (output == 0u || negative_count != 2u)
-                {
                     continue;
-                }
 
                 const bool has_left = has_binary_implication_clause(binary_clauses, negative_inputs[0], output);
                 const bool has_right = has_binary_implication_clause(binary_clauses, negative_inputs[1], output);
                 if (!has_left || !has_right)
-                {
                     continue;
-                }
 
                 add_gate(gate_kind::and_gate, output, negative_inputs);
             }
@@ -302,9 +270,7 @@ namespace kmx::sat::simplify::extractor
         void add_gate(const gate_kind kind, const std::uint32_t output, const std::array<std::uint32_t, 2> inputs) noexcept
         {
             if (output == 0u || inputs[0] == 0u || inputs[1] == 0u)
-            {
                 return;
-            }
 
             const auto normalized_inputs = normalize_inputs(kind, inputs);
             const auto duplicate = std::find_if(gate_records_.begin(), gate_records_.end(),
@@ -313,9 +279,7 @@ namespace kmx::sat::simplify::extractor
                                                            normalize_inputs(existing.kind, existing.inputs) == normalized_inputs;
                                                 });
             if (duplicate != gate_records_.end())
-            {
                 return;
-            }
 
             gate_records_.push_back(gate_record {kind, output, normalized_inputs});
             summary_materialized_ = false;

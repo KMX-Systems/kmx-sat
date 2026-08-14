@@ -60,9 +60,7 @@ namespace kmx::sat::cdcl
             {
                 (void) external_var;
                 if (!mapper_->is_eliminated(internal_var))
-                {
                     live_internal_variables.push_back(internal_var);
-                }
             }
 
             std::sort(live_internal_variables.begin(), live_internal_variables.end(),
@@ -71,9 +69,7 @@ namespace kmx::sat::cdcl
             constexpr std::uint32_t dense_internal_base = 1u << 30;
             std::uint32_t next_dense_index = dense_internal_base;
             for (const auto internal_var: live_internal_variables)
-            {
                 variable_permutation_[internal_var.index()] = variable {next_dense_index++};
-            }
 
             variable_permutation_ready_ = true;
         }
@@ -83,9 +79,7 @@ namespace kmx::sat::cdcl
         void rewrite_literals() noexcept
         {
             if (clause_database_ == nullptr)
-            {
                 return;
-            }
 
             reason_ref_rewrite_.clear();
             relocated_refs_.clear();
@@ -95,29 +89,21 @@ namespace kmx::sat::cdcl
                 {
                     auto literals = clause_database_->storage_of().literals_of(ref);
                     for (auto& lit: literals)
-                    {
                         lit = remap_literal(lit);
-                    }
                     const auto relocated_ref = clause_database_->storage_of().relocate_clause(ref);
                     if (relocated_ref.valid() && relocated_ref != ref)
                     {
                         clause_database_->rewrite_ref_after_gc(ref, relocated_ref);
                         if (cold_store_ != nullptr)
-                        {
                             cold_store_->rewrite_ref_after_gc(ref, relocated_ref);
-                        }
                         if (proof_manager_ != nullptr)
-                        {
                             proof_manager_->on_clause_relocated(ref, relocated_ref);
-                        }
                         reason_ref_rewrite_[ref.offset()] = relocated_ref.offset();
                         relocated_refs_.push_back({ref, relocated_ref});
                     }
                     clause_database_->storage_of().rewrite_clause_literals(relocated_ref, literals);
                     if (cold_store_ != nullptr)
-                    {
                         cold_store_->rewrite_literals_after_compaction(relocated_ref, literals);
-                    }
                 });
         }
 
@@ -128,9 +114,7 @@ namespace kmx::sat::cdcl
             if (watch_list_ != nullptr)
             {
                 for (const auto& [old_ref, new_ref]: relocated_refs_)
-                {
                     watch_list_->replace_clause_ref_after_gc(old_ref, new_ref);
-                }
                 watch_list_->reindex_after_compaction([&](const literal lit) noexcept { return remap_literal(lit); });
             }
         }
@@ -140,9 +124,7 @@ namespace kmx::sat::cdcl
         void rewrite_reasons() noexcept
         {
             if (assignment_store_ == nullptr)
-            {
                 return;
-            }
             assignment_store_->rewrite_reasons_after_compaction(reason_ref_rewrite_);
         }
 
@@ -155,9 +137,7 @@ namespace kmx::sat::cdcl
             {
                 mapper_->rebuild_after_compaction(variable_permutation_);
                 if (variable_permutation_ready_)
-                {
                     dense_internal_base_ = 1u << 30;
-                }
             }
         }
 
@@ -179,9 +159,7 @@ namespace kmx::sat::cdcl
         literal remap_literal(const literal lit) const noexcept
         {
             if (const auto it = variable_permutation_.find(lit.variable_of().index()); it != variable_permutation_.end())
-            {
                 return literal {it->second, lit.is_negated()};
-            }
             return lit;
         }
 
@@ -195,12 +173,8 @@ namespace kmx::sat::cdcl
             references.insert(references.end(), irredundant.begin(), irredundant.end());
             references.insert(references.end(), redundant.begin(), redundant.end());
             for (const auto ref: references)
-            {
                 if (!clause_database_->is_garbage(ref))
-                {
                     visitor(ref);
-                }
-            }
         }
 
         clause::database* clause_database_ {};

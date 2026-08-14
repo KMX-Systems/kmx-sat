@@ -56,9 +56,7 @@ namespace kmx::sat::cdcl
 
         chb.update_on_conflict(weaker);
         for (std::uint32_t index {}; index < 8u; ++index)
-        {
             chb.update_on_conflict(stronger);
-        }
 
         REQUIRE(chb.score_of(weaker) >= 0.0);
         REQUIRE(chb.score_of(stronger) <= 1.0);
@@ -73,12 +71,8 @@ namespace kmx::sat::cdcl
 
         decision.set_next_variable(0u);
         decision.notify_assignment_literal(literal {selected, true});
-        decision.set_selectability_filter(
-            [](const variable var, const void* context) noexcept
-            {
-                return var.index() != static_cast<const variable*>(context)->index();
-            },
-            &blocked);
+        decision.set_selectability_filter([](const variable var, const void* context) noexcept
+                                          { return var.index() != static_cast<const variable*>(context)->index(); }, &blocked);
         decision.notify_conflict_variables(std::array<variable, 1> {selected});
 
         const auto branch = decision.pick_branch_literal();

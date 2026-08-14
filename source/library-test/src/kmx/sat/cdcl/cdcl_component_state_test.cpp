@@ -84,9 +84,8 @@ namespace kmx::sat::cdcl
         REQUIRE(analyzer.has_learned_clause());
 
         conflict_analyzer variable_dedup_analyzer;
-        const std::vector<literal> variable_dedup_conflict_clause {
-            literal {variable {10}, false}, literal {variable {10}, true}, literal {variable {11}, false}, literal {variable {12}, true}
-        };
+        const std::vector<literal> variable_dedup_conflict_clause {literal {variable {10}, false}, literal {variable {10}, true},
+                                                                   literal {variable {11}, false}, literal {variable {12}, true}};
         variable_dedup_analyzer.seed_conflict_clause(std::span<const literal> {variable_dedup_conflict_clause});
         variable_dedup_analyzer.set_decision_level(variable {10}, 3u);
         variable_dedup_analyzer.set_decision_level(variable {11}, 2u);
@@ -100,9 +99,8 @@ namespace kmx::sat::cdcl
         REQUIRE(deduped_clause[2].variable_of().index() == 12u);
 
         conflict_analyzer root_prune_analyzer;
-        const std::vector<literal> root_prune_conflict_clause {
-            literal {variable {20}, false}, literal {variable {21}, true}, literal {variable {22}, false}
-        };
+        const std::vector<literal> root_prune_conflict_clause {literal {variable {20}, false}, literal {variable {21}, true},
+                                                               literal {variable {22}, false}};
         root_prune_analyzer.seed_conflict_clause(std::span<const literal> {root_prune_conflict_clause});
         root_prune_analyzer.set_decision_level(variable {20}, 3u);
         root_prune_analyzer.set_decision_level(variable {21}, 0u);
@@ -137,9 +135,8 @@ namespace kmx::sat::cdcl
         REQUIRE(level_reset_analyzer.compute_backjump_level() == 0u);
 
         conflict_analyzer tied_level_analyzer;
-        const std::vector<literal> tied_level_conflict_clause {
-            literal {variable {31}, false}, literal {variable {32}, true}, literal {variable {33}, false}
-        };
+        const std::vector<literal> tied_level_conflict_clause {literal {variable {31}, false}, literal {variable {32}, true},
+                                                               literal {variable {33}, false}};
         tied_level_analyzer.seed_conflict_clause(std::span<const literal> {tied_level_conflict_clause});
         tied_level_analyzer.set_decision_level(variable {31}, 5u);
         tied_level_analyzer.set_decision_level(variable {32}, 5u);
@@ -229,7 +226,7 @@ namespace kmx::sat::cdcl
 
             // Same fixture family, but the conflict clause now also carries a literal from an earlier non-zero
             // level (v3@1), which must survive into the learned clause's tail and drive a non-zero backjump.
-            fixture.levels[3] = 1u; // v3: propagated via A, level 1
+            fixture.levels[3] = 1u;                                                             // v3: propagated via A, level 1
             fixture.reasons[3] = {literal {variable {1}, true}, literal {variable {3}, false}}; // A = (~v1 v v3)
 
             const std::vector<literal> tail_trail_in_order {
@@ -282,12 +279,10 @@ namespace kmx::sat::cdcl
             return value->reasons[var.index()];
         };
 
-        const std::array<literal, 4> trail {
-            literal {variable {1u}, false}, literal {variable {2u}, false},
-            literal {variable {3u}, false}, literal {variable {4u}, false}};
+        const std::array<literal, 4> trail {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false},
+                                            literal {variable {4u}, false}};
         conflict_analyzer analyzer;
-        const std::array<literal, 2> conflict {
-            literal {variable {3u}, true}, literal {variable {4u}, true}};
+        const std::array<literal, 2> conflict {literal {variable {3u}, true}, literal {variable {4u}, true}};
         analyzer.seed_conflict_clause(conflict);
         analyzer.analyze_via_resolution(trail, 3u, level_of, reason_of, &data);
 

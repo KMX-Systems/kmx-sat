@@ -14,9 +14,7 @@ namespace kmx::sat::cdcl
     static bool allow_variable_except_blocked(const variable var, const void* raw_context) noexcept
     {
         if (raw_context == nullptr)
-        {
             return true;
-        }
 
         const auto& context = *static_cast<const decision_filter_context*>(raw_context);
         return var.index() != context.blocked_variable;
@@ -96,10 +94,9 @@ namespace kmx::sat::cdcl
     TEST_CASE("decision engine weights short learned clauses more aggressively", "[sat]")
     {
         engine::decision decision;
-        const std::array<literal, 5> broad_clause {
-            literal {variable {41u}, false}, literal {variable {42u}, false}, literal {variable {43u}, false},
-            literal {variable {44u}, false}, literal {variable {45u}, false}
-        };
+        const std::array<literal, 5> broad_clause {literal {variable {41u}, false}, literal {variable {42u}, false},
+                                                   literal {variable {43u}, false}, literal {variable {44u}, false},
+                                                   literal {variable {45u}, false}};
         const std::array<literal, 2> short_clause {literal {variable {61u}, false}, literal {variable {62u}, false}};
 
         decision.notify_learned_clause(broad_clause);
@@ -115,9 +112,8 @@ namespace kmx::sat::cdcl
     TEST_CASE("decision engine prioritizes asserting literal from learned clause", "[sat]")
     {
         engine::decision decision;
-        const std::array<literal, 3> learned_clause {
-            literal {variable {91u}, true}, literal {variable {92u}, false}, literal {variable {93u}, false}
-        };
+        const std::array<literal, 3> learned_clause {literal {variable {91u}, true}, literal {variable {92u}, false},
+                                                     literal {variable {93u}, false}};
 
         decision.notify_learned_clause(learned_clause);
         decision.set_next_variable(0u);
@@ -191,9 +187,8 @@ namespace kmx::sat::cdcl
     TEST_CASE("decision engine ignores duplicate variable literals in conflict clause feedback", "[sat]")
     {
         engine::decision decision;
-        const std::array<literal, 3> conflict_clause {
-            literal {variable {201u}, true}, literal {variable {201u}, false}, literal {variable {202u}, false}
-        };
+        const std::array<literal, 3> conflict_clause {literal {variable {201u}, true}, literal {variable {201u}, false},
+                                                      literal {variable {202u}, false}};
 
         decision.notify_conflict_clause(conflict_clause);
         decision.set_next_variable(0u);
@@ -272,27 +267,19 @@ namespace kmx::sat::cdcl
         REQUIRE(first_branch.has_value());
 
         for (std::uint32_t index = 0u; index < 16u; ++index)
-        {
             decision.notify_conflict();
-        }
 
         for (std::uint32_t index = 0u; index < 4u; ++index)
-        {
             decision.notify_restart();
-        }
 
         REQUIRE(decision.evsids_rescale_count() == 1u);
         REQUIRE(decision.chb_decay_count() == 3u);
 
         decision.set_maintenance_intervals(0u, 0u, 0u);
         for (std::uint32_t index = 0u; index < 32u; ++index)
-        {
             decision.notify_conflict();
-        }
         for (std::uint32_t index = 0u; index < 8u; ++index)
-        {
             decision.notify_restart();
-        }
 
         REQUIRE(decision.evsids_rescale_count() == 1u);
         REQUIRE(decision.chb_decay_count() == 3u);

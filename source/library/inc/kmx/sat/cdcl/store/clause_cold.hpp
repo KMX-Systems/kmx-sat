@@ -69,9 +69,7 @@ namespace kmx::sat::cdcl::store
         void demote_to_cold(const clause::ref_t ref) noexcept
         {
             if (!enabled_ || !ref.valid())
-            {
                 return;
-            }
             store_payload(ref, {});
         }
 
@@ -79,9 +77,7 @@ namespace kmx::sat::cdcl::store
         void demote_to_cold(const clause::ref_t ref, const std::span<const literal> literals) noexcept
         {
             if (!enabled_ || !ref.valid())
-            {
                 return;
-            }
             store_payload(ref, literals);
         }
 
@@ -105,9 +101,7 @@ namespace kmx::sat::cdcl::store
         void decode_on_access(const clause::ref_t ref) noexcept
         {
             if (enabled_ && cold_refs_.find(ref.offset()) != cold_refs_.end())
-            {
                 ++access_count_;
-            }
         }
 
         /// @brief Decodes a cold payload for an explicitly cold access without promoting it.
@@ -116,9 +110,7 @@ namespace kmx::sat::cdcl::store
             std::vector<literal> result {};
             const auto it = payloads_.find(ref.offset());
             if (!enabled_ || it == payloads_.end())
-            {
                 return result;
-            }
 
             std::int64_t previous {};
             for (std::size_t index {}; index < it->second.size();)
@@ -128,31 +120,21 @@ namespace kmx::sat::cdcl::store
                 for (;;)
                 {
                     if (index >= it->second.size())
-                    {
                         return {};
-                    }
                     const auto byte = it->second[index++];
                     if (shift == 28u && (byte & 0x7fu) > 0x1fu)
-                    {
                         return {};
-                    }
                     encoded |= static_cast<std::uint64_t>(byte & 0x7fu) << shift;
                     if ((byte & 0x80u) == 0u)
-                    {
                         break;
-                    }
                     shift += 7u;
                     if (shift >= 32u)
-                    {
                         return {};
-                    }
                 }
                 const auto delta = static_cast<std::int64_t>(encoded >> 1u) ^ -static_cast<std::int64_t>(encoded & 1u);
                 previous += delta;
                 if (previous < 0 || previous > static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()))
-                {
                     return {};
-                }
                 result.emplace_back(literal {static_cast<std::uint32_t>(previous)});
             }
             return result;
@@ -170,22 +152,15 @@ namespace kmx::sat::cdcl::store
         std::size_t access_count() const noexcept { return access_count_; }
 
         /// @brief Returns whether a reference is currently tracked as cold.
-        bool is_cold(const clause::ref_t ref) const noexcept
-        {
-            return enabled_ && cold_refs_.find(ref.offset()) != cold_refs_.end();
-        }
+        bool is_cold(const clause::ref_t ref) const noexcept { return enabled_ && cold_refs_.find(ref.offset()) != cold_refs_.end(); }
 
         /// @brief Rewrites a tracked cold reference after a physical clause move.
         void rewrite_ref_after_gc(const clause::ref_t old_ref, const clause::ref_t new_ref) noexcept
         {
             if (!enabled_ || !old_ref.valid() || !new_ref.valid() || old_ref == new_ref)
-            {
                 return;
-            }
             if (cold_refs_.erase(old_ref.offset()) != 0u)
-            {
                 cold_refs_.insert(new_ref.offset());
-            }
             if (const auto it = payloads_.find(old_ref.offset()); it != payloads_.end())
             {
                 auto payload = std::move(it->second);
@@ -198,9 +173,7 @@ namespace kmx::sat::cdcl::store
         void rewrite_literals_after_compaction(const clause::ref_t ref, const std::span<const literal> literals) noexcept
         {
             if (!enabled_ || !is_cold(ref))
-            {
                 return;
-            }
             erase_payload(ref);
             cold_refs_.erase(ref.offset());
             store_payload(ref, literals);
@@ -212,9 +185,7 @@ namespace kmx::sat::cdcl::store
         void store_payload(const clause::ref_t ref, const std::span<const literal> literals) noexcept
         {
             if (!cold_refs_.insert(ref.offset()).second)
-            {
                 return;
-            }
 
             std::vector<std::uint8_t> encoded_payload {};
             std::int64_t previous {};
@@ -229,9 +200,7 @@ namespace kmx::sat::cdcl::store
                     auto byte = static_cast<std::uint8_t>(encoded & 0x7fu);
                     encoded >>= 7u;
                     if (encoded != 0u)
-                    {
                         byte |= 0x80u;
-                    }
                     encoded_payload.push_back(byte);
                 } while (encoded != 0u);
             }
@@ -245,9 +214,7 @@ namespace kmx::sat::cdcl::store
             const auto bytes = it == payloads_.end() || it->second.empty() ? estimated_entry_bytes_ : it->second.size();
             cold_footprint_ = cold_footprint_ >= bytes ? cold_footprint_ - bytes : 0u;
             if (it != payloads_.end())
-            {
                 payloads_.erase(it);
-            }
         }
 
         bool enabled_ {};

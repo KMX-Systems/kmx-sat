@@ -24,7 +24,7 @@ namespace kmx::sat
     };
 
     static bool satisfies(const std::vector<std::vector<literal>>& clauses, const std::vector<literal>& assumptions,
-                   const std::uint32_t assignment) noexcept
+                          const std::uint32_t assignment) noexcept
     {
         for (const auto& clause: clauses)
         {
@@ -35,32 +35,24 @@ namespace kmx::sat
                 satisfied = satisfied || (lit.is_negated() ? bit == 0u : bit != 0u);
             }
             if (!satisfied)
-            {
                 return false;
-            }
         }
         for (const auto assumption: assumptions)
         {
             const auto bit = (assignment >> (assumption.variable_of().index() - 1u)) & 1u;
             if ((assumption.is_negated() && bit != 0u) || (!assumption.is_negated() && bit == 0u))
-            {
                 return false;
-            }
         }
         return true;
     }
 
     static bool oracle_sat(const std::vector<std::vector<literal>>& clauses, const std::vector<literal>& assumptions,
-                    const std::uint32_t variable_count) noexcept
+                           const std::uint32_t variable_count) noexcept
     {
         const auto assignment_count = std::uint32_t {1u} << variable_count;
         for (std::uint32_t assignment {}; assignment < assignment_count; ++assignment)
-        {
             if (satisfies(clauses, assumptions, assignment))
-            {
                 return true;
-            }
-        }
         return false;
     }
 
@@ -75,13 +67,9 @@ namespace kmx::sat
             const literal candidate {variable {variable_index}, negated};
             bool duplicate = false;
             for (const auto existing: clause)
-            {
                 duplicate = duplicate || existing.raw() == candidate.raw();
-            }
             if (!duplicate)
-            {
                 clause.push_back(candidate);
-            }
         }
         return clause;
     }
@@ -140,25 +128,16 @@ namespace kmx::sat
             const auto result = solver.solve(request);
             const auto expected_sat = oracle_sat(clauses, assumptions, variable_count);
             if (result.status_of() == solve_result::status::unknown)
-            {
                 REQUIRE(request.decision_limit != 0u);
-            }
             else
-            {
-                REQUIRE(result.status_of()
-                        == (expected_sat ? solve_result::status::satisfiable : solve_result::status::unsatisfiable));
-            }
+                REQUIRE(result.status_of() == (expected_sat ? solve_result::status::satisfiable : solve_result::status::unsatisfiable));
             const auto current_statistics = solver.statistics();
             REQUIRE(telemetry::solver_statistics::snapshot_monotonic(previous_statistics, current_statistics));
             previous_statistics = current_statistics;
             if (result.status_of() == solve_result::status::satisfiable)
-            {
                 REQUIRE(!result.model().values().empty());
-            }
             if (result.status_of() == solve_result::status::unsatisfiable && !assumptions.empty())
-            {
                 REQUIRE(!result.failed_core().assumptions().empty());
-            }
             solver.release_incremental_assumptions();
         }
     }

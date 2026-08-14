@@ -58,9 +58,7 @@ namespace kmx::sat::cdcl
         void rescale() noexcept
         {
             for (auto& entry: scores_)
-            {
                 entry.second *= 0.5;
-            }
             bump_increment_ *= 0.5;
         }
 
@@ -70,9 +68,7 @@ namespace kmx::sat::cdcl
         std::optional<variable> extract_best() noexcept
         {
             if (scores_.empty())
-            {
-                return std::nullopt;
-            }
+                return {};
 
             const variable best = scores_.front().first;
             positions_.erase(static_cast<std::size_t>(best.index()));
@@ -112,9 +108,7 @@ namespace kmx::sat::cdcl
             bool operator()(const std::pair<variable, double>& left, const std::pair<variable, double>& right) const noexcept
             {
                 if (left.second != right.second)
-                {
                     return left.second < right.second;
-                }
                 return left.first.index() > right.first.index();
             }
         };
@@ -137,9 +131,7 @@ namespace kmx::sat::cdcl
             {
                 const auto parent = (position - 1u) / 2u;
                 if (!precedes(position, parent))
-                {
                     break;
-                }
                 swap_entries(position, parent);
                 position = parent;
             }
@@ -151,19 +143,13 @@ namespace kmx::sat::cdcl
             {
                 const auto left = position * 2u + 1u;
                 if (left >= scores_.size())
-                {
                     return;
-                }
                 auto best = left;
                 const auto right = left + 1u;
                 if (right < scores_.size() && precedes(right, left))
-                {
                     best = right;
-                }
                 if (!precedes(best, position))
-                {
                     return;
-                }
                 swap_entries(position, best);
                 position = best;
             }
@@ -173,9 +159,7 @@ namespace kmx::sat::cdcl
         {
             positions_.clear();
             for (std::size_t index {}; index < scores_.size(); ++index)
-            {
                 positions_[static_cast<std::size_t>(scores_[index].first.index())] = index;
-            }
         }
 
         std::vector<std::pair<variable, double>> scores_ {};

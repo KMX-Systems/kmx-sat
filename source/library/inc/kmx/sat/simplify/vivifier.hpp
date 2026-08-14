@@ -78,15 +78,11 @@ namespace kmx::sat::simplify
             pending_target_size_ = 0u;
 
             if (database_ == nullptr || !ref.valid() || !database_->storage_of().is_alive(ref))
-            {
                 return;
-            }
 
             const auto current_size = database_->storage_of().literals_of(ref).size();
             if (current_size <= 1u)
-            {
                 return;
-            }
         }
 
         /// @brief Checks whether the current vivification budget has been exhausted.
@@ -100,9 +96,7 @@ namespace kmx::sat::simplify
         void commit_shrunk_clause(const cdcl::clause::ref_t ref) noexcept
         {
             if (database_ == nullptr || !ref.valid() || ref != pending_shrink_ref_ || pending_target_size_ == 0u)
-            {
                 return;
-            }
 
             database_->storage_of().shrink_clause(ref, pending_target_size_);
             pending_shrink_ref_ = {};

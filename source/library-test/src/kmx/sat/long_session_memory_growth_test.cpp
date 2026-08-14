@@ -1,9 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <array>
 #include <algorithm>
-#include <cstdlib>
+#include <array>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <string>
 
@@ -23,12 +23,8 @@ namespace kmx::sat
             std::size_t value {};
             std::string unit;
             while (status >> name >> value >> unit)
-            {
                 if (name == "VmRSS:")
-                {
                     return value;
-                }
-            }
             return 0u;
         }
     }
@@ -50,18 +46,16 @@ namespace kmx::sat
             report.open(report_path, std::ios::out | std::ios::trunc);
             report << "{\"schema\":1,\"kind\":\"header\",\"episodes\":1000}\n";
         }
-        const auto emit_sample = [&](const std::uint32_t episode, const char* operation, const char* status) {
+        const auto emit_sample = [&](const std::uint32_t episode, const char* operation, const char* status)
+        {
             if (!report.is_open())
-            {
                 return;
-            }
             const auto statistics = solver.statistics();
-            report << "{\"kind\":\"sample\",\"episode\":" << episode << ",\"operation\":\"" << operation
-                   << "\",\"status\":\"" << status << "\",\"rss_kb\":" << resident_set_kb()
-                   << ",\"conflicts\":" << statistics.conflicts << ",\"decisions\":" << statistics.decisions
-                   << ",\"restarts\":" << statistics.restarts << ",\"learned_clauses\":" << statistics.learned_clauses
-                   << ",\"reduction_passes\":" << statistics.reduction_passes << ",\"reduced_clauses\":"
-                   << statistics.reduced_clauses << ",\"deleted_clauses\":" << statistics.deleted_clauses
+            report << "{\"kind\":\"sample\",\"episode\":" << episode << ",\"operation\":\"" << operation << "\",\"status\":\"" << status
+                   << "\",\"rss_kb\":" << resident_set_kb() << ",\"conflicts\":" << statistics.conflicts
+                   << ",\"decisions\":" << statistics.decisions << ",\"restarts\":" << statistics.restarts
+                   << ",\"learned_clauses\":" << statistics.learned_clauses << ",\"reduction_passes\":" << statistics.reduction_passes
+                   << ",\"reduced_clauses\":" << statistics.reduced_clauses << ",\"deleted_clauses\":" << statistics.deleted_clauses
                    << ",\"proof_buffered_payload_bytes\":" << solver.proof_buffered_payload_bytes()
                    << ",\"cold_footprint_bytes\":" << solver.cold_footprint_bytes()
                    << ",\"report_buffer_size\":" << solver.statistics_report_emission_count()

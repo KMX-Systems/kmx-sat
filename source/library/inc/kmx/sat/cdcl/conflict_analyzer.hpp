@@ -51,9 +51,7 @@ namespace kmx::sat::cdcl
             resolution_chain_step_count_ = 0u;
 
             if (pending_conflict_literals_.empty())
-            {
                 learned_literals_.clear();
-            }
             else
             {
                 learned_literals_ = std::move(pending_conflict_literals_);
@@ -65,15 +63,11 @@ namespace kmx::sat::cdcl
             unique_literals.reserve(learned_literals_.size());
             for (const auto lit: learned_literals_)
             {
-                const auto duplicate_it = std::find_if(unique_literals.begin(), unique_literals.end(),
-                                                       [lit](const literal existing) noexcept
-                                                       {
-                                                           return existing.variable_of().index() == lit.variable_of().index();
-                                                       });
+                const auto duplicate_it =
+                    std::find_if(unique_literals.begin(), unique_literals.end(), [lit](const literal existing) noexcept
+                                 { return existing.variable_of().index() == lit.variable_of().index(); });
                 if (duplicate_it == unique_literals.end())
-                {
                     unique_literals.push_back(lit);
-                }
             }
             learned_literals_ = std::move(unique_literals);
 
@@ -88,9 +82,7 @@ namespace kmx::sat::cdcl
                 {
                     const auto lit = learned_literals_[index];
                     if (level_of_variable(lit.variable_of()) == 0u)
-                    {
                         continue;
-                    }
                     minimized_literals.push_back(lit);
                 }
 
@@ -129,9 +121,7 @@ namespace kmx::sat::cdcl
                 const auto seen_it = std::find_if(bump_candidates_.begin(), bump_candidates_.end(),
                                                   [var](const variable existing) noexcept { return existing.index() == var.index(); });
                 if (seen_it == bump_candidates_.end())
-                {
                     bump_candidates_.push_back(var);
-                }
             }
 
             backjump_level_ = second_highest_decision_level();
@@ -164,9 +154,7 @@ namespace kmx::sat::cdcl
 
             std::vector<literal> conflict_literals {};
             if (pending_conflict_literals_.empty())
-            {
                 conflict_literals.clear();
-            }
             else
             {
                 conflict_literals = std::move(pending_conflict_literals_);
@@ -174,30 +162,20 @@ namespace kmx::sat::cdcl
             }
 
             if (conflict_literals.empty() || level_of == nullptr || reason_of == nullptr)
-            {
                 return;
-            }
 
             for (const auto index: touched_variable_indices_)
-            {
                 if (index < seen_flags_.size())
-                {
                     seen_flags_[index] = 0u;
-                }
-            }
             touched_variable_indices_.clear();
 
             const auto mark_seen = [this](const variable var) noexcept -> bool
             {
                 const auto index = static_cast<std::size_t>(var.index());
                 if (index >= seen_flags_.size())
-                {
                     seen_flags_.resize(index + 1u, 0u);
-                }
                 if (seen_flags_[index] != 0u)
-                {
                     return false;
-                }
                 seen_flags_[index] = 1u;
                 touched_variable_indices_.push_back(index);
                 return true;
@@ -222,28 +200,18 @@ namespace kmx::sat::cdcl
                 {
                     const auto candidate_variable = candidate.variable_of();
                     if (have_pivot && candidate_variable.index() == pivot.variable_of().index())
-                    {
                         continue;
-                    }
                     if (!mark_seen(candidate_variable))
-                    {
                         continue;
-                    }
 
                     bump_candidates_.push_back(candidate_variable);
                     const auto candidate_level = level_of(context, candidate_variable);
                     if (candidate_level == 0u)
-                    {
                         continue;
-                    }
                     if (candidate_level >= current_level)
-                    {
                         ++unresolved_at_current_level;
-                    }
                     else
-                    {
                         tail_literals.push_back(candidate);
-                    }
                 }
 
                 if (unresolved_at_current_level == 0u)
@@ -261,8 +229,7 @@ namespace kmx::sat::cdcl
                 {
                     const auto trail_literal = trail_in_order[static_cast<std::size_t>(trail_cursor)];
                     --trail_cursor;
-                    if (is_seen(trail_literal.variable_of())
-                        && level_of(context, trail_literal.variable_of()) == current_level)
+                    if (is_seen(trail_literal.variable_of()) && level_of(context, trail_literal.variable_of()) == current_level)
                     {
                         pivot = trail_literal;
                         have_pivot = true;
@@ -271,23 +238,17 @@ namespace kmx::sat::cdcl
                 }
 
                 if (!have_pivot)
-                {
                     break;
-                }
 
                 --unresolved_at_current_level;
                 if (unresolved_at_current_level == 0u)
-                {
                     break;
-                }
 
                 literals_to_resolve = reason_of(context, pivot.variable_of());
             }
 
             if (have_pivot)
-            {
                 learned_literals_.push_back(pivot.negated());
-            }
             else if (!tail_literals.empty())
             {
                 learned_literals_.push_back(tail_literals.front());
@@ -303,9 +264,7 @@ namespace kmx::sat::cdcl
             {
                 const auto level = level_of(context, lit.variable_of());
                 if (level > highest_tail_level)
-                {
                     highest_tail_level = level;
-                }
             }
             backjump_level_ = highest_tail_level;
 
@@ -315,9 +274,7 @@ namespace kmx::sat::cdcl
                           const auto lhs_level = level_of(context, lhs.variable_of());
                           const auto rhs_level = level_of(context, rhs.variable_of());
                           if (lhs_level != rhs_level)
-                          {
                               return lhs_level > rhs_level;
-                          }
                           return lhs.raw() < rhs.raw();
                       });
 
@@ -327,15 +284,11 @@ namespace kmx::sat::cdcl
             canonical_literals.reserve(learned_literals_.size());
             for (const auto lit: learned_literals_)
             {
-                const auto duplicate_it = std::find_if(canonical_literals.begin(), canonical_literals.end(),
-                                                       [lit](const literal existing) noexcept
-                                                       {
-                                                           return existing.variable_of().index() == lit.variable_of().index();
-                                                       });
+                const auto duplicate_it =
+                    std::find_if(canonical_literals.begin(), canonical_literals.end(), [lit](const literal existing) noexcept
+                                 { return existing.variable_of().index() == lit.variable_of().index(); });
                 if (duplicate_it == canonical_literals.end())
-                {
                     canonical_literals.push_back(lit);
-                }
             }
             learned_literals_ = std::move(canonical_literals);
         }
@@ -346,9 +299,7 @@ namespace kmx::sat::cdcl
         literal derive_first_uip() const noexcept
         {
             if (learned_literals_.empty())
-            {
                 return {};
-            }
             return learned_literals_.front();
         }
 
@@ -378,15 +329,11 @@ namespace kmx::sat::cdcl
             resolution_chain_step_count_ = learned_literals_.empty() ? 0 : static_cast<std::uint32_t>(learned_literals_.size() - 1);
             resolution_chain_literals_.clear();
             if (learned_literals_.size() <= 1u)
-            {
                 return;
-            }
 
             resolution_chain_literals_.reserve(learned_literals_.size() - 1u);
             for (std::size_t index = 1u; index < learned_literals_.size(); ++index)
-            {
                 resolution_chain_literals_.push_back(learned_literals_[index]);
-            }
         }
 
         /// @brief Returns the literal sequence used to build the current resolution chain.
@@ -435,18 +382,14 @@ namespace kmx::sat::cdcl
             const auto it = std::find_if(decision_levels_.begin(), decision_levels_.end(),
                                          [var](const auto& pair) noexcept { return pair.first.index() == var.index(); });
             if (it == decision_levels_.end())
-            {
                 return 0;
-            }
             return it->second;
         }
 
         std::uint32_t second_highest_decision_level() const noexcept
         {
             if (learned_literals_.size() < 2)
-            {
                 return 0;
-            }
 
             std::uint32_t highest {};
             std::uint32_t second_highest {};
@@ -459,9 +402,7 @@ namespace kmx::sat::cdcl
                     highest = level;
                 }
                 else if (level < highest && level > second_highest)
-                {
                     second_highest = level;
-                }
             }
 
             return second_highest;

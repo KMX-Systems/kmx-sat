@@ -35,12 +35,8 @@ namespace kmx::sat::cdcl::clause
         bool contains(const literal lit) const noexcept
         {
             for (const auto& entry: literals_)
-            {
                 if (entry == lit)
-                {
                     return true;
-                }
-            }
             return false;
         }
 

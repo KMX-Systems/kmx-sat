@@ -107,9 +107,7 @@ namespace kmx::sat::simplify::scheduler
         void enable_pass(const std::string_view pass_name) noexcept
         {
             if (!is_known_pass(pass_name) || is_enabled(pass_name))
-            {
                 return;
-            }
             enabled_passes_.push_back(pass_name);
         }
 
@@ -133,9 +131,7 @@ namespace kmx::sat::simplify::scheduler
         void set_conflicts_seen(const std::uint64_t conflicts) noexcept
         {
             if (conflicts < conflicts_seen_)
-            {
                 next_conflict_trigger_ = conflict_trigger_window_;
-            }
             conflicts_seen_ = conflicts;
         }
 
@@ -154,9 +150,7 @@ namespace kmx::sat::simplify::scheduler
         void set_decisions_seen(const std::uint64_t decisions) noexcept
         {
             if (decisions < decisions_seen_)
-            {
                 last_decisions_snapshot_ = decisions;
-            }
             decisions_seen_ = decisions;
         }
 
@@ -164,9 +158,7 @@ namespace kmx::sat::simplify::scheduler
         void set_reduction_passes_seen(const std::uint64_t reduction_passes) noexcept
         {
             if (reduction_passes < reduction_passes_seen_)
-            {
                 last_reduction_snapshot_ = reduction_passes;
-            }
             reduction_passes_seen_ = reduction_passes;
         }
 
@@ -174,9 +166,7 @@ namespace kmx::sat::simplify::scheduler
         void set_learned_clauses_seen(const std::uint64_t learned_clause_count) noexcept
         {
             if (learned_clause_count < learned_clauses_seen_)
-            {
                 last_learned_clause_snapshot_ = learned_clause_count;
-            }
             learned_clauses_seen_ = learned_clause_count;
         }
 
@@ -186,14 +176,10 @@ namespace kmx::sat::simplify::scheduler
         bool should_run() const noexcept
         {
             if (abort_requested_)
-            {
                 return false;
-            }
 
             if (memory_governor_ != nullptr && memory_governor_->hard_limit_breached())
-            {
                 return false;
-            }
 
             return conflicts_seen_ >= next_conflict_trigger_ || restart_count_ >= next_restart_trigger_;
         }
@@ -226,13 +212,9 @@ namespace kmx::sat::simplify::scheduler
             update_cooldown_windows();
 
             if (conflicts_seen_ >= next_conflict_trigger_)
-            {
                 next_conflict_trigger_ = conflicts_seen_ + conflict_trigger_window_;
-            }
             if (restart_count_ >= next_restart_trigger_)
-            {
                 next_restart_trigger_ = restart_count_ + restart_trigger_window_;
-            }
         }
 
         /// @brief Computes the work budget available for the next inprocessing epoch.
@@ -291,18 +273,14 @@ namespace kmx::sat::simplify::scheduler
                 const auto clause_count_before = clause_counts_snapshot();
 
                 if (pass_name == "forward_subsumer")
-                {
                     forward_subsumer_.run();
-                }
                 else if (pass_name == "vivifier")
                 {
                     vivifier_.set_budget(static_cast<std::size_t>(last_budget_));
                     vivifier_.run();
                 }
                 else if (pass_name == "congruence")
-                {
                     congruence_.run();
-                }
 
                 const auto clause_count_after = clause_counts_snapshot();
                 const bool observed_effectiveness = clause_database_ != nullptr;
@@ -366,9 +344,7 @@ namespace kmx::sat::simplify::scheduler
             }
 
             if (adaptive_pass_cap_ == 0u || adaptive_pass_cap_ > enabled_count)
-            {
                 adaptive_pass_cap_ = enabled_count;
-            }
 
             if (clause_delta_last_epoch_ == 0u)
             {
@@ -385,9 +361,7 @@ namespace kmx::sat::simplify::scheduler
             ++high_yield_streak_;
             low_yield_streak_ = 0u;
             if (high_yield_streak_ >= 1u && adaptive_pass_cap_ < enabled_count)
-            {
                 ++adaptive_pass_cap_;
-            }
         }
 
         void update_cooldown_windows() noexcept
@@ -421,9 +395,8 @@ namespace kmx::sat::simplify::scheduler
             const auto restart_delta = restart_count_ >= last_restart_snapshot_ ? restart_count_ - last_restart_snapshot_ : 0u;
             const auto reduction_delta =
                 reduction_passes_seen_ >= last_reduction_snapshot_ ? reduction_passes_seen_ - last_reduction_snapshot_ : 0u;
-            const auto learned_clause_delta = learned_clauses_seen_ >= last_learned_clause_snapshot_ ?
-                                                  learned_clauses_seen_ - last_learned_clause_snapshot_ :
-                                                  0u;
+            const auto learned_clause_delta =
+                learned_clauses_seen_ >= last_learned_clause_snapshot_ ? learned_clauses_seen_ - last_learned_clause_snapshot_ : 0u;
 
             last_conflicts_snapshot_ = conflicts_seen_;
             last_decisions_snapshot_ = decisions_seen_;
@@ -462,13 +435,9 @@ namespace kmx::sat::simplify::scheduler
             const auto observed_gain = static_cast<double>(clause_delta_last_epoch_) / gain_denominator;
 
             if (telemetry_samples_ == 0u)
-            {
                 structural_gain_ema_ = observed_gain;
-            }
             else
-            {
                 structural_gain_ema_ = (1.0 - telemetry_alpha) * structural_gain_ema_ + telemetry_alpha * observed_gain;
-            }
 
             ++telemetry_samples_;
         }
@@ -526,13 +495,9 @@ namespace kmx::sat::simplify::scheduler
         const pass_effectiveness& pass_effectiveness_of(const std::string_view pass_name) const noexcept
         {
             if (pass_name == "forward_subsumer")
-            {
                 return forward_subsumer_effectiveness_;
-            }
             if (pass_name == "vivifier")
-            {
                 return vivifier_effectiveness_;
-            }
             return congruence_effectiveness_;
         }
 
@@ -578,14 +543,10 @@ namespace kmx::sat::simplify::scheduler
         bool is_proof_format_compatible(const std::string_view pass_name) const noexcept
         {
             if (proof_manager_ == nullptr || !proof_manager_->has_enabled_formats())
-            {
                 return true;
-            }
 
             if (pass_name != "congruence")
-            {
                 return true;
-            }
 
             return proof_manager_->has_enabled_format("veripb");
         }
@@ -593,9 +554,7 @@ namespace kmx::sat::simplify::scheduler
         std::size_t clause_counts_snapshot() const noexcept
         {
             if (clause_database_ == nullptr)
-            {
                 return 0u;
-            }
 
             const auto stats = clause_database_->stats_snapshot();
             return stats.irredundant_count + stats.redundant_count;
@@ -604,13 +563,9 @@ namespace kmx::sat::simplify::scheduler
         pass_effectiveness& pass_effectiveness_entry(const std::string_view pass_name) noexcept
         {
             if (pass_name == "forward_subsumer")
-            {
                 return forward_subsumer_effectiveness_;
-            }
             if (pass_name == "vivifier")
-            {
                 return vivifier_effectiveness_;
-            }
             return congruence_effectiveness_;
         }
 
@@ -618,25 +573,19 @@ namespace kmx::sat::simplify::scheduler
                                        const bool was_effective) noexcept
         {
             if (!observed_effectiveness)
-            {
                 return;
-            }
 
             auto& entry = pass_effectiveness_entry(pass_name);
             ++entry.observed_runs;
             if (was_effective)
-            {
                 ++entry.effective_runs;
-            }
         }
 
         double pass_priority(const std::string_view pass_name) const noexcept
         {
             const auto& entry = pass_effectiveness_of(pass_name);
             if (entry.observed_runs == 0u)
-            {
                 return 0.5;
-            }
 
             return static_cast<double>(entry.effective_runs) / static_cast<double>(entry.observed_runs);
         }

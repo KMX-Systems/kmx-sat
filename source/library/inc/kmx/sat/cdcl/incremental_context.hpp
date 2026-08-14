@@ -52,9 +52,7 @@ namespace kmx::sat::cdcl
         void retain_learned_clause() noexcept
         {
             if (in_epoch_)
-            {
                 current_epoch_retained_learned_clauses_ += 1u;
-            }
         }
 
         /// @brief Discards all state scoped strictly to the episode that just ended (assumptions, temporary

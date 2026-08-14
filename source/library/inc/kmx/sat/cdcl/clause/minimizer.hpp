@@ -47,26 +47,18 @@ namespace kmx::sat::cdcl::clause
         void minimize_learned_clause(const ref_t ref) noexcept
         {
             if (storage_ == nullptr || !ref.valid())
-            {
                 return;
-            }
 
             auto literals = storage_->literals_of(ref);
             if (literals.size() <= 1u)
-            {
                 return;
-            }
 
             std::vector<literal> deduplicated {};
             deduplicated.reserve(literals.size());
             std::unordered_set<literal::raw_t> seen {};
             for (const auto lit: literals)
-            {
                 if (seen.insert(lit.raw()).second)
-                {
                     deduplicated.push_back(lit);
-                }
-            }
 
             if (!deduplicated.empty())
             {
@@ -92,16 +84,12 @@ namespace kmx::sat::cdcl::clause
 
             const auto literals = storage_->literals_of(ref);
             if (literals.size() <= 1u)
-            {
                 return;
-            }
 
             std::unordered_set<literal::raw_t> exact_literals {};
             exact_literals.reserve(literals.size());
             for (const auto lit: literals)
-            {
                 exact_literals.insert(lit.raw());
-            }
 
             std::unordered_set<std::uint32_t> removable_variables {};
             std::unordered_set<std::uint32_t> visiting_variables {};
@@ -109,13 +97,9 @@ namespace kmx::sat::cdcl::clause
             {
                 const auto variable_index = var.index();
                 if (removable_variables.contains(variable_index))
-                {
                     return true;
-                }
                 if (!visiting_variables.insert(variable_index).second)
-                {
                     return false;
-                }
 
                 const auto reason_view = reason_of(context, var);
                 if (reason_view.empty())
@@ -127,8 +111,8 @@ namespace kmx::sat::cdcl::clause
                 const std::vector<literal> reason {reason_view.begin(), reason_view.end()};
                 for (const auto reason_literal: reason)
                 {
-                    if (reason_literal.variable_of().index() == variable_index || level_of(context, reason_literal.variable_of()) == 0u
-                        || exact_literals.contains(reason_literal.raw()))
+                    if (reason_literal.variable_of().index() == variable_index || level_of(context, reason_literal.variable_of()) == 0u ||
+                        exact_literals.contains(reason_literal.raw()))
                     {
                         continue;
                     }
@@ -151,9 +135,7 @@ namespace kmx::sat::cdcl::clause
             {
                 const auto lit = literals[index];
                 if (!can_remove(can_remove, lit.variable_of()))
-                {
                     minimized_literals.push_back(lit);
-                }
             }
 
             if (minimized_literals.size() < literals.size())
@@ -174,9 +156,7 @@ namespace kmx::sat::cdcl::clause
         void shrink_clause(const ref_t ref) noexcept
         {
             if (storage_ == nullptr || !ref.valid())
-            {
                 return;
-            }
 
             if (minimized_.find(ref.offset()) != minimized_.end())
             {
@@ -192,16 +172,12 @@ namespace kmx::sat::cdcl::clause
         void recompute_glue(const ref_t ref) noexcept
         {
             if (!ref.valid())
-            {
                 return;
-            }
             const auto target_size = target_sizes_.contains(ref.offset()) ? target_sizes_.at(ref.offset()) : 1u;
             last_glue_ = std::max<std::uint32_t>(1u, target_size);
             glue_.insert_or_assign(ref.offset(), last_glue_);
             if (database_ != nullptr)
-            {
                 database_->set_glue(ref, last_glue_);
-            }
         }
 
         /// @brief Recomputes exact LBD/glue as the number of distinct decision levels in the stored clause.
@@ -212,24 +188,18 @@ namespace kmx::sat::cdcl::clause
         void recompute_glue(const ref_t ref, const level_lookup_t level_of, const void* context) noexcept
         {
             if (storage_ == nullptr || !ref.valid() || level_of == nullptr)
-            {
                 return;
-            }
 
             const auto literals = storage_->literals_of(ref);
             std::unordered_set<std::uint32_t> levels {};
             levels.reserve(literals.size());
             for (const auto lit: literals)
-            {
                 levels.insert(level_of(context, lit.variable_of()));
-            }
 
             last_glue_ = std::max<std::uint32_t>(1u, static_cast<std::uint32_t>(levels.size()));
             glue_.insert_or_assign(ref.offset(), last_glue_);
             if (database_ != nullptr)
-            {
                 database_->set_glue(ref, last_glue_);
-            }
         }
 
         /// @brief Promotes a clause to a higher-quality tier if its recomputed glue justifies it.
@@ -238,16 +208,12 @@ namespace kmx::sat::cdcl::clause
         void promote_if_needed(const ref_t ref) noexcept
         {
             if (!ref.valid())
-            {
                 return;
-            }
             if (glue_.contains(ref.offset()) && glue_.at(ref.offset()) <= 2u)
             {
                 promoted_.insert(ref.offset());
                 if (database_ != nullptr)
-                {
                     database_->promote_clause(ref);
-                }
             }
         }
 

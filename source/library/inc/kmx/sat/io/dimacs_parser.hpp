@@ -52,9 +52,7 @@ namespace kmx::sat::io
             {
                 const auto read_count = source.read(buffer, sizeof(buffer));
                 if (read_count == 0)
-                {
                     break;
-                }
                 text.append(buffer, read_count);
             }
 
@@ -74,22 +72,14 @@ namespace kmx::sat::io
                 line_start = line_end == std::string::npos ? text.size() + 1 : line_end + 1;
 
                 while (!line_view.empty() && std::isspace(static_cast<unsigned char>(line_view.front())) != 0)
-                {
                     line_view.remove_prefix(1);
-                }
                 while (!line_view.empty() && std::isspace(static_cast<unsigned char>(line_view.back())) != 0)
-                {
                     line_view.remove_suffix(1);
-                }
 
                 if (line_view.empty())
-                {
                     continue;
-                }
                 if (line_view.front() == 'c')
-                {
                     continue;
-                }
 
                 if (line_view.front() == 'p')
                 {
@@ -184,9 +174,7 @@ namespace kmx::sat::io
                 {
                     std::string_view line_view {line};
                     while (!line_view.empty() && std::isspace(static_cast<unsigned char>(line_view.front())) != 0)
-                    {
                         line_view.remove_prefix(1);
-                    }
 
                     if (!line_view.empty() && line_view.front() == 'p')
                     {
@@ -223,9 +211,7 @@ namespace kmx::sat::io
         bool parse_clause(file_source& source) noexcept
         {
             if (!parse(source))
-            {
                 return false;
-            }
             return !clauses_.empty();
         }
 

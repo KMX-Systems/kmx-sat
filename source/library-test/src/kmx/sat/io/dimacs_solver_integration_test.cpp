@@ -36,9 +36,7 @@ namespace kmx::sat::io
 
         solver sat_solver;
         for (const auto& clause: sat_parser.clauses())
-        {
             sat_solver.add_clause(std::span<const literal> {clause});
-        }
         const auto sat_result = sat_solver.solve(solve_request {});
         REQUIRE(sat_result.status_of() == solve_result::status::satisfiable);
         sat_source.close();
@@ -60,9 +58,7 @@ namespace kmx::sat::io
 
         solver unsat_solver;
         for (const auto& clause: unsat_parser.clauses())
-        {
             unsat_solver.add_clause(std::span<const literal> {clause});
-        }
         const auto unsat_result = unsat_solver.solve(solve_request {});
         REQUIRE(unsat_result.status_of() == solve_result::status::unsatisfiable);
         unsat_source.close();

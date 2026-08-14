@@ -72,9 +72,7 @@ namespace kmx::sat::proof::tracer
         void add_original(const cdcl::clause::ref_t ref) noexcept
         {
             if (!variant_)
-            {
                 return;
-            }
             std::visit([&](auto& tracer) noexcept { tracer.add_original(ref); }, *variant_);
         }
 
@@ -84,9 +82,7 @@ namespace kmx::sat::proof::tracer
         void add_derived(const cdcl::clause::ref_t ref) noexcept
         {
             if (!variant_)
-            {
                 return;
-            }
             std::visit([&](auto& tracer) noexcept { tracer.add_derived(ref); }, *variant_);
         }
 
@@ -96,9 +92,7 @@ namespace kmx::sat::proof::tracer
         void delete_clause(const cdcl::clause::ref_t ref) noexcept
         {
             if (!variant_)
-            {
                 return;
-            }
             std::visit([&](auto& tracer) noexcept { tracer.delete_clause(ref); }, *variant_);
         }
 
@@ -108,9 +102,7 @@ namespace kmx::sat::proof::tracer
         void shrink_clause(const cdcl::clause::ref_t ref) noexcept
         {
             if (!variant_)
-            {
                 return;
-            }
             std::visit([&](auto& tracer) noexcept { tracer.shrink_clause(ref); }, *variant_);
         }
 
@@ -120,9 +112,7 @@ namespace kmx::sat::proof::tracer
         void on_event(const proof::proof_event& event) noexcept
         {
             if (!variant_)
-            {
                 return;
-            }
             std::visit([&](auto& tracer) noexcept { tracer.on_event(event); }, *variant_);
         }
 
@@ -131,9 +121,7 @@ namespace kmx::sat::proof::tracer
         void finalize() noexcept
         {
             if (!variant_)
-            {
                 return;
-            }
             std::visit([](auto& tracer) noexcept { tracer.finalize(); }, *variant_);
         }
 
@@ -142,38 +130,24 @@ namespace kmx::sat::proof::tracer
         std::string_view format_name() const noexcept
         {
             if (!variant_)
-            {
                 return {};
-            }
 
             return std::visit(
                 [](const auto& tracer) noexcept -> std::string_view
                 {
                     using tracer_t = std::decay_t<decltype(tracer)>;
                     if constexpr (std::same_as<tracer_t, drat>)
-                    {
                         return "drat";
-                    }
                     else if constexpr (std::same_as<tracer_t, lrat>)
-                    {
                         return "lrat";
-                    }
                     else if constexpr (std::same_as<tracer_t, frat>)
-                    {
                         return "frat";
-                    }
                     else if constexpr (std::same_as<tracer_t, idrup>)
-                    {
                         return "idrup";
-                    }
                     else if constexpr (std::same_as<tracer_t, lidrup>)
-                    {
                         return "lidrup";
-                    }
                     else
-                    {
                         return "veripb";
-                    }
                 },
                 *variant_);
         }

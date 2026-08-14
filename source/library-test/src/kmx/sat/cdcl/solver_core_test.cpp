@@ -49,8 +49,7 @@ namespace kmx::sat::cdcl
         solver_core binary_conflict_solver;
         binary_conflict_solver.add_problem_clause({literal {variable {90u}, false}});
         binary_conflict_solver.add_problem_clause({literal {variable {91u}, false}});
-        binary_conflict_solver.add_problem_clause(
-            {literal {variable {90u}, true}, literal {variable {91u}, true}});
+        binary_conflict_solver.add_problem_clause({literal {variable {90u}, true}, literal {variable {91u}, true}});
         REQUIRE(binary_conflict_solver.solve({}) == solver_core::status::unsatisfiable);
         REQUIRE(binary_conflict_solver.binary_watch_scan_count() > 0u);
         REQUIRE(binary_conflict_solver.binary_watch_conflict_count() > 0u);
@@ -69,8 +68,8 @@ namespace kmx::sat::cdcl
         solver_core assumption_subset_solver;
         assumption_subset_solver.add_problem_clause({literal {variable {1}, false}});
         const std::vector<literal> subset_assumptions {literal {variable {1}, true}, literal {variable {9}, false}};
-        REQUIRE(assumption_subset_solver.solve_under_assumptions(std::span<const literal> {subset_assumptions})
-            == solver_core::status::unsatisfiable);
+        REQUIRE(assumption_subset_solver.solve_under_assumptions(std::span<const literal> {subset_assumptions}) ==
+                solver_core::status::unsatisfiable);
         REQUIRE(assumption_subset_solver.extract_failed_core().size() == 1u);
         REQUIRE(assumption_subset_solver.extract_failed_core().front().raw() == subset_assumptions.front().raw());
         REQUIRE(assumption_subset_solver.propagator_assumption_call_count() == 1u);
@@ -79,8 +78,8 @@ namespace kmx::sat::cdcl
         assumption_reason_solver.add_problem_clause({literal {variable {1}, true}, literal {variable {2}, false}});
         assumption_reason_solver.add_problem_clause({literal {variable {2}, true}});
         const std::vector<literal> reason_assumptions {literal {variable {1}, false}, literal {variable {9}, false}};
-        REQUIRE(assumption_reason_solver.solve_under_assumptions(std::span<const literal> {reason_assumptions})
-            == solver_core::status::unsatisfiable);
+        REQUIRE(assumption_reason_solver.solve_under_assumptions(std::span<const literal> {reason_assumptions}) ==
+                solver_core::status::unsatisfiable);
         REQUIRE(assumption_reason_solver.extract_failed_core().size() == 1u);
         REQUIRE(assumption_reason_solver.extract_failed_core().front().raw() == reason_assumptions.front().raw());
 
@@ -189,8 +188,8 @@ namespace kmx::sat::cdcl
         tautology_conflict_limited_request.conflict_limit = 1u;
         REQUIRE(tautology_conflict_limited_solver.solve(tautology_conflict_limited_request) == solver_core::status::unknown);
         REQUIRE(tautology_conflict_limited_solver.current_search_outcome() == search_coordinator::outcome::terminated);
-        REQUIRE(tautology_conflict_limited_solver.current_search_termination_cause()
-            == search_coordinator::termination_cause::conflict_limit);
+        REQUIRE(tautology_conflict_limited_solver.current_search_termination_cause() ==
+                search_coordinator::termination_cause::conflict_limit);
         REQUIRE(tautology_conflict_limited_solver.learned_clause_count() == 0u);
 
         solver_core option_solver;
@@ -247,10 +246,9 @@ namespace kmx::sat::cdcl
         REQUIRE(proof_gated_solver.proof_checkers_valid());
 
         const auto& preprocess_summaries = proof_gated_solver.preprocess_last_reported_summaries();
-        const auto gate_summary =
-            std::find_if(preprocess_summaries.begin(), preprocess_summaries.end(),
-                         [](const simplify::scheduler::preprocess::pass_summary& summary) noexcept
-                         { return summary.id == simplify::scheduler::preprocess::pass_id::gate; });
+        const auto gate_summary = std::find_if(preprocess_summaries.begin(), preprocess_summaries.end(),
+                                               [](const simplify::scheduler::preprocess::pass_summary& summary) noexcept
+                                               { return summary.id == simplify::scheduler::preprocess::pass_id::gate; });
         REQUIRE(gate_summary != preprocess_summaries.end());
         REQUIRE_FALSE(gate_summary->executed);
         REQUIRE(gate_summary->skipped_by_proof_format);
@@ -286,16 +284,10 @@ namespace kmx::sat::cdcl
         const auto& antecedent_ids = proof_learning_solver.last_proof_event().antecedent_ids;
         REQUIRE_FALSE(antecedent_ids.empty());
         for (const auto antecedent_id: antecedent_ids)
-        {
             REQUIRE(antecedent_id.valid());
-        }
         for (std::size_t index = 0u; index < antecedent_ids.size(); ++index)
-        {
             for (std::size_t other = index + 1u; other < antecedent_ids.size(); ++other)
-            {
                 REQUIRE_FALSE(antecedent_ids[index].equals(antecedent_ids[other]));
-            }
-        }
 
         const auto buffered_events = proof_learning_solver.buffered_proof_events();
         REQUIRE(buffered_events.size() >= 8u);
@@ -304,14 +296,10 @@ namespace kmx::sat::cdcl
         for (const auto& event: buffered_events)
         {
             if (event.kind == proof::event_kind::add_original || event.kind == proof::event_kind::add_derived)
-            {
                 earlier_clause_ids.push_back(event.clause_id);
-            }
 
             if (event.clause_id.equals(proof_learning_solver.last_proof_event().clause_id))
-            {
                 break;
-            }
         }
 
         REQUIRE(earlier_clause_ids.size() >= 4u);

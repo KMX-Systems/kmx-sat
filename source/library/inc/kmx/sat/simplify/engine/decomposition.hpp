@@ -289,9 +289,7 @@ namespace kmx::sat::simplify::engine
             for (const auto node: ordered_nodes)
             {
                 if (index_.contains(node))
-                {
                     continue;
-                }
                 strong_connect(node);
             }
 
@@ -313,16 +311,12 @@ namespace kmx::sat::simplify::engine
             max_substitutions_per_component_ = 0u;
 
             if (components_.empty())
-            {
                 ++find_equivalence_empty_component_run_count_;
-            }
 
             for (const auto& component: components_)
             {
                 if (component.size() < 2u)
-                {
                     continue;
-                }
 
                 ++non_singleton_equivalence_component_count_;
                 const auto substitutions_before_component = substitutions_.size();
@@ -331,30 +325,23 @@ namespace kmx::sat::simplify::engine
                 for (const auto node: component)
                 {
                     if (node == representative)
-                    {
                         continue;
-                    }
                     substitutions_.push_back({node, representative});
                     ++equivalence_count_;
                 }
 
                 const auto substitutions_for_component = substitutions_.size() - substitutions_before_component;
                 if (substitutions_for_component > max_substitutions_per_component_)
-                {
                     max_substitutions_per_component_ = substitutions_for_component;
-                }
             }
 
             generated_substitution_count_ = substitutions_.size();
 
             std::sort(substitutions_.begin(), substitutions_.end(),
-                      [](const std::pair<std::uint32_t, std::uint32_t>& left,
-                         const std::pair<std::uint32_t, std::uint32_t>& right) noexcept
+                      [](const std::pair<std::uint32_t, std::uint32_t>& left, const std::pair<std::uint32_t, std::uint32_t>& right) noexcept
                       {
                           if (left.second != right.second)
-                          {
                               return left.second < right.second;
-                          }
                           return left.first < right.first;
                       });
         }
@@ -374,16 +361,10 @@ namespace kmx::sat::simplify::engine
             total_emitted_substitution_count_ += substitutions_.size();
 
             if (substitutor_ != nullptr)
-            {
                 for (const auto& [from, to]: substitutions_)
-                {
                     substitutor_->apply_equivalence_class(from, to);
-                }
-            }
             else
-            {
                 ++emit_without_substitutor_count_;
-            }
             substitutions_emitted_ = true;
         }
 
@@ -403,9 +384,7 @@ namespace kmx::sat::simplify::engine
         {
             const auto it = adjacency_.find(node);
             if (it == adjacency_.end())
-            {
                 return 0u;
-            }
             return it->second.size();
         }
 
@@ -442,45 +421,35 @@ namespace kmx::sat::simplify::engine
         std::size_t average_outgoing_implication_per_node_floor() const noexcept
         {
             if (node_count() == 0u)
-            {
                 return 0u;
-            }
             return unique_implication_edge_count() / node_count();
         }
 
         std::size_t average_component_size_floor() const noexcept
         {
             if (component_count_ == 0u)
-            {
                 return 0u;
-            }
             return node_count() / component_count_;
         }
 
         std::size_t equivalence_coverage_per_node_per_mille() const noexcept
         {
             if (node_count() == 0u)
-            {
                 return 0u;
-            }
             return (equivalence_count_ * 1000u) / node_count();
         }
 
         std::size_t substitution_density_per_node_per_mille() const noexcept
         {
             if (node_count() == 0u)
-            {
                 return 0u;
-            }
             return (generated_substitution_count_ * 1000u) / node_count();
         }
 
         std::size_t successor_scans_per_unique_edge_per_mille() const noexcept
         {
             if (unique_implication_edge_count() == 0u)
-            {
                 return 0u;
-            }
             return (successor_scan_count_ * 1000u) / unique_implication_edge_count();
         }
 
@@ -494,17 +463,11 @@ namespace kmx::sat::simplify::engine
 
         std::size_t find_equivalence_run_count() const noexcept { return find_equivalence_run_count_; }
 
-        std::size_t find_equivalence_empty_component_run_count() const noexcept
-        {
-            return find_equivalence_empty_component_run_count_;
-        }
+        std::size_t find_equivalence_empty_component_run_count() const noexcept { return find_equivalence_empty_component_run_count_; }
 
         std::size_t generated_substitution_count() const noexcept { return generated_substitution_count_; }
 
-        std::size_t non_singleton_equivalence_component_count() const noexcept
-        {
-            return non_singleton_equivalence_component_count_;
-        }
+        std::size_t non_singleton_equivalence_component_count() const noexcept { return non_singleton_equivalence_component_count_; }
 
         std::size_t max_substitutions_per_component() const noexcept { return max_substitutions_per_component_; }
 
@@ -525,9 +488,7 @@ namespace kmx::sat::simplify::engine
         std::size_t edge_density_per_node_per_mille() const noexcept
         {
             if (node_count() == 0u)
-            {
                 return 0u;
-            }
             return (unique_implication_edge_count() * 1000u) / node_count();
         }
 
@@ -603,9 +564,8 @@ namespace kmx::sat::simplify::engine
                 .reset_emit_invocation_count = reset_emit_invocation_count_,
                 .reset_telemetry_invocation_count = reset_telemetry_invocation_count_,
                 .clear_graph_invocation_count = clear_graph_invocation_count_,
-                .total_reset_invocation_count =
-                    reset_graph_invocation_count_ + reset_run_invocation_count_ + reset_emit_invocation_count_
-                    + reset_telemetry_invocation_count_ + clear_graph_invocation_count_,
+                .total_reset_invocation_count = reset_graph_invocation_count_ + reset_run_invocation_count_ + reset_emit_invocation_count_ +
+                                                reset_telemetry_invocation_count_ + clear_graph_invocation_count_,
             };
         }
 
@@ -621,71 +581,61 @@ namespace kmx::sat::simplify::engine
             };
         }
 
-        static reset_metrics_delta reset_metrics_delta_between(const reset_metrics& before,
-                                                               const reset_metrics& after) noexcept
+        static reset_metrics_delta reset_metrics_delta_between(const reset_metrics& before, const reset_metrics& after) noexcept
         {
             return reset_metrics_delta {
-                .reset_graph_invocation_count =
-                    after.reset_graph_invocation_count >= before.reset_graph_invocation_count
-                        ? after.reset_graph_invocation_count - before.reset_graph_invocation_count
-                        : 0u,
-                .reset_run_invocation_count =
-                    after.reset_run_invocation_count >= before.reset_run_invocation_count
-                        ? after.reset_run_invocation_count - before.reset_run_invocation_count
-                        : 0u,
-                .reset_emit_invocation_count =
-                    after.reset_emit_invocation_count >= before.reset_emit_invocation_count
-                        ? after.reset_emit_invocation_count - before.reset_emit_invocation_count
-                        : 0u,
-                .reset_telemetry_invocation_count =
-                    after.reset_telemetry_invocation_count >= before.reset_telemetry_invocation_count
-                        ? after.reset_telemetry_invocation_count - before.reset_telemetry_invocation_count
-                        : 0u,
-                .clear_graph_invocation_count =
-                    after.clear_graph_invocation_count >= before.clear_graph_invocation_count
-                        ? after.clear_graph_invocation_count - before.clear_graph_invocation_count
-                        : 0u,
-                .total_reset_invocation_count =
-                    after.total_reset_invocation_count >= before.total_reset_invocation_count
-                        ? after.total_reset_invocation_count - before.total_reset_invocation_count
-                        : 0u,
+                .reset_graph_invocation_count = after.reset_graph_invocation_count >= before.reset_graph_invocation_count ?
+                                                    after.reset_graph_invocation_count - before.reset_graph_invocation_count :
+                                                    0u,
+                .reset_run_invocation_count = after.reset_run_invocation_count >= before.reset_run_invocation_count ?
+                                                  after.reset_run_invocation_count - before.reset_run_invocation_count :
+                                                  0u,
+                .reset_emit_invocation_count = after.reset_emit_invocation_count >= before.reset_emit_invocation_count ?
+                                                   after.reset_emit_invocation_count - before.reset_emit_invocation_count :
+                                                   0u,
+                .reset_telemetry_invocation_count = after.reset_telemetry_invocation_count >= before.reset_telemetry_invocation_count ?
+                                                        after.reset_telemetry_invocation_count - before.reset_telemetry_invocation_count :
+                                                        0u,
+                .clear_graph_invocation_count = after.clear_graph_invocation_count >= before.clear_graph_invocation_count ?
+                                                    after.clear_graph_invocation_count - before.clear_graph_invocation_count :
+                                                    0u,
+                .total_reset_invocation_count = after.total_reset_invocation_count >= before.total_reset_invocation_count ?
+                                                    after.total_reset_invocation_count - before.total_reset_invocation_count :
+                                                    0u,
             };
         }
 
         static bool reset_metrics_monotonic(const reset_metrics& before, const reset_metrics& after) noexcept
         {
-            return after.reset_graph_invocation_count >= before.reset_graph_invocation_count
-                && after.reset_run_invocation_count >= before.reset_run_invocation_count
-                && after.reset_emit_invocation_count >= before.reset_emit_invocation_count
-                && after.reset_telemetry_invocation_count >= before.reset_telemetry_invocation_count
-                && after.clear_graph_invocation_count >= before.clear_graph_invocation_count
-                && after.total_reset_invocation_count >= before.total_reset_invocation_count;
+            return after.reset_graph_invocation_count >= before.reset_graph_invocation_count &&
+                   after.reset_run_invocation_count >= before.reset_run_invocation_count &&
+                   after.reset_emit_invocation_count >= before.reset_emit_invocation_count &&
+                   after.reset_telemetry_invocation_count >= before.reset_telemetry_invocation_count &&
+                   after.clear_graph_invocation_count >= before.clear_graph_invocation_count &&
+                   after.total_reset_invocation_count >= before.total_reset_invocation_count;
         }
 
         consistency_metrics consistency_metrics_snapshot() const noexcept
         {
             const auto implication_accounting_consistent =
-                accepted_implication_count() + rejected_zero_implication_count() + dropped_duplicate_edge_count()
-                == implication_attempt_count();
+                accepted_implication_count() + rejected_zero_implication_count() + dropped_duplicate_edge_count() ==
+                implication_attempt_count();
 
-            const auto component_accounting_consistent =
-                singleton_component_count() + non_singleton_component_count() == component_count();
+            const auto component_accounting_consistent = singleton_component_count() + non_singleton_component_count() == component_count();
 
             const auto substitution_accounting_consistent =
                 generated_substitution_count() == substitution_count() && equivalence_count() == substitution_count();
 
-            const auto emit_accounting_consistent =
-                total_emitted_substitution_count() >= last_emitted_substitution_count()
-                && (emit_run_count() == 0u ? total_emitted_substitution_count() == 0u : true);
+            const auto emit_accounting_consistent = total_emitted_substitution_count() >= last_emitted_substitution_count() &&
+                                                    (emit_run_count() == 0u ? total_emitted_substitution_count() == 0u : true);
 
-            const auto reset_accounting_consistent = reset_graph_invocation_count_ >= reset_telemetry_invocation_count_
-                                                  && reset_run_invocation_count_ >= reset_telemetry_invocation_count_
-                                                  && reset_emit_invocation_count_ >= reset_telemetry_invocation_count_
-                                                  && reset_telemetry_invocation_count_ >= clear_graph_invocation_count_;
+            const auto reset_accounting_consistent = reset_graph_invocation_count_ >= reset_telemetry_invocation_count_ &&
+                                                     reset_run_invocation_count_ >= reset_telemetry_invocation_count_ &&
+                                                     reset_emit_invocation_count_ >= reset_telemetry_invocation_count_ &&
+                                                     reset_telemetry_invocation_count_ >= clear_graph_invocation_count_;
 
-            const auto overall_consistent = implication_accounting_consistent && component_accounting_consistent
-                                         && substitution_accounting_consistent && emit_accounting_consistent
-                                         && reset_accounting_consistent;
+            const auto overall_consistent = implication_accounting_consistent && component_accounting_consistent &&
+                                            substitution_accounting_consistent && emit_accounting_consistent && reset_accounting_consistent;
 
             return consistency_metrics {
                 .implication_accounting_consistent = implication_accounting_consistent,
@@ -720,21 +670,15 @@ namespace kmx::sat::simplify::engine
         void canonicalize_components() noexcept
         {
             for (auto& component: components_)
-            {
                 std::sort(component.begin(), component.end());
-            }
 
             std::sort(components_.begin(), components_.end(),
                       [](const std::vector<std::uint32_t>& left, const std::vector<std::uint32_t>& right) noexcept
                       {
                           if (left.empty() || right.empty())
-                          {
                               return left.size() < right.size();
-                          }
                           if (left.front() != right.front())
-                          {
                               return left.front() < right.front();
-                          }
                           return left.size() < right.size();
                       });
         }
@@ -747,9 +691,7 @@ namespace kmx::sat::simplify::engine
             ++next_index_;
             tarjan_stack_.push_back(node);
             if (tarjan_stack_.size() > max_tarjan_stack_depth_)
-            {
                 max_tarjan_stack_depth_ = tarjan_stack_.size();
-            }
             on_stack_.insert(node);
 
             const auto it = adjacency_.find(node);
@@ -773,9 +715,7 @@ namespace kmx::sat::simplify::engine
             }
 
             if (low_link_[node] != index_[node])
-            {
                 return;
-            }
 
             ++root_component_extraction_count_;
 
@@ -787,9 +727,7 @@ namespace kmx::sat::simplify::engine
                 on_stack_.erase(top);
                 component.push_back(top);
                 if (top == node)
-                {
                     break;
-                }
             }
             components_.push_back(std::move(component));
         }
@@ -799,18 +737,12 @@ namespace kmx::sat::simplify::engine
             for (const auto& component: components_)
             {
                 if (component.size() < 2u)
-                {
                     ++singleton_component_count_;
-                }
                 else
-                {
                     ++non_singleton_component_count_;
-                }
 
                 if (component.size() > max_component_size_)
-                {
                     max_component_size_ = component.size();
-                }
             }
         }
 

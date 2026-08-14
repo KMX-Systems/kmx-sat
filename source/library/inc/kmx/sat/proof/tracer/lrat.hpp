@@ -81,9 +81,7 @@ namespace kmx::sat::proof::tracer
             record.literals = event.literals;
             record.antecedent_id_values.reserve(event.antecedent_ids.size());
             for (const auto antecedent: event.antecedent_ids)
-            {
                 record.antecedent_id_values.push_back(antecedent.value());
-            }
             emitted_events_.push_back(record);
         }
 

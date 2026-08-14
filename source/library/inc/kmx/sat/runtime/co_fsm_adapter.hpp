@@ -90,10 +90,8 @@ namespace kmx::sat::runtime
 
         static bool lifecycle_monotonic(const lifecycle_metrics& before, const lifecycle_metrics& after) noexcept
         {
-            return after.activation_count >= before.activation_count
-                && after.deactivation_count >= before.deactivation_count
-                && after.transition_epoch >= before.transition_epoch
-                && after.last_activation_epoch >= before.last_activation_epoch;
+            return after.activation_count >= before.activation_count && after.deactivation_count >= before.deactivation_count &&
+                   after.transition_epoch >= before.transition_epoch && after.last_activation_epoch >= before.last_activation_epoch;
         }
 
     private:

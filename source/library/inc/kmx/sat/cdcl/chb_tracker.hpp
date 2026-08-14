@@ -6,7 +6,7 @@
     #include <algorithm>
     #include <cstddef>
     #include <cstdint>
-        #include <optional>
+    #include <optional>
     #include <utility>
     #include <vector>
 #endif
@@ -37,18 +37,12 @@ namespace kmx::sat::cdcl
         /// @brief Updates the reward signal for a variable when it is assigned.
         /// @param var Variable being assigned.
         /// @throws None (noexcept).
-        void update_on_assignment(const variable var) noexcept
-        {
-            update_score(var, 0.25);
-        }
+        void update_on_assignment(const variable var) noexcept { update_score(var, 0.25); }
 
         /// @brief Updates the reward signal for a variable involved in a conflict.
         /// @param var Variable involved in the conflict.
         /// @throws None (noexcept).
-        void update_on_conflict(const variable var) noexcept
-        {
-            update_score(var, 1.0);
-        }
+        void update_on_conflict(const variable var) noexcept { update_score(var, 1.0); }
 
         /// @brief Returns the current CHB score for a variable.
         /// @param var Variable to query.
@@ -58,9 +52,7 @@ namespace kmx::sat::cdcl
         {
             const auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept { return entry.first == var; });
             if (it == scores_.end())
-            {
                 return 0.0;
-            }
             return it->second;
         }
 
@@ -72,11 +64,9 @@ namespace kmx::sat::cdcl
             for (const auto& entry: scores_)
             {
                 if (entry.second <= 0.0 || !selectable(entry.first))
-                {
                     continue;
-                }
-                if (best == nullptr || entry.second > best->second
-                    || (entry.second == best->second && entry.first.index() < best->first.index()))
+                if (best == nullptr || entry.second > best->second ||
+                    (entry.second == best->second && entry.first.index() < best->first.index()))
                 {
                     best = &entry;
                 }
@@ -89,23 +79,15 @@ namespace kmx::sat::cdcl
         void decay_step() noexcept
         {
             for (auto& entry: scores_)
-            {
                 entry.second *= decay_factor_;
-            }
             ++decay_count_;
         }
 
         /// @brief Sets the exponential reward learning rate in the inclusive range [0, 1].
-        void set_learning_rate(const double rate) noexcept
-        {
-            learning_rate_ = std::clamp(rate, 0.0, 1.0);
-        }
+        void set_learning_rate(const double rate) noexcept { learning_rate_ = std::clamp(rate, 0.0, 1.0); }
 
         /// @brief Sets the multiplicative decay factor in the inclusive range [0, 1].
-        void set_decay_factor(const double factor) noexcept
-        {
-            decay_factor_ = std::clamp(factor, 0.0, 1.0);
-        }
+        void set_decay_factor(const double factor) noexcept { decay_factor_ = std::clamp(factor, 0.0, 1.0); }
 
         /// @brief Returns how many explicit decay steps have been applied.
         std::uint32_t decay_count() const noexcept { return decay_count_; }

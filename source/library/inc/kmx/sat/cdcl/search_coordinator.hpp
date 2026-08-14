@@ -75,9 +75,7 @@ namespace kmx::sat::cdcl
         void run_search_epoch() noexcept
         {
             if (outcome_ != outcome::in_progress)
-            {
                 return;
-            }
 
             const auto assumption_conflict = propagator_.propagate_assumptions();
             if (assumption_conflict.valid())
@@ -93,9 +91,7 @@ namespace kmx::sat::cdcl
                 {
                     handle_conflict();
                     if (outcome_ != outcome::in_progress)
-                    {
                         return;
-                    }
                     continue;
                 }
 
@@ -121,9 +117,7 @@ namespace kmx::sat::cdcl
                     }
                     reduce_controller_.update_tiers();
                     if (clause_database_ != nullptr)
-                    {
                         clause_database_->decay_quality();
-                    }
                 }
 
                 const auto branch_literal = decision_engine_.pick_branch_literal();
@@ -141,9 +135,7 @@ namespace kmx::sat::cdcl
                     return;
                 }
                 if (restart_controller_.should_restart())
-                {
                     handle_restart();
-                }
                 return;
             }
         }
@@ -217,15 +209,27 @@ namespace kmx::sat::cdcl
 
         /// @brief Handles the satisfiable terminal case (every variable consistently assigned).
         /// @throws None (noexcept).
-        void handle_sat() noexcept { termination_cause_ = termination_cause::none; outcome_ = outcome::satisfiable; }
+        void handle_sat() noexcept
+        {
+            termination_cause_ = termination_cause::none;
+            outcome_ = outcome::satisfiable;
+        }
 
         /// @brief Handles the unsatisfiable terminal case (empty clause derived, or assumption-level conflict).
         /// @throws None (noexcept).
-        void handle_unsat() noexcept { termination_cause_ = termination_cause::none; outcome_ = outcome::unsatisfiable; }
+        void handle_unsat() noexcept
+        {
+            termination_cause_ = termination_cause::none;
+            outcome_ = outcome::unsatisfiable;
+        }
 
         /// @brief Handles limit exhaustion or an external termination callback firing.
         /// @throws None (noexcept).
-        void handle_termination(const termination_cause cause = termination_cause::external) noexcept { termination_cause_ = cause; outcome_ = outcome::terminated; }
+        void handle_termination(const termination_cause cause = termination_cause::external) noexcept
+        {
+            termination_cause_ = cause;
+            outcome_ = outcome::terminated;
+        }
 
         /// @brief Returns the terminal state tracked by this coordinator.
         /// @return Current search-epoch outcome.
@@ -280,8 +284,7 @@ namespace kmx::sat::cdcl
         /// @param conflict_maintenance_interval EVSIDS rescale interval in conflicts (0 disables).
         /// @param chb_decay_interval CHB decay interval in conflicts (0 disables).
         /// @param restart_decay_interval CHB decay interval in restarts (0 disables).
-        void set_decision_maintenance_intervals(const std::uint32_t conflict_maintenance_interval,
-                                                const std::uint32_t chb_decay_interval,
+        void set_decision_maintenance_intervals(const std::uint32_t conflict_maintenance_interval, const std::uint32_t chb_decay_interval,
                                                 const std::uint32_t restart_decay_interval) noexcept
         {
             decision_engine_.set_maintenance_intervals(conflict_maintenance_interval, chb_decay_interval, restart_decay_interval);
@@ -364,9 +367,7 @@ namespace kmx::sat::cdcl
         std::optional<literal> next_branch_literal(const std::uint32_t fallback_variable) noexcept
         {
             if (fallback_variable != 0u)
-            {
                 decision_engine_.set_next_variable(fallback_variable);
-            }
             return decision_engine_.pick_branch_literal();
         }
 
@@ -377,14 +378,10 @@ namespace kmx::sat::cdcl
         std::optional<literal> take_branch_literal(const std::uint32_t fallback_variable) noexcept
         {
             if (outcome_ != outcome::in_progress)
-            {
-                return std::nullopt;
-            }
+                return {};
 
             if (restart_controller_.should_restart())
-            {
                 handle_restart();
-            }
 
             if (reduce_controller_.should_reduce())
             {
@@ -402,28 +399,22 @@ namespace kmx::sat::cdcl
                 }
                 reduce_controller_.update_tiers();
                 if (clause_database_ != nullptr)
-                {
                     clause_database_->decay_quality();
-                }
             }
 
             if (fallback_variable != 0u)
-            {
                 decision_engine_.set_next_variable(fallback_variable);
-            }
             const auto branch_literal = decision_engine_.pick_branch_literal();
             if (!branch_literal.has_value())
             {
                 handle_sat();
-                return std::nullopt;
+                return {};
             }
 
             restart_controller_.tick_decision();
             ++decision_count_;
             if (decision_limit_ != 0 && decision_count_ >= decision_limit_)
-            {
                 handle_termination(termination_cause::decision_limit);
-            }
 
             return branch_literal;
         }
@@ -463,10 +454,7 @@ namespace kmx::sat::cdcl
 
         double fast_glue_ema() const noexcept { return restart_controller_.fast_glue_ema(); }
         double slow_glue_ema() const noexcept { return restart_controller_.slow_glue_ema(); }
-        std::uint32_t glue_restart_threshold_percent() const noexcept
-        {
-            return restart_controller_.glue_restart_threshold_percent();
-        }
+        std::uint32_t glue_restart_threshold_percent() const noexcept { return restart_controller_.glue_restart_threshold_percent(); }
 
         /// @brief Forces the next search loop iteration to execute one reduction pass.
         /// @throws None (noexcept).
@@ -610,9 +598,7 @@ namespace kmx::sat::cdcl
             reduce_controller_.tick_conflict();
             ++conflict_count_;
             if (conflict_limit_ != 0 && conflict_count_ >= conflict_limit_)
-            {
                 handle_termination(termination_cause::conflict_limit);
-            }
         }
 
         static constexpr std::uint64_t max_deferred_inprocess_resync_streak {1u};

@@ -90,9 +90,7 @@ namespace kmx::sat::cdcl
             {
                 ++remaining_redundant_count;
                 if (ref == reason_ref)
-                {
                     reason_survived = true;
-                }
             });
 
         REQUIRE(remaining_redundant_count == 1u);
@@ -104,12 +102,12 @@ namespace kmx::sat::cdcl
         controller::reduce reduce;
         clause::database database;
 
-        const auto low_glue_used = database.add_clause(
-            std::array<literal, 2> {literal {variable {10}, false}, literal {variable {11}, false}}, true);
-        const auto high_glue_unused = database.add_clause(
-            std::array<literal, 4> {literal {variable {12}, false}, literal {variable {13}, false}, literal {variable {14}, false},
-                                    literal {variable {15}, false}},
-                                    true);
+        const auto low_glue_used =
+            database.add_clause(std::array<literal, 2> {literal {variable {10}, false}, literal {variable {11}, false}}, true);
+        const auto high_glue_unused =
+            database.add_clause(std::array<literal, 4> {literal {variable {12}, false}, literal {variable {13}, false},
+                                                        literal {variable {14}, false}, literal {variable {15}, false}},
+                                true);
         const auto active_reason = database.add_clause(std::array<literal, 1> {literal {variable {16}, false}}, true);
 
         database.set_glue(low_glue_used, 1u);
@@ -133,10 +131,10 @@ namespace kmx::sat::cdcl
     {
         controller::reduce reduce;
         clause::database database;
-        const auto inactive = database.add_clause(
-            std::array<literal, 2> {literal {variable {40u}, false}, literal {variable {41u}, false}}, true);
-        const auto active = database.add_clause(
-            std::array<literal, 2> {literal {variable {42u}, false}, literal {variable {43u}, false}}, true);
+        const auto inactive =
+            database.add_clause(std::array<literal, 2> {literal {variable {40u}, false}, literal {variable {41u}, false}}, true);
+        const auto active =
+            database.add_clause(std::array<literal, 2> {literal {variable {42u}, false}, literal {variable {43u}, false}}, true);
 
         database.set_glue(inactive, 3u);
         database.set_glue(active, 3u);
@@ -156,10 +154,10 @@ namespace kmx::sat::cdcl
     {
         controller::reduce reduce;
         clause::database database;
-        const auto active_low_glue = database.add_clause(
-            std::array<literal, 2> {literal {variable {60u}, false}, literal {variable {61u}, false}}, true);
-        const auto stale_low_glue = database.add_clause(
-            std::array<literal, 2> {literal {variable {62u}, false}, literal {variable {63u}, false}}, true);
+        const auto active_low_glue =
+            database.add_clause(std::array<literal, 2> {literal {variable {60u}, false}, literal {variable {61u}, false}}, true);
+        const auto stale_low_glue =
+            database.add_clause(std::array<literal, 2> {literal {variable {62u}, false}, literal {variable {63u}, false}}, true);
 
         database.set_glue(active_low_glue, 2u);
         database.set_glue(stale_low_glue, 2u);
@@ -181,10 +179,10 @@ namespace kmx::sat::cdcl
         std::array<clause::ref_t, 4> candidates {};
         for (std::size_t index {}; index < candidates.size(); ++index)
         {
-            candidates[index] = database.add_clause(
-                std::array<literal, 2> {literal {variable {static_cast<std::uint32_t>(50u + index * 2u)}, false},
-                                        literal {variable {static_cast<std::uint32_t>(51u + index * 2u)}, false}},
-                true);
+            candidates[index] =
+                database.add_clause(std::array<literal, 2> {literal {variable {static_cast<std::uint32_t>(50u + index * 2u)}, false},
+                                                            literal {variable {static_cast<std::uint32_t>(51u + index * 2u)}, false}},
+                                    true);
             database.set_glue(candidates[index], static_cast<std::uint32_t>(index + 1u));
         }
 

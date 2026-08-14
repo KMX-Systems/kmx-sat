@@ -80,9 +80,7 @@ namespace kmx::sat::proof::tracer
             record.literals = event.literals;
             record.antecedent_id_values.reserve(event.antecedent_ids.size());
             for (const auto antecedent: event.antecedent_ids)
-            {
                 record.antecedent_id_values.push_back(antecedent.value());
-            }
             emitted_events_.push_back(record);
         }
 
@@ -91,9 +89,7 @@ namespace kmx::sat::proof::tracer
         void finalize() noexcept
         {
             if (finalized_)
-            {
                 return;
-            }
             emitted_events_.push_back({event_kind::finalize, 0u});
             finalized_ = true;
         }

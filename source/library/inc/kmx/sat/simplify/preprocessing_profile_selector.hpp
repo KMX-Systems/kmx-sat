@@ -32,8 +32,8 @@ namespace kmx::sat::simplify
     };
 
     inline constexpr std::array<std::string_view, 14> pass_names {
-        "transitive_reducer", "decomposition", "probing", "forward_subsumer", "blocked", "covered", "bounded", "fast",
-        "instantiation", "factorizer", "gate", "congruence", "vivifier", "sweep"};
+        "transitive_reducer", "decomposition", "probing", "forward_subsumer", "blocked",  "covered", "bounded", "fast",
+        "instantiation",      "factorizer",    "gate",    "congruence",       "vivifier", "sweep"};
 
     inline constexpr std::optional<pass_id> parse_pass(const std::string_view name) noexcept
     {
@@ -44,17 +44,13 @@ namespace kmx::sat::simplify
             hash *= 16777619u;
         }
 
-        constexpr std::array<std::uint32_t, 14> pass_hashes {
-            0xb70710c1u, 0xda4c4018u, 0xd6a79702u, 0x5ef40fb1u, 0x5a5d6eb3u, 0xf6358681u, 0xff54b66au,
-            0x029402afu, 0x9a6bf24au, 0x587fb7f6u, 0x1660eb12u, 0x60fe7efau, 0x1171d8a3u, 0x518432e3u};
+        constexpr std::array<std::uint32_t, 14> pass_hashes {0xb70710c1u, 0xda4c4018u, 0xd6a79702u, 0x5ef40fb1u, 0x5a5d6eb3u,
+                                                             0xf6358681u, 0xff54b66au, 0x029402afu, 0x9a6bf24au, 0x587fb7f6u,
+                                                             0x1660eb12u, 0x60fe7efau, 0x1171d8a3u, 0x518432e3u};
         for (std::size_t index {}; index < pass_hashes.size(); ++index)
-        {
             if (pass_hashes[index] == hash && pass_names[index] == name)
-            {
                 return static_cast<pass_id>(index);
-            }
-        }
-        return std::nullopt;
+        return {};
     }
 
     /// @brief Instance-aware selection and ordering of preprocessing passes from cheap structural fingerprints, avoiding
@@ -117,37 +113,27 @@ namespace kmx::sat::simplify
 
             current_fingerprint_ = {};
             if (clause_database_ == nullptr)
-            {
                 return;
-            }
 
             const auto collect_clause = [&](const cdcl::clause::ref_t ref) noexcept
             {
                 if (clause_database_->is_garbage(ref))
-                {
                     return;
-                }
 
                 const auto literals = clause_database_->storage_of().literals_of(ref);
                 current_fingerprint_.clause_count += 1u;
                 current_fingerprint_.total_literal_count += literals.size();
                 if (literals.size() == 2u)
-                {
                     current_fingerprint_.binary_clause_count += 1u;
-                }
                 if (literals.size() >= 5u)
-                {
                     current_fingerprint_.long_clause_count += 1u;
-                }
             };
 
             clause_database_->iterate_irredundant(collect_clause);
             clause_database_->iterate_redundant(collect_clause);
 
             if (current_fingerprint_.clause_count == 0u)
-            {
                 return;
-            }
 
             current_fingerprint_.average_clause_length =
                 static_cast<double>(current_fingerprint_.total_literal_count) / static_cast<double>(current_fingerprint_.clause_count);
@@ -179,17 +165,11 @@ namespace kmx::sat::simplify
                                                                current_fingerprint_.long_clause_ratio >= probing_long_clause_threshold_ &&
                                                                current_fingerprint_.binary_clause_ratio <= 0.10;
             if (current_plan_.skip_memory_heavy_passes)
-            {
                 current_plan_.skip_pass_mask |= pass_bit(pass_id::congruence) | pass_bit(pass_id::vivifier);
-            }
             if (current_plan_.skip_factorizer_for_binary_dense)
-            {
                 current_plan_.skip_pass_mask |= pass_bit(pass_id::factorizer);
-            }
             if (current_plan_.skip_probing_for_long_clause_heavy)
-            {
                 current_plan_.skip_pass_mask |= pass_bit(pass_id::probing);
-            }
         }
 
         /// @brief Records the actual yield of a pass to refine future selection decisions.
@@ -204,17 +184,13 @@ namespace kmx::sat::simplify
         {
             ++effectiveness_count_;
             if (!was_effective.has_value())
-            {
                 return;
-            }
 
             if (id == pass_id::factorizer)
             {
                 ++factorizer_effectiveness_.observed_runs;
                 if (*was_effective)
-                {
                     ++factorizer_effectiveness_.effective_runs;
-                }
                 return;
             }
 
@@ -222,9 +198,7 @@ namespace kmx::sat::simplify
             {
                 ++probing_effectiveness_.observed_runs;
                 if (*was_effective)
-                {
                     ++probing_effectiveness_.effective_runs;
-                }
             }
         }
 
@@ -261,9 +235,8 @@ namespace kmx::sat::simplify
         /// @param restart_pressure_ema Inprocess restart-pressure EMA.
         /// @param reduction_pressure_ema Inprocess reduction-pressure EMA.
         /// @param learned_clause_pressure_ema Inprocess learned-clause-pressure EMA.
-        void set_inprocess_telemetry(const double conflict_density_ema, const double structural_gain_ema,
-                                     const double restart_pressure_ema, const double reduction_pressure_ema,
-                                     const double learned_clause_pressure_ema) noexcept
+        void set_inprocess_telemetry(const double conflict_density_ema, const double structural_gain_ema, const double restart_pressure_ema,
+                                     const double reduction_pressure_ema, const double learned_clause_pressure_ema) noexcept
         {
             inprocess_conflict_density_ema_ = conflict_density_ema;
             inprocess_structural_gain_ema_ = structural_gain_ema;
@@ -277,10 +250,7 @@ namespace kmx::sat::simplify
         /// @param pass_name Identifier of the candidate pass.
         /// @return True when the pass is allowed in the active plan.
         /// @throws None (noexcept).
-        bool should_run_pass(const pass_id id) const noexcept
-        {
-            return (current_plan_.skip_pass_mask & pass_bit(id)) == 0u;
-        }
+        bool should_run_pass(const pass_id id) const noexcept { return (current_plan_.skip_pass_mask & pass_bit(id)) == 0u; }
 
         const pass_plan& current_pass_plan() const noexcept { return current_plan_; }
 
@@ -298,9 +268,7 @@ namespace kmx::sat::simplify
                 const auto factorizer_hit_rate = static_cast<double>(factorizer_effectiveness_.effective_runs) /
                                                  static_cast<double>(factorizer_effectiveness_.observed_runs);
                 if (factorizer_hit_rate <= low_effectiveness_hit_rate_threshold)
-                {
                     factorizer_binary_dense_threshold_ = 0.70;
-                }
             }
 
             probing_long_clause_threshold_ = default_probing_long_clause_threshold;
@@ -309,9 +277,7 @@ namespace kmx::sat::simplify
                 const auto probing_hit_rate =
                     static_cast<double>(probing_effectiveness_.effective_runs) / static_cast<double>(probing_effectiveness_.observed_runs);
                 if (probing_hit_rate <= low_effectiveness_hit_rate_threshold)
-                {
                     probing_long_clause_threshold_ = 0.65;
-                }
             }
         }
 
@@ -328,10 +294,7 @@ namespace kmx::sat::simplify
         const pass_effectiveness& probing_effectiveness() const noexcept { return probing_effectiveness_; }
 
     private:
-        static constexpr std::uint64_t pass_bit(const pass_id id) noexcept
-        {
-            return std::uint64_t {1u} << static_cast<std::size_t>(id);
-        }
+        static constexpr std::uint64_t pass_bit(const pass_id id) noexcept { return std::uint64_t {1u} << static_cast<std::size_t>(id); }
 
         static constexpr double default_factorizer_binary_dense_threshold {0.80};
         static constexpr double default_probing_long_clause_threshold {0.75};
@@ -342,7 +305,6 @@ namespace kmx::sat::simplify
         static constexpr double elevated_reduction_pressure_threshold {0.03};
         static constexpr double elevated_learned_clause_pressure_threshold {0.50};
         static constexpr double low_structural_gain_threshold {0.05};
-
 
         bool is_elevated_learned_clause_pressure() const noexcept
         {

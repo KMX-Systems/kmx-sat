@@ -19,9 +19,7 @@ namespace kmx::sat::simplify
     {
         scheduler::preprocess scheduler;
         for (const auto pass_name: scheduler::preprocess::baseline_passes)
-        {
             scheduler.disable_pass(pass_name);
-        }
         scheduler.enable_pass("sweep");
 
         scheduler.run_initial_pipeline();
@@ -102,9 +100,7 @@ namespace kmx::sat::simplify
         scheduler.attach_variable_mapper(mapper);
 
         for (const auto pass_name: scheduler::preprocess::baseline_passes)
-        {
             scheduler.disable_pass(pass_name);
-        }
         scheduler.enable_pass("decomposition");
 
         const variable var_three {3u};
@@ -165,9 +161,7 @@ namespace kmx::sat::simplify
         scheduler.attach_variable_mapper(mapper);
 
         for (const auto pass_name: scheduler::preprocess::baseline_passes)
-        {
             scheduler.disable_pass(pass_name);
-        }
         scheduler.enable_pass("gate");
         scheduler.enable_pass("congruence");
 
@@ -240,16 +234,14 @@ namespace kmx::sat::simplify
         const auto& first_summaries = scheduler.last_reported_summaries();
         REQUIRE(first_summaries.size() == scheduler::preprocess::baseline_passes.size());
         const auto vivifier_summary =
-            std::find_if(first_summaries.begin(), first_summaries.end(),
-                         [](const scheduler::preprocess::pass_summary& summary) noexcept
+            std::find_if(first_summaries.begin(), first_summaries.end(), [](const scheduler::preprocess::pass_summary& summary) noexcept
                          { return summary.id == scheduler::preprocess::pass_id::vivifier; });
         REQUIRE(vivifier_summary != first_summaries.end());
         REQUIRE_FALSE(vivifier_summary->executed);
         REQUIRE(vivifier_summary->skipped_by_selector);
 
         const auto congruence_summary =
-            std::find_if(first_summaries.begin(), first_summaries.end(),
-                         [](const scheduler::preprocess::pass_summary& summary) noexcept
+            std::find_if(first_summaries.begin(), first_summaries.end(), [](const scheduler::preprocess::pass_summary& summary) noexcept
                          { return summary.id == scheduler::preprocess::pass_id::congruence; });
         REQUIRE(congruence_summary != first_summaries.end());
         REQUIRE_FALSE(congruence_summary->executed);
@@ -276,9 +268,7 @@ namespace kmx::sat::simplify
         scheduler.attach_clause_database(clause_database);
 
         for (const auto pass_name: scheduler::preprocess::baseline_passes)
-        {
             scheduler.disable_pass(pass_name);
-        }
         scheduler.enable_pass("probing");
         scheduler.enable_pass("factorizer");
         scheduler.enable_pass("transitive_reducer");
@@ -313,9 +303,7 @@ namespace kmx::sat::simplify
         scheduler.attach_proof_manager(proof_manager);
 
         for (const auto pass_name: scheduler::preprocess::baseline_passes)
-        {
             scheduler.disable_pass(pass_name);
-        }
         scheduler.enable_pass("gate");
         scheduler.enable_pass("congruence");
 
@@ -348,9 +336,7 @@ namespace kmx::sat::simplify
         scheduler.attach_clause_database(clause_database);
 
         for (const auto pass_name: scheduler::preprocess::baseline_passes)
-        {
             scheduler.disable_pass(pass_name);
-        }
         scheduler.enable_pass("transitive_reducer");
 
         const auto implication_ab =
@@ -378,9 +364,7 @@ namespace kmx::sat::simplify
         scheduler.attach_clause_database(clause_database);
 
         for (const auto pass_name: scheduler::preprocess::baseline_passes)
-        {
             scheduler.disable_pass(pass_name);
-        }
         scheduler.enable_pass("probing");
         scheduler.enable_pass("factorizer");
         scheduler.enable_pass("transitive_reducer");
@@ -427,16 +411,14 @@ namespace kmx::sat::simplify
 
         const auto& summaries = scheduler.last_reported_summaries();
         const auto vivifier_summary =
-            std::find_if(summaries.begin(), summaries.end(),
-                         [](const scheduler::preprocess::pass_summary& summary) noexcept
+            std::find_if(summaries.begin(), summaries.end(), [](const scheduler::preprocess::pass_summary& summary) noexcept
                          { return summary.id == scheduler::preprocess::pass_id::vivifier; });
         REQUIRE(vivifier_summary != summaries.end());
         REQUIRE_FALSE(vivifier_summary->executed);
         REQUIRE(vivifier_summary->skipped_by_selector);
 
         const auto congruence_summary =
-            std::find_if(summaries.begin(), summaries.end(),
-                         [](const scheduler::preprocess::pass_summary& summary) noexcept
+            std::find_if(summaries.begin(), summaries.end(), [](const scheduler::preprocess::pass_summary& summary) noexcept
                          { return summary.id == scheduler::preprocess::pass_id::congruence; });
         REQUIRE(congruence_summary != summaries.end());
         REQUIRE_FALSE(congruence_summary->executed);
@@ -464,8 +446,7 @@ namespace kmx::sat::simplify
 
         const auto& summaries = scheduler.last_reported_summaries();
         const auto vivifier_summary =
-            std::find_if(summaries.begin(), summaries.end(),
-                         [](const scheduler::preprocess::pass_summary& summary) noexcept
+            std::find_if(summaries.begin(), summaries.end(), [](const scheduler::preprocess::pass_summary& summary) noexcept
                          { return summary.id == scheduler::preprocess::pass_id::vivifier; });
         REQUIRE(vivifier_summary != summaries.end());
         REQUIRE_FALSE(vivifier_summary->executed);
@@ -493,16 +474,14 @@ namespace kmx::sat::simplify
 
         const auto& summaries = scheduler.last_reported_summaries();
         const auto vivifier_summary =
-            std::find_if(summaries.begin(), summaries.end(),
-                         [](const scheduler::preprocess::pass_summary& summary) noexcept
+            std::find_if(summaries.begin(), summaries.end(), [](const scheduler::preprocess::pass_summary& summary) noexcept
                          { return summary.id == scheduler::preprocess::pass_id::vivifier; });
         REQUIRE(vivifier_summary != summaries.end());
         REQUIRE(vivifier_summary->executed);
         REQUIRE_FALSE(vivifier_summary->skipped_by_selector);
 
         const auto congruence_summary =
-            std::find_if(summaries.begin(), summaries.end(),
-                         [](const scheduler::preprocess::pass_summary& summary) noexcept
+            std::find_if(summaries.begin(), summaries.end(), [](const scheduler::preprocess::pass_summary& summary) noexcept
                          { return summary.id == scheduler::preprocess::pass_id::congruence; });
         REQUIRE(congruence_summary != summaries.end());
         REQUIRE(congruence_summary->executed);
@@ -522,9 +501,7 @@ namespace kmx::sat::simplify
         scheduler.attach_proof_manager(proof_manager);
 
         for (const auto pass_name: scheduler::preprocess::baseline_passes)
-        {
             scheduler.disable_pass(pass_name);
-        }
         scheduler.enable_pass("probing");
 
         const literal unit_lit {variable {61u}, false};
@@ -545,9 +522,7 @@ namespace kmx::sat::simplify
             {
                 const auto clause = clause_database.storage_of().literals_of(ref);
                 if (clause.size() == 1u && clause.front() == implied_lit)
-                {
                     attached_backbone_unit = true;
-                }
             });
         REQUIRE_FALSE(attached_backbone_unit);
         REQUIRE(proof_manager.last_event().kind == proof::event_kind::shrink_clause);

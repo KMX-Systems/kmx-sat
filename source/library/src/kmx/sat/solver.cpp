@@ -16,9 +16,7 @@ namespace kmx::sat
     static std::optional<literal> literal_from_dimacs(const int32_t dimacs_value) noexcept
     {
         if (dimacs_value == 0)
-        {
-            return std::nullopt;
-        }
+            return {};
 
         const auto variable_index = static_cast<variable::index_t>(std::abs(dimacs_value));
         return literal {variable {variable_index}, dimacs_value < 0};
@@ -86,29 +84,23 @@ namespace kmx::sat
         {
             io::writer::format formatter {};
             const auto snapshot = statistics_.snapshot_of();
-            const auto detail = statistics_report_detail_ == solver::statistics_report_detail::verbose
-                                    ? io::writer::format::statistics_detail::verbose
-                                    : io::writer::format::statistics_detail::compact;
+            const auto detail = statistics_report_detail_ == solver::statistics_report_detail::verbose ?
+                                    io::writer::format::statistics_detail::verbose :
+                                    io::writer::format::statistics_detail::compact;
             formatter.write_statistics(snapshot, detail);
             emitted_statistics_report_lines_.emplace_back(formatter.buffer_view());
             emitted_statistics_snapshots_.push_back(snapshot);
             constexpr std::size_t max_emitted_statistics_report_lines = 64u;
             if (emitted_statistics_report_lines_.size() > max_emitted_statistics_report_lines)
-            {
                 emitted_statistics_report_lines_.erase(emitted_statistics_report_lines_.begin());
-            }
             if (emitted_statistics_snapshots_.size() > max_emitted_statistics_report_lines)
-            {
                 emitted_statistics_snapshots_.erase(emitted_statistics_snapshots_.begin());
-            }
         }
 
         void flush_pending_clause() noexcept
         {
             if (pending_clause_.empty())
-            {
                 return;
-            }
             core_.add_problem_clause(std::span<const literal> {pending_clause_});
             pending_clause_.clear();
         }
@@ -129,15 +121,13 @@ namespace kmx::sat
 
         [[nodiscard]] bool has_persisted_configuration() const noexcept
         {
-            return has_configured_conflict_limit_ || has_configured_decision_limit_ || has_configured_enabled_pass_mask_
-                || has_configured_decision_conflict_maintenance_interval_ || has_configured_decision_chb_decay_interval_
-                || has_configured_decision_restart_decay_interval_ || has_configured_restart_interval_
-                || has_configured_decision_restart_interval_ || has_configured_reduction_fraction_percent_ || has_configured_chb_enabled_
-                || has_configured_reduction_interval_
-                || has_configured_glue_restart_threshold_percent_
-                || has_configured_cold_storage_enabled_
-                || has_configured_activity_retention_threshold_
-                || has_configured_strict_mode_ || !active_configuration_profile_.empty();
+            return has_configured_conflict_limit_ || has_configured_decision_limit_ || has_configured_enabled_pass_mask_ ||
+                   has_configured_decision_conflict_maintenance_interval_ || has_configured_decision_chb_decay_interval_ ||
+                   has_configured_decision_restart_decay_interval_ || has_configured_restart_interval_ ||
+                   has_configured_decision_restart_interval_ || has_configured_reduction_fraction_percent_ || has_configured_chb_enabled_ ||
+                   has_configured_reduction_interval_ || has_configured_glue_restart_threshold_percent_ ||
+                   has_configured_cold_storage_enabled_ || has_configured_activity_retention_threshold_ || has_configured_strict_mode_ ||
+                   !active_configuration_profile_.empty();
         }
 
         void clear_persisted_configuration() noexcept
@@ -177,47 +167,38 @@ namespace kmx::sat
 
         void apply_core_configuration() noexcept
         {
-            const auto conflict_maintenance_interval = has_configured_decision_conflict_maintenance_interval_
-                                                           ? configured_decision_conflict_maintenance_interval_
-                                                           : default_decision_conflict_maintenance_interval;
-            const auto chb_decay_interval = has_configured_decision_chb_decay_interval_
-                                                ? configured_decision_chb_decay_interval_
-                                                : default_decision_chb_decay_interval;
-            const auto restart_decay_interval = has_configured_decision_restart_decay_interval_
-                                                    ? configured_decision_restart_decay_interval_
-                                                    : default_decision_restart_decay_interval;
+            const auto conflict_maintenance_interval = has_configured_decision_conflict_maintenance_interval_ ?
+                                                           configured_decision_conflict_maintenance_interval_ :
+                                                           default_decision_conflict_maintenance_interval;
+            const auto chb_decay_interval =
+                has_configured_decision_chb_decay_interval_ ? configured_decision_chb_decay_interval_ : default_decision_chb_decay_interval;
+            const auto restart_decay_interval = has_configured_decision_restart_decay_interval_ ?
+                                                    configured_decision_restart_decay_interval_ :
+                                                    default_decision_restart_decay_interval;
 
-            core_.set_decision_maintenance_intervals(conflict_maintenance_interval,
-                                                     chb_decay_interval,
-                                                     restart_decay_interval);
+            core_.set_decision_maintenance_intervals(conflict_maintenance_interval, chb_decay_interval, restart_decay_interval);
             core_.set_restart_interval(has_configured_restart_interval_ ? configured_restart_interval_ : 0u);
             core_.set_decision_restart_interval(has_configured_decision_restart_interval_ ? configured_decision_restart_interval_ : 0u);
             core_.set_reduction_interval(has_configured_reduction_interval_ ? configured_reduction_interval_ : 0u);
             core_.set_chb_enabled(configured_chb_enabled_);
             core_.set_reduction_fraction_percent(has_configured_reduction_fraction_percent_ ? configured_reduction_fraction_percent_ : 50u);
-            core_.set_activity_retention_threshold(has_configured_activity_retention_threshold_ ? configured_activity_retention_threshold_ : 2.0);
-            core_.set_glue_restart_threshold_percent(has_configured_glue_restart_threshold_percent_ ? configured_glue_restart_threshold_percent_ : 0u);
+            core_.set_activity_retention_threshold(has_configured_activity_retention_threshold_ ? configured_activity_retention_threshold_ :
+                                                                                                  2.0);
+            core_.set_glue_restart_threshold_percent(
+                has_configured_glue_restart_threshold_percent_ ? configured_glue_restart_threshold_percent_ : 0u);
             core_.set_cold_storage_enabled(configured_cold_storage_enabled_);
         }
 
         void apply_persisted_configuration(solve_request& request) const noexcept
         {
             if (request.conflict_limit == 0u && has_configured_conflict_limit_)
-            {
                 request.conflict_limit = configured_conflict_limit_;
-            }
             if (request.decision_limit == 0u && has_configured_decision_limit_)
-            {
                 request.decision_limit = configured_decision_limit_;
-            }
             if (request.enabled_pass_mask == 0u && has_configured_enabled_pass_mask_)
-            {
                 request.enabled_pass_mask = configured_enabled_pass_mask_;
-            }
             if (!request.strict_mode && has_configured_strict_mode_)
-            {
                 request.strict_mode = configured_strict_mode_;
-            }
         }
     };
 
@@ -269,13 +250,9 @@ namespace kmx::sat
         if (lit.raw() == 0)
         {
             if (impl_->pending_clause_.empty())
-            {
                 impl_->core_.add_problem_clause(std::span<const literal> {});
-            }
             else
-            {
                 impl_->flush_pending_clause();
-            }
             impl_->state_machine_.transition_to_adding();
             return;
         }
@@ -326,9 +303,7 @@ namespace kmx::sat
                                  solve_result::proof_summary {}};
         }
         if (impl_->terminate_callback_)
-        {
             impl_->statistics_.inc("terminate_callback_calls");
-        }
 
         if (impl_->external_propagator_hook_)
         {
@@ -360,17 +335,13 @@ namespace kmx::sat
 
             const auto buffered_events = impl_->core_.buffered_proof_events();
             if (impl_->last_consumed_proof_event_count_ > buffered_events.size())
-            {
                 impl_->last_consumed_proof_event_count_ = 0u;
-            }
 
             for (std::size_t index = impl_->last_consumed_proof_event_count_; index < buffered_events.size(); ++index)
             {
                 const auto& event = buffered_events[index];
                 if (event.kind != proof::event_kind::add_derived || event.literals.empty())
-                {
                     continue;
-                }
 
                 learned_clause_literals.clear();
                 learned_clause_literals.reserve(event.literals.size());
@@ -378,15 +349,11 @@ namespace kmx::sat
                 {
                     const auto parsed_literal = literal_from_dimacs(dimacs_literal);
                     if (parsed_literal.has_value())
-                    {
                         learned_clause_literals.push_back(parsed_literal.value());
-                    }
                 }
 
                 if (learned_clause_literals.empty())
-                {
                     continue;
-                }
 
                 impl_->learn_callback_(std::span<const literal> {learned_clause_literals});
                 ++learn_callback_count;
@@ -401,23 +368,16 @@ namespace kmx::sat
                 ++learn_callback_count;
                 impl_->statistics_.inc("learn_callback_calls");
             }
-
         }
 
         impl_->assumptions_.clear();
 
         if (mapped_status == solve_result::status::satisfiable)
-        {
             impl_->state_machine_.transition_to_sat();
-        }
         else if (mapped_status == solve_result::status::unsatisfiable)
-        {
             impl_->state_machine_.transition_to_unsat();
-        }
         else
-        {
             impl_->state_machine_.transition_to_steady();
-        }
 
         impl_->core_.finalize_proof();
 
@@ -436,13 +396,9 @@ namespace kmx::sat
     std::optional<bool> solver::value_of(const variable var) const noexcept
     {
         for (const auto lit: impl_->last_model_)
-        {
             if (lit.variable_of().index() == var.index())
-            {
                 return !lit.is_negated();
-            }
-        }
-        return std::nullopt;
+        return {};
     }
 
     /// @brief Constructs a default-initialized instance.
@@ -538,18 +494,14 @@ namespace kmx::sat
             recognized_option = true;
             impl_->has_configured_reduction_fraction_percent_ = value >= 1 && value <= 100;
             if (impl_->has_configured_reduction_fraction_percent_)
-            {
                 impl_->configured_reduction_fraction_percent_ = static_cast<std::uint32_t>(value);
-            }
         }
         else if (name == "glue_restart_threshold_percent")
         {
             recognized_option = true;
             impl_->has_configured_glue_restart_threshold_percent_ = value == 0 || value >= 101;
             if (impl_->has_configured_glue_restart_threshold_percent_)
-            {
                 impl_->configured_glue_restart_threshold_percent_ = value >= 0 ? static_cast<std::uint32_t>(value) : 0u;
-            }
         }
         else if (name == "cold_storage_enabled")
         {
@@ -681,9 +633,9 @@ namespace kmx::sat
     std::string solver::statistics_report_line() const
     {
         io::writer::format formatter {};
-        const auto detail = impl_->statistics_report_detail_ == statistics_report_detail::verbose
-                                ? io::writer::format::statistics_detail::verbose
-                                : io::writer::format::statistics_detail::compact;
+        const auto detail = impl_->statistics_report_detail_ == statistics_report_detail::verbose ?
+                                io::writer::format::statistics_detail::verbose :
+                                io::writer::format::statistics_detail::compact;
         formatter.write_statistics(impl_->statistics_.snapshot_of(), detail);
         return std::string {formatter.buffer_view()};
     }
@@ -696,36 +648,28 @@ namespace kmx::sat
     std::string_view solver::last_emitted_statistics_report_line() const noexcept
     {
         if (impl_->emitted_statistics_report_lines_.empty())
-        {
             return {};
-        }
         return impl_->emitted_statistics_report_lines_.back();
     }
 
     std::string_view solver::previous_emitted_statistics_report_line() const noexcept
     {
         if (impl_->emitted_statistics_report_lines_.size() < 2u)
-        {
             return {};
-        }
         return impl_->emitted_statistics_report_lines_[impl_->emitted_statistics_report_lines_.size() - 2u];
     }
 
     std::optional<telemetry::solver_statistics::snapshot> solver::last_emitted_statistics_snapshot() const noexcept
     {
         if (impl_->emitted_statistics_snapshots_.empty())
-        {
-            return std::nullopt;
-        }
+            return {};
         return impl_->emitted_statistics_snapshots_.back();
     }
 
     std::optional<telemetry::solver_statistics::snapshot> solver::previous_emitted_statistics_snapshot() const noexcept
     {
         if (impl_->emitted_statistics_snapshots_.size() < 2u)
-        {
-            return std::nullopt;
-        }
+            return {};
         return impl_->emitted_statistics_snapshots_[impl_->emitted_statistics_snapshots_.size() - 2u];
     }
 
@@ -734,9 +678,7 @@ namespace kmx::sat
         const auto previous = previous_emitted_statistics_snapshot();
         const auto latest = last_emitted_statistics_snapshot();
         if (!previous.has_value() || !latest.has_value())
-        {
             return true;
-        }
         return telemetry::solver_statistics::snapshot_monotonic(previous.value(), latest.value());
     }
 
@@ -745,9 +687,7 @@ namespace kmx::sat
         const auto previous = previous_emitted_statistics_snapshot();
         const auto latest = last_emitted_statistics_snapshot();
         if (!previous.has_value() || !latest.has_value())
-        {
-            return std::nullopt;
-        }
+            return {};
         return telemetry::solver_statistics::snapshot_delta_between(previous.value(), latest.value());
     }
 
@@ -758,13 +698,9 @@ namespace kmx::sat
         impl_->core_.reset();
         impl_->apply_core_configuration();
         if (impl_->has_persisted_configuration())
-        {
             impl_->core_.persist_option_subset();
-        }
         if (impl_->proof_sink_ != nullptr)
-        {
             impl_->core_.attach_proof_tracer(*impl_->proof_sink_);
-        }
         impl_->pending_clause_.clear();
         impl_->assumptions_.clear();
         impl_->last_model_.clear();
@@ -858,36 +794,28 @@ namespace kmx::sat
     std::optional<std::uint64_t> solver::configured_conflict_limit() const noexcept
     {
         if (!impl_->has_configured_conflict_limit_)
-        {
-            return std::nullopt;
-        }
+            return {};
         return impl_->configured_conflict_limit_;
     }
 
     std::optional<std::uint64_t> solver::configured_decision_limit() const noexcept
     {
         if (!impl_->has_configured_decision_limit_)
-        {
-            return std::nullopt;
-        }
+            return {};
         return impl_->configured_decision_limit_;
     }
 
     std::optional<std::uint64_t> solver::configured_enabled_pass_mask() const noexcept
     {
         if (!impl_->has_configured_enabled_pass_mask_)
-        {
-            return std::nullopt;
-        }
+            return {};
         return impl_->configured_enabled_pass_mask_;
     }
 
     std::optional<bool> solver::configured_strict_mode() const noexcept
     {
         if (!impl_->has_configured_strict_mode_)
-        {
-            return std::nullopt;
-        }
+            return {};
         return impl_->configured_strict_mode_;
     }
 

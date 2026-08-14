@@ -50,9 +50,7 @@ namespace kmx::sat::cdcl::engine
         void backtrack_to_level(const std::uint32_t level) noexcept
         {
             if (trail_state_ == nullptr || assignment_ == nullptr || decision_frames_ == nullptr)
-            {
                 return;
-            }
 
             const auto current_level = decision_frames_->current_level();
             const auto target_level = level < current_level ? level : current_level;
@@ -62,23 +60,15 @@ namespace kmx::sat::cdcl::engine
             trail_state_->pop_to(preserved_head < trail_head ? preserved_head : trail_head);
 
             if (target_level == 0u)
-            {
                 decision_frames_->pop_to_level(0u);
-            }
             else
-            {
                 decision_frames_->pop_to_level(target_level);
-            }
 
             assignment_->unassign_above_level(target_level);
             if (target_level == 0u)
-            {
                 assignment_->set_current_level(0u);
-            }
             else
-            {
                 assignment_->set_current_level(target_level);
-            }
             assignment_->set_current_trail_position(trail_state_->current_head());
             last_backtracked_level_ = target_level;
         }
@@ -88,14 +78,10 @@ namespace kmx::sat::cdcl::engine
         void chronological_backtrack() noexcept
         {
             if (trail_state_ == nullptr || assignment_ == nullptr || decision_frames_ == nullptr)
-            {
                 return;
-            }
             const auto current_level = decision_frames_->current_level();
             if (current_level == 0u)
-            {
                 return;
-            }
             backtrack_to_level(current_level - 1u);
         }
 
@@ -115,9 +101,7 @@ namespace kmx::sat::cdcl::engine
         void clear_transient_marks() noexcept
         {
             if (assignment_ != nullptr)
-            {
                 assignment_->clear_analysis_marks();
-            }
         }
 
         /// @brief Returns the most recent decision level requested by this backtrack engine.

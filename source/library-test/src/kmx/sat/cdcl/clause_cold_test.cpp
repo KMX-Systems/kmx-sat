@@ -42,7 +42,7 @@ namespace kmx::sat::cdcl::store
         clause_cold cold;
         const clause::ref_t ref {31u};
         const std::array<literal, 3> literals {literal {variable {100u}, true}, literal {variable {4u}, false},
-                               literal {variable {101u}, false}};
+                                               literal {variable {101u}, false}};
         cold.set_enabled(true);
         cold.demote_to_cold(ref, literals);
 
@@ -92,9 +92,7 @@ namespace kmx::sat::cdcl::store
         const clause::ref_t ref {91u};
         std::array<literal, 32> literals {};
         for (std::uint32_t index {}; index < literals.size(); ++index)
-        {
             literals[index] = literal {variable {index + 1u}, false};
-        }
 
         cold.set_enabled(true);
         cold.demote_to_cold(ref, literals);

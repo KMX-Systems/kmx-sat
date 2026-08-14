@@ -44,9 +44,7 @@ namespace kmx::sat::cdcl
                 }
             }
             if (formula_satisfied)
-            {
                 return true;
-            }
         }
         return false;
     }

@@ -39,9 +39,7 @@ namespace kmx::sat::cdcl
         {
             const auto variable_index = static_cast<std::size_t>(var.index());
             if (nodes_.find(variable_index) != nodes_.end())
-            {
                 return;
-            }
 
             node node_value {var, npos, npos};
             const auto node_index = nodes_storage_.size();
@@ -68,9 +66,7 @@ namespace kmx::sat::cdcl
         {
             const auto it = nodes_.find(static_cast<std::size_t>(var.index()));
             if (it == nodes_.end() || it->second == head_)
-            {
                 return;
-            }
 
             const auto node_index = it->second;
             unlink(node_index);
@@ -86,9 +82,7 @@ namespace kmx::sat::cdcl
         std::optional<variable> front_candidate() const noexcept
         {
             if (head_ == npos)
-            {
-                return std::nullopt;
-            }
+                return {};
             return nodes_storage_[head_].value;
         }
 
@@ -116,18 +110,14 @@ namespace kmx::sat::cdcl
         void shuffle() noexcept
         {
             if (size_ <= 1u)
-            {
                 return;
-            }
 
             const auto max_stride = static_cast<std::uint32_t>(size_ - 1u);
             const auto stride = static_cast<std::uint32_t>((shuffle_epoch_ % max_stride) + 1u);
             std::vector<std::size_t> order {};
             order.reserve(size_);
             for (auto current = head_; current != npos; current = nodes_storage_[current].next)
-            {
                 order.push_back(current);
-            }
             std::rotate(order.begin(), order.begin() + stride, order.end());
             relink(order);
             last_shuffle_stride_ = stride;
@@ -140,9 +130,7 @@ namespace kmx::sat::cdcl
         void shuffle(const std::uint32_t salt) noexcept
         {
             if (size_ <= 1u)
-            {
                 return;
-            }
 
             if (size_ > 2u)
             {
@@ -173,21 +161,13 @@ namespace kmx::sat::cdcl
             const auto previous = nodes_storage_[node_index].previous;
             const auto next = nodes_storage_[node_index].next;
             if (previous == npos)
-            {
                 head_ = next;
-            }
             else
-            {
                 nodes_storage_[previous].next = next;
-            }
             if (next == npos)
-            {
                 tail_ = previous;
-            }
             else
-            {
                 nodes_storage_[next].previous = previous;
-            }
         }
 
         void relink(const std::vector<std::size_t>& order) noexcept

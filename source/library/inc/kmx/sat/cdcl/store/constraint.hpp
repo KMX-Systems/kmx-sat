@@ -55,9 +55,7 @@ namespace kmx::sat::cdcl::store
         std::optional<std::span<const literal>> constraint_clause_ref() const noexcept
         {
             if (!has_clause_)
-            {
-                return std::nullopt;
-            }
+                return {};
             return std::span<const literal> {clause_};
         }
 

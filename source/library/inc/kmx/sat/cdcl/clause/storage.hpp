@@ -67,9 +67,7 @@ namespace kmx::sat::cdcl::clause
         {
             const auto resolved = resolve_ref(ref);
             if (!is_alive(resolved))
-            {
                 return {};
-            }
 
             const auto literal_count = arena_.literal_count(resolved);
             const auto literals = arena_.read_literals(resolved);
@@ -106,9 +104,7 @@ namespace kmx::sat::cdcl::clause
             {
                 const auto it = relocated_refs_.find(resolved.offset());
                 if (it == relocated_refs_.end() || it->second == resolved.offset())
-                {
                     break;
-                }
                 resolved = ref_t {it->second};
             }
             return resolved;
@@ -143,9 +139,7 @@ namespace kmx::sat::cdcl::clause
         {
             const auto resolved = resolve_ref(ref);
             if (!resolved.valid() || literals.size() > arena_.literal_count(resolved))
-            {
                 return;
-            }
             arena_.write_literals(resolved, literals);
             arena_.truncate_literals(resolved, static_cast<std::uint32_t>(literals.size()));
         }
@@ -175,9 +169,7 @@ namespace kmx::sat::cdcl::clause
             const auto ref = arena_.allocate_clause(literals.size());
             arena_.write_literals(ref, literals);
             if (redundant)
-            {
                 redundant_.insert(ref.offset());
-            }
             alive_.insert(ref.offset());
             assign_proof_id(ref);
             return ref;

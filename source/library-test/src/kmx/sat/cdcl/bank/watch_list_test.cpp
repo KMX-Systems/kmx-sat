@@ -86,7 +86,7 @@ namespace kmx::sat::cdcl
         REQUIRE(watches.size_of(second) == 1u);
 
         watches.reindex_after_compaction([&](const literal literal_value) noexcept
-        { return literal_value == first || literal_value == second ? first : literal_value; });
+                                         { return literal_value == first || literal_value == second ? first : literal_value; });
 
         REQUIRE(watches.size_of(first) == 1u);
         REQUIRE(watches.size_of(second) == 0u);
@@ -113,7 +113,7 @@ namespace kmx::sat::cdcl
         watches.watch_literal(second, duplicate);
 
         watches.reindex_after_compaction([&](const literal literal_value) noexcept
-        { return literal_value == first || literal_value == second ? first : literal_value; });
+                                         { return literal_value == first || literal_value == second ? first : literal_value; });
 
         std::vector<watch> merged_entries {};
         watches.iterate(first, [&](const watch& entry) noexcept { merged_entries.push_back(entry); });

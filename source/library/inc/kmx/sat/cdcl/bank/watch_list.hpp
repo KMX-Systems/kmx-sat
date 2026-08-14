@@ -42,8 +42,8 @@ namespace kmx::sat::cdcl::bank
         void watch_literal(const literal lit, const watch entry) noexcept
         {
             auto& list = ensure_list(lit);
-            const auto existing = std::find_if(list.begin(), list.end(), [&](const watch& current) noexcept
-                                               { return current.clause_ref() == entry.clause_ref(); });
+            const auto existing = std::find_if(list.begin(), list.end(),
+                                               [&](const watch& current) noexcept { return current.clause_ref() == entry.clause_ref(); });
             if (existing != list.end())
             {
                 *existing = entry;
@@ -61,22 +61,16 @@ namespace kmx::sat::cdcl::bank
             const auto index = lit.index_in_watch_bank();
             const auto it = lists_.find(index);
             if (it == lists_.end())
-            {
                 return;
-            }
             auto& list = it->second;
             const auto old_size = list.size();
             list.erase(std::remove_if(list.begin(), list.end(),
                                       [&](const auto& current) noexcept { return current.clause_ref() == entry.clause_ref(); }),
                        list.end());
             if (list.size() == old_size)
-            {
                 return;
-            }
             if (list.empty())
-            {
                 lists_.erase(it);
-            }
         }
 
         /// @brief Checks whether the given watch entry is currently registered for the given literal.
@@ -88,9 +82,7 @@ namespace kmx::sat::cdcl::bank
             const auto index = lit.index_in_watch_bank();
             const auto it = lists_.find(index);
             if (it == lists_.end())
-            {
                 return false;
-            }
             const auto& list = it->second;
             return std::find(list.begin(), list.end(), entry) != list.end();
         }
@@ -106,13 +98,9 @@ namespace kmx::sat::cdcl::bank
             const auto index = lit.index_in_watch_bank();
             const auto it = lists_.find(index);
             if (it == lists_.end())
-            {
                 return;
-            }
             for (const auto& entry: it->second)
-            {
                 visitor(entry);
-            }
         }
 
         /// @brief Returns how many watch entries are currently registered for the given literal.
@@ -138,9 +126,7 @@ namespace kmx::sat::cdcl::bank
         void replace_clause_ref_after_gc(const clause::ref_t old_ref, const clause::ref_t new_ref) noexcept
         {
             if (!old_ref.valid() || !new_ref.valid() || old_ref == new_ref)
-            {
                 return;
-            }
             for (auto& [index, list]: lists_)
             {
                 (void) index;
@@ -150,9 +136,7 @@ namespace kmx::sat::cdcl::bank
                     {
                         watch rewritten_entry {entry.blocking_literal(), new_ref, entry.is_binary()};
                         if (entry.is_binary())
-                        {
                             rewritten_entry.set_binary_literal(entry.binary_literal());
-                        }
                         entry = rewritten_entry;
                     }
                 }
@@ -160,13 +144,10 @@ namespace kmx::sat::cdcl::bank
                 unique_entries.reserve(list.size());
                 for (const auto& entry: list)
                 {
-                    const auto duplicate = std::find_if(unique_entries.begin(), unique_entries.end(),
-                                                        [&](const watch& existing) noexcept
+                    const auto duplicate = std::find_if(unique_entries.begin(), unique_entries.end(), [&](const watch& existing) noexcept
                                                         { return existing.clause_ref() == entry.clause_ref(); });
                     if (duplicate == unique_entries.end())
-                    {
                         unique_entries.push_back(entry);
-                    }
                 }
                 list.swap(unique_entries);
             }
@@ -182,12 +163,8 @@ namespace kmx::sat::cdcl::bank
             std::vector<literal::raw_t> indices {};
             indices.reserve(lists_.size());
             for (const auto& [index, list]: lists_)
-            {
                 if (!list.empty())
-                {
                     indices.push_back(index);
-                }
-            }
             std::sort(indices.begin(), indices.end());
             for (const auto index: indices)
             {
@@ -199,16 +176,11 @@ namespace kmx::sat::cdcl::bank
                 {
                     watch remapped_entry {remap(entry.blocking_literal()), entry.clause_ref(), entry.is_binary()};
                     if (entry.is_binary())
-                    {
                         remapped_entry.set_binary_literal(remap(entry.binary_literal()));
-                    }
-                    const auto duplicate = std::find_if(target.begin(), target.end(),
-                                                        [&](const watch& existing) noexcept
+                    const auto duplicate = std::find_if(target.begin(), target.end(), [&](const watch& existing) noexcept
                                                         { return existing.clause_ref() == remapped_entry.clause_ref(); });
                     if (duplicate == target.end())
-                    {
                         target.push_back(remapped_entry);
-                    }
                 }
             }
             lists_.swap(rebuilt);

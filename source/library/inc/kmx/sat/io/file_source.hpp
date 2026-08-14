@@ -50,9 +50,7 @@ namespace kmx::sat::io
         std::size_t read(char* buffer, const std::size_t buffer_size) noexcept
         {
             if (file_ == nullptr || buffer == nullptr || buffer_size == 0)
-            {
                 return 0;
-            }
             return std::fread(buffer, 1, buffer_size, file_);
         }
 
@@ -62,9 +60,7 @@ namespace kmx::sat::io
         int getc() noexcept
         {
             if (file_ == nullptr)
-            {
                 return -1;
-            }
             return std::fgetc(file_);
         }
 

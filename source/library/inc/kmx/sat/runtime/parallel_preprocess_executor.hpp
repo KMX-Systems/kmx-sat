@@ -45,12 +45,9 @@ namespace kmx::sat::runtime
         {
             ++runs_;
             if (thread_budget_ < 1u)
-            {
                 thread_budget_ = 1u;
-            }
-            last_parallel_chunk_size_ = configured_work_item_count_ == 0u
-                                         ? 0u
-                                         : (configured_work_item_count_ + thread_budget_ - 1u) / thread_budget_;
+            last_parallel_chunk_size_ =
+                configured_work_item_count_ == 0u ? 0u : (configured_work_item_count_ + thread_budget_ - 1u) / thread_budget_;
             total_processed_work_item_count_ += configured_work_item_count_;
         }
 
@@ -70,13 +67,9 @@ namespace kmx::sat::runtime
         {
             thread_budget_ = thread_budget;
             if (thread_budget_ < 1u)
-            {
                 thread_budget_ = 1u;
-            }
             if (thread_budget_ > 256u)
-            {
                 thread_budget_ = 256u;
-            }
         }
 
         void set_work_item_count(std::size_t work_item_count) noexcept { configured_work_item_count_ = work_item_count; }
@@ -94,10 +87,7 @@ namespace kmx::sat::runtime
 
         [[nodiscard]] std::size_t last_parallel_chunk_size() const noexcept { return last_parallel_chunk_size_; }
 
-        [[nodiscard]] std::size_t total_processed_work_item_count() const noexcept
-        {
-            return total_processed_work_item_count_;
-        }
+        [[nodiscard]] std::size_t total_processed_work_item_count() const noexcept { return total_processed_work_item_count_; }
 
         [[nodiscard]] std::uint32_t idle_merge_skip_count() const noexcept { return idle_merge_skip_count_; }
 
@@ -125,13 +115,11 @@ namespace kmx::sat::runtime
             total_processed_work_item_count_ = 0u;
         }
 
-        static bool execution_metrics_monotonic(const execution_metrics& before,
-                                                const execution_metrics& after) noexcept
+        static bool execution_metrics_monotonic(const execution_metrics& before, const execution_metrics& after) noexcept
         {
-            return after.runs >= before.runs
-                && after.merges >= before.merges
-                && after.idle_merge_skip_count >= before.idle_merge_skip_count
-                && after.total_processed_work_item_count >= before.total_processed_work_item_count;
+            return after.runs >= before.runs && after.merges >= before.merges &&
+                   after.idle_merge_skip_count >= before.idle_merge_skip_count &&
+                   after.total_processed_work_item_count >= before.total_processed_work_item_count;
         }
 
     private:

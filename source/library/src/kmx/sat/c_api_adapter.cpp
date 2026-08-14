@@ -2,9 +2,9 @@
 /// @brief File-level API declarations and implementation details.
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #include <cstdlib>
-#include <limits>
 #include <kmx/sat/c_api_adapter.hpp>
 #include <kmx/sat/ipasir.h>
+#include <limits>
 
 struct kmx_sat_ipasir_solver final
 {
@@ -13,24 +13,26 @@ struct kmx_sat_ipasir_solver final
 
 extern "C"
 {
-    kmx_sat_ipasir_solver* ipasir_init(void) { return new kmx_sat_ipasir_solver {}; }
+    kmx_sat_ipasir_solver* ipasir_init(void)
+    {
+        return new kmx_sat_ipasir_solver {};
+    }
 
-    void ipasir_release(kmx_sat_ipasir_solver* solver) { delete solver; }
+    void ipasir_release(kmx_sat_ipasir_solver* solver)
+    {
+        delete solver;
+    }
 
     void ipasir_add(kmx_sat_ipasir_solver* solver, const int lit)
     {
         if (solver != nullptr)
-        {
             solver->adapter.ipasir_add(lit);
-        }
     }
 
     void ipasir_assume(kmx_sat_ipasir_solver* solver, const int lit)
     {
         if (solver != nullptr)
-        {
             solver->adapter.ipasir_assume(lit);
-        }
     }
 
     int ipasir_solve(kmx_sat_ipasir_solver* solver)
@@ -59,9 +61,7 @@ namespace kmx::sat
     static literal from_ipasir_literal(const std::int32_t lit) noexcept
     {
         if (!is_valid_ipasir_literal(lit))
-        {
             return {};
-        }
         const auto variable_index = static_cast<variable::index_t>(std::abs(lit));
         return literal {variable {variable_index}, lit < 0};
     }
@@ -87,9 +87,7 @@ namespace kmx::sat
     void c_api_adapter::ipasir_add(const std::int32_t lit) noexcept
     {
         if (lit == std::numeric_limits<std::int32_t>::min())
-        {
             return;
-        }
         solver_.add_literal(from_ipasir_literal(lit));
     }
 
@@ -99,9 +97,7 @@ namespace kmx::sat
     void c_api_adapter::ipasir_assume(const std::int32_t lit) noexcept
     {
         if (!is_valid_ipasir_literal(lit))
-        {
             return;
-        }
         solver_.assume(from_ipasir_literal(lit));
     }
 
@@ -131,16 +127,12 @@ namespace kmx::sat
     std::int32_t c_api_adapter::ipasir_val(const std::int32_t lit) const noexcept
     {
         if (!is_valid_ipasir_literal(lit))
-        {
             return 0;
-        }
 
         const auto variable_index = static_cast<variable::index_t>(std::abs(lit));
         const auto value = solver_.value_of(variable {variable_index});
         if (!value.has_value())
-        {
             return 0;
-        }
 
         const bool literal_true = lit > 0 ? *value : !*value;
         return literal_true ? lit : -lit;
@@ -153,9 +145,7 @@ namespace kmx::sat
     bool c_api_adapter::ipasir_failed(const std::int32_t lit) const noexcept
     {
         if (!is_valid_ipasir_literal(lit))
-        {
             return false;
-        }
         return solver_.failed(from_ipasir_literal(lit));
     }
 
@@ -188,9 +178,7 @@ namespace kmx::sat
     {
         const auto configured = solver_.configured_conflict_limit();
         if (!configured.has_value())
-        {
             return -1;
-        }
         return static_cast<std::int64_t>(configured.value());
     }
 
@@ -198,9 +186,7 @@ namespace kmx::sat
     {
         const auto configured = solver_.configured_decision_limit();
         if (!configured.has_value())
-        {
             return -1;
-        }
         return static_cast<std::int64_t>(configured.value());
     }
 
@@ -208,9 +194,7 @@ namespace kmx::sat
     {
         const auto configured = solver_.configured_strict_mode();
         if (!configured.has_value())
-        {
             return -1;
-        }
         return configured.value() ? 1 : 0;
     }
 
@@ -221,8 +205,8 @@ namespace kmx::sat
 
     void c_api_adapter::ipasir_set_statistics_verbose_reporting(const std::int32_t verbose) noexcept
     {
-        solver_.set_statistics_report_detail(verbose == 0 ? solver::statistics_report_detail::compact
-                                                          : solver::statistics_report_detail::verbose);
+        solver_.set_statistics_report_detail(verbose == 0 ? solver::statistics_report_detail::compact :
+                                                            solver::statistics_report_detail::verbose);
     }
 
     std::int32_t c_api_adapter::ipasir_statistics_verbose_reporting() const noexcept

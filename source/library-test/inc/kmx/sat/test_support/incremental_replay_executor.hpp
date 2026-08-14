@@ -29,9 +29,7 @@ namespace kmx::sat::test_support
                     break;
                 case replay_operation_kind::assume:
                     for (const auto lit: operation.literals)
-                    {
                         solver.assume(lit);
-                    }
                     break;
                 case replay_operation_kind::release_assumptions:
                     solver.release_incremental_assumptions();

@@ -97,18 +97,12 @@ namespace kmx::sat::io::fixture
             {
                 mix(clause.size());
                 for (const auto lit: clause)
-                {
                     mix(lit.raw());
-                }
             }
             for (const auto lit: assumptions_)
-            {
                 mix(lit.raw());
-            }
             for (const auto lit: request_.assumptions)
-            {
                 mix(lit.raw());
-            }
             mix(request_.conflict_limit);
             mix(request_.decision_limit);
             mix(request_.enabled_pass_mask);
@@ -147,29 +141,15 @@ namespace kmx::sat::io::fixture
             };
 
             for (const auto& clause: clauses_)
-            {
                 for (const auto lit: clause)
-                {
                     if (!in_domain(lit))
-                    {
                         return false;
-                    }
-                }
-            }
             for (const auto lit: assumptions_)
-            {
                 if (!in_domain(lit))
-                {
                     return false;
-                }
-            }
             for (const auto lit: request_.assumptions)
-            {
                 if (!in_domain(lit))
-                {
                     return false;
-                }
-            }
             return true;
         }
 
@@ -179,23 +159,15 @@ namespace kmx::sat::io::fixture
         bool validate_clause_shapes() const noexcept
         {
             if (schema_.payload_kind_of() != schema::payload_kind::cnf_fixture)
-            {
                 return true;
-            }
 
             for (const auto& clause: clauses_)
             {
                 if (clause.empty())
-                {
                     return false;
-                }
                 for (const auto lit: clause)
-                {
                     if (lit.raw() == 0u)
-                    {
                         return false;
-                    }
-                }
             }
             return true;
         }
@@ -206,17 +178,11 @@ namespace kmx::sat::io::fixture
         bool validate_limits_payload() const noexcept
         {
             if (schema_.payload_kind_of() != schema::payload_kind::solve_request_fixture)
-            {
                 return true;
-            }
 
             for (const auto lit: request_.assumptions)
-            {
                 if (lit.raw() == 0u)
-                {
                     return false;
-                }
-            }
             return validate_literal_domain();
         }
 

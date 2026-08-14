@@ -129,11 +129,8 @@ namespace kmx::sat
         SECTION("solver facade maps deterministic limit exits to unknown")
         {
             solver decision_limited_solver;
-            std::vector<literal> decision_clause {
-                literal {variable {31u}, false},
-                literal {variable {32u}, false},
-                literal {variable {33u}, false}
-            };
+            std::vector<literal> decision_clause {literal {variable {31u}, false}, literal {variable {32u}, false},
+                                                  literal {variable {33u}, false}};
             decision_limited_solver.add_clause(std::span<const literal> {decision_clause});
 
             solve_request decision_limited_request {};
@@ -156,11 +153,8 @@ namespace kmx::sat
             solver persisted_decision_limited_solver;
             persisted_decision_limited_solver.set_option("decision_limit", 1);
             REQUIRE(persisted_decision_limited_solver.has_persisted_configuration());
-            std::vector<literal> decision_clause {
-                literal {variable {51u}, false},
-                literal {variable {52u}, false},
-                literal {variable {53u}, false}
-            };
+            std::vector<literal> decision_clause {literal {variable {51u}, false}, literal {variable {52u}, false},
+                                                  literal {variable {53u}, false}};
             persisted_decision_limited_solver.add_clause(std::span<const literal> {decision_clause});
 
             const auto persisted_decision_result = persisted_decision_limited_solver.solve(solve_request {});
@@ -375,9 +369,8 @@ namespace kmx::sat
             REQUIRE(reporting_solver.previous_emitted_statistics_snapshot().has_value());
             REQUIRE(reporting_solver.emitted_statistics_snapshot_tail_monotonic());
             REQUIRE(reporting_solver.emitted_statistics_snapshot_tail_delta().has_value());
-            REQUIRE(telemetry::solver_statistics::snapshot_monotonic(
-                reporting_solver.previous_emitted_statistics_snapshot().value(),
-                reporting_solver.last_emitted_statistics_snapshot().value()));
+            REQUIRE(telemetry::solver_statistics::snapshot_monotonic(reporting_solver.previous_emitted_statistics_snapshot().value(),
+                                                                     reporting_solver.last_emitted_statistics_snapshot().value()));
             REQUIRE(reporting_solver.emitted_statistics_snapshot_tail_delta().value().conflicts == 1u);
             REQUIRE(reporting_solver.emitted_statistics_snapshot_tail_delta().value().decisions == 0u);
             REQUIRE(reporting_solver.emitted_statistics_snapshot_tail_delta().value().option_updates == 0u);
@@ -390,10 +383,8 @@ namespace kmx::sat
             const auto compact_previous_parsed = test_support::parse_statistics_report_line(compact_previous_line);
             const auto compact_latest_parsed = test_support::parse_statistics_report_line(compact_latest_line);
             REQUIRE(test_support::compact_statistics_report_exactly_matches_snapshot(compact_previous_parsed, compact_previous_snapshot));
-            REQUIRE(test_support::compact_statistics_report_delta_matches_snapshot_delta(
-                compact_previous_parsed,
-                compact_latest_parsed,
-                compact_tail_delta));
+            REQUIRE(test_support::compact_statistics_report_delta_matches_snapshot_delta(compact_previous_parsed, compact_latest_parsed,
+                                                                                         compact_tail_delta));
 
             reporting_solver.set_statistics_report_detail(solver::statistics_report_detail::verbose);
             reporting_solver.assume(literal {variable {23u}, true});
@@ -408,10 +399,8 @@ namespace kmx::sat
             const auto verbose_latest_parsed = test_support::parse_statistics_report_line(verbose_latest_line);
             const auto verbose_previous_parsed = test_support::parse_statistics_report_line(verbose_previous_line);
             REQUIRE(test_support::verbose_statistics_report_exactly_matches_snapshot(verbose_latest_parsed, verbose_latest_snapshot));
-            REQUIRE(test_support::verbose_statistics_report_delta_matches_snapshot_delta(
-                verbose_previous_parsed,
-                verbose_latest_parsed,
-                verbose_tail_delta));
+            REQUIRE(test_support::verbose_statistics_report_delta_matches_snapshot_delta(verbose_previous_parsed, verbose_latest_parsed,
+                                                                                         verbose_tail_delta));
 
             reporting_solver.set_statistics_report_detail(solver::statistics_report_detail::compact);
             const auto compact_line = reporting_solver.statistics_report_line();
@@ -519,16 +508,12 @@ namespace kmx::sat
             const auto compact_after_report_parsed = test_support::parse_statistics_report_line(compact_after_report_line);
             REQUIRE(test_support::compact_statistics_report_has_compact_schema(compact_before_report_parsed));
             REQUIRE(test_support::compact_statistics_report_exactly_matches_snapshot(
-                compact_previous_report_parsed,
-                adapter.ipasir_previous_emitted_statistics_snapshot().value()));
+                compact_previous_report_parsed, adapter.ipasir_previous_emitted_statistics_snapshot().value()));
             REQUIRE(test_support::compact_statistics_report_has_compact_schema(compact_after_report_parsed));
             REQUIRE(test_support::compact_statistics_report_exactly_matches_snapshot(
-                compact_after_report_parsed,
-                adapter.ipasir_last_emitted_statistics_snapshot().value()));
+                compact_after_report_parsed, adapter.ipasir_last_emitted_statistics_snapshot().value()));
             REQUIRE(test_support::compact_statistics_report_delta_matches_snapshot_delta(
-                compact_previous_report_parsed,
-                compact_after_report_parsed,
-                adapter.ipasir_statistics_emission_tail_delta().value()));
+                compact_previous_report_parsed, compact_after_report_parsed, adapter.ipasir_statistics_emission_tail_delta().value()));
 
             adapter.ipasir_set_statistics_verbose_reporting(1);
             REQUIRE(adapter.ipasir_statistics_verbose_reporting() == 1);
@@ -548,23 +533,17 @@ namespace kmx::sat
             const auto verbose_before_report_parsed = test_support::parse_statistics_report_line(verbose_before_report_line);
             const auto verbose_previous_report_parsed = test_support::parse_statistics_report_line(verbose_previous_report_line);
             const auto verbose_after_report_parsed = test_support::parse_statistics_report_line(verbose_after_report_line);
-            const auto compact_verbose_after_report_parsed =
-                test_support::parse_statistics_report_line(compact_verbose_after_report_line);
+            const auto compact_verbose_after_report_parsed = test_support::parse_statistics_report_line(compact_verbose_after_report_line);
             REQUIRE(test_support::verbose_statistics_report_has_verbose_schema(verbose_before_report_parsed));
             REQUIRE(test_support::verbose_statistics_report_exactly_matches_snapshot(
-                verbose_previous_report_parsed,
-                adapter.ipasir_previous_emitted_statistics_snapshot().value()));
+                verbose_previous_report_parsed, adapter.ipasir_previous_emitted_statistics_snapshot().value()));
             REQUIRE(test_support::verbose_statistics_report_has_verbose_schema(verbose_after_report_parsed));
             REQUIRE(test_support::verbose_statistics_report_exactly_matches_snapshot(
-                verbose_after_report_parsed,
-                adapter.ipasir_last_emitted_statistics_snapshot().value()));
-            REQUIRE(test_support::verbose_statistics_report_extends_compact_consistently(
-                compact_verbose_after_report_parsed,
-                verbose_after_report_parsed));
+                verbose_after_report_parsed, adapter.ipasir_last_emitted_statistics_snapshot().value()));
+            REQUIRE(test_support::verbose_statistics_report_extends_compact_consistently(compact_verbose_after_report_parsed,
+                                                                                         verbose_after_report_parsed));
             REQUIRE(test_support::verbose_statistics_report_delta_matches_snapshot_delta(
-                verbose_previous_report_parsed,
-                verbose_after_report_parsed,
-                adapter.ipasir_statistics_emission_tail_delta().value()));
+                verbose_previous_report_parsed, verbose_after_report_parsed, adapter.ipasir_statistics_emission_tail_delta().value()));
 
             adapter.ipasir_init();
             adapter.ipasir_add(1);
@@ -629,9 +608,7 @@ namespace kmx::sat
             std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}},
         };
         for (const auto& clause: clauses)
-        {
             configured_solver.add_clause(std::span<const literal> {clause});
-        }
 
         const auto result = configured_solver.solve(solve_request {});
         const auto statistics = configured_solver.statistics();

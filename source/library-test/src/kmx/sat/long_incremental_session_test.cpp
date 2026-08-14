@@ -50,8 +50,7 @@ namespace kmx::sat
 
     TEST_CASE("long incremental session isolates clauses, limits, and assumptions", "[sat]")
     {
-        const std::array<literal, 2> branching_clause {
-            literal {variable {1u}, false}, literal {variable {2u}, false}};
+        const std::array<literal, 2> branching_clause {literal {variable {1u}, false}, literal {variable {2u}, false}};
         const std::array<literal, 1> first_unit {literal {variable {1u}, false}};
         const std::array<literal, 1> second_unit {literal {variable {3u}, false}};
 

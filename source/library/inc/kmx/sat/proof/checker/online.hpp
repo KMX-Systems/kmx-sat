@@ -86,13 +86,9 @@ namespace kmx::sat::proof::checker
         void on_relocate(const cdcl::clause::ref_t old_ref, const cdcl::clause::ref_t new_ref) noexcept
         {
             if (!old_ref.valid() || !new_ref.valid() || old_ref.offset() == new_ref.offset())
-            {
                 return;
-            }
             if (active_.erase(old_ref.offset()) != 0)
-            {
                 active_.insert(new_ref.offset());
-            }
         }
 
         /// @brief Validates current checker state against expected proof conclusion conditions.

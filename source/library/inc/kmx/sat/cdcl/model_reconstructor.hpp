@@ -44,9 +44,7 @@ namespace kmx::sat::cdcl
             for (const auto& lit: initial_model_)
             {
                 if (internal_only_variables_.contains(lit.variable_of().index()))
-                {
                     continue;
-                }
                 reconstructed_model_.push_back(lit);
             }
             return model_view {std::span<const literal> {reconstructed_model_}};
@@ -62,9 +60,7 @@ namespace kmx::sat::cdcl
                 {
                     using payload_t = std::decay_t<decltype(payload)>;
                     if constexpr (std::is_same_v<payload_t, extension_record::factor_transformation>)
-                    {
                         mark_internal_only_variable(payload.introduced_variable);
-                    }
                 },
                 record.payload);
         }
@@ -78,9 +74,7 @@ namespace kmx::sat::cdcl
             for (const auto& lit: initial_model_)
             {
                 if (internal_only_variables_.contains(lit.variable_of().index()))
-                {
                     continue;
-                }
                 filtered.push_back(lit);
             }
             initial_model_ = filtered;

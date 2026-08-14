@@ -65,12 +65,8 @@ namespace kmx::sat::proof
         {
             const auto drained = buffered_events_.size();
             if (sink_)
-            {
                 for (const auto& event: buffered_events_)
-                {
                     sink_(event);
-                }
-            }
             buffered_events_.clear();
             last_drain_count_ = drained;
         }

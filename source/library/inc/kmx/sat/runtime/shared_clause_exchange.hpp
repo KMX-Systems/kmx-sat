@@ -93,13 +93,9 @@ namespace kmx::sat::runtime
         {
             max_pending_ = max_pending;
             if (max_pending_ < 1u)
-            {
                 max_pending_ = 1u;
-            }
             if (max_pending_ > 4096u)
-            {
                 max_pending_ = 4096u;
-            }
         }
 
         /// @brief Clears all exchange state, for example between unrelated portfolio runs.
@@ -132,10 +128,7 @@ namespace kmx::sat::runtime
 
         [[nodiscard]] std::uint32_t dropped_invalid_ref_count() const noexcept { return dropped_invalid_ref_count_; }
 
-        [[nodiscard]] std::uint32_t dropped_duplicate_ref_count() const noexcept
-        {
-            return dropped_duplicate_ref_count_;
-        }
+        [[nodiscard]] std::uint32_t dropped_duplicate_ref_count() const noexcept { return dropped_duplicate_ref_count_; }
 
         [[nodiscard]] std::uint32_t truncated_by_policy_count() const noexcept { return truncated_by_policy_count_; }
 
@@ -171,13 +164,11 @@ namespace kmx::sat::runtime
 
         static bool exchange_metrics_monotonic(const exchange_metrics& before, const exchange_metrics& after) noexcept
         {
-            return after.drain_count >= before.drain_count
-                && after.publish_attempt_count >= before.publish_attempt_count
-                && after.dropped_invalid_ref_count >= before.dropped_invalid_ref_count
-                && after.dropped_duplicate_ref_count >= before.dropped_duplicate_ref_count
-                && after.truncated_by_policy_count >= before.truncated_by_policy_count
-                && after.policy_apply_count >= before.policy_apply_count
-                && after.total_drained_refs >= before.total_drained_refs;
+            return after.drain_count >= before.drain_count && after.publish_attempt_count >= before.publish_attempt_count &&
+                   after.dropped_invalid_ref_count >= before.dropped_invalid_ref_count &&
+                   after.dropped_duplicate_ref_count >= before.dropped_duplicate_ref_count &&
+                   after.truncated_by_policy_count >= before.truncated_by_policy_count &&
+                   after.policy_apply_count >= before.policy_apply_count && after.total_drained_refs >= before.total_drained_refs;
         }
 
     private:

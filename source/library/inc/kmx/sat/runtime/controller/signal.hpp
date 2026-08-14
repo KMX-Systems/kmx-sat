@@ -69,9 +69,7 @@ namespace kmx::sat::runtime::controller
         void notify_os_signal() noexcept
         {
             if (!handlers_installed_)
-            {
                 return;
-            }
             request_stop();
             ++os_signal_request_count_;
         }
@@ -120,10 +118,8 @@ namespace kmx::sat::runtime::controller
 
         static bool metrics_monotonic(const metrics& before, const metrics& after) noexcept
         {
-            return after.install_count >= before.install_count
-                && after.stop_request_count >= before.stop_request_count
-                && after.os_signal_request_count >= before.os_signal_request_count
-                && after.clear_count >= before.clear_count;
+            return after.install_count >= before.install_count && after.stop_request_count >= before.stop_request_count &&
+                   after.os_signal_request_count >= before.os_signal_request_count && after.clear_count >= before.clear_count;
         }
 
     private:

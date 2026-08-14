@@ -77,9 +77,7 @@ namespace kmx::sat::io::writer
         {
             buffer_.append(line.begin(), line.end());
             if (buffer_.empty() || buffer_.back() != '\n')
-            {
                 buffer_.push_back('\n');
-            }
         }
 
         /// @brief Writes one already-assembled proof record (add/delete/shrink) to the output target.

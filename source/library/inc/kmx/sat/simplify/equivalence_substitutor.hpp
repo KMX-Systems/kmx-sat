@@ -64,9 +64,7 @@ namespace kmx::sat::simplify
         void apply_equivalence_class(const std::uint32_t from, const std::uint32_t to) noexcept
         {
             if (from == 0u || to == 0u || from == to)
-            {
                 return;
-            }
 
             pending_rewrites_.push_back({from, to});
             rewrite_map_[from] = to;
@@ -96,9 +94,7 @@ namespace kmx::sat::simplify
             if (!pending_rewrites_.empty())
             {
                 if (watch_list_ != nullptr)
-                {
                     watch_list_->reindex_after_compaction([&](const literal old_literal) noexcept { return remap_literal(old_literal); });
-                }
                 ++watch_rewrite_count_;
             }
         }
@@ -114,9 +110,7 @@ namespace kmx::sat::simplify
                     std::unordered_map<std::uint32_t, variable> permutation {};
                     permutation.reserve(pending_rewrites_.size());
                     for (const auto& [from, to]: pending_rewrites_)
-                    {
                         permutation[from] = variable {resolve_representative(to)};
-                    }
                     variable_mapper_->rebuild_after_compaction(permutation);
                 }
                 ++external_mapping_rewrite_count_;
@@ -148,9 +142,7 @@ namespace kmx::sat::simplify
             {
                 const auto it = rewrite_map_.find(value);
                 if (it == rewrite_map_.end() || it->second == value)
-                {
                     break;
-                }
                 value = it->second;
             }
             return value;
@@ -161,9 +153,7 @@ namespace kmx::sat::simplify
             const auto old_var = old_literal.variable_of().index();
             const auto new_var = resolve_representative(old_var);
             if (new_var == old_var)
-            {
                 return old_literal;
-            }
             return literal {variable {new_var}, old_literal.is_negated()};
         }
 
@@ -173,9 +163,7 @@ namespace kmx::sat::simplify
             for (const auto ref: refs)
             {
                 if (!ref.valid() || clause_database_->is_garbage(ref))
-                {
                     continue;
-                }
 
                 auto literals = storage.literals_of(ref);
                 bool changed {};
@@ -190,9 +178,7 @@ namespace kmx::sat::simplify
                 }
 
                 if (changed)
-                {
                     storage.rewrite_clause_literals(ref, literals);
-                }
             }
         }
 

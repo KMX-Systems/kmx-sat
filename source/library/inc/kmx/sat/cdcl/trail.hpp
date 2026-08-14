@@ -33,9 +33,7 @@ namespace kmx::sat::cdcl
             }
             literals_.resize(position);
             if (propagation_head_ > position)
-            {
                 propagation_head_ = position;
-            }
         }
 
         std::uint32_t current_head() const noexcept { return static_cast<std::uint32_t>(literals_.size()); }
@@ -45,17 +43,13 @@ namespace kmx::sat::cdcl
         void advance_propagation_head() noexcept
         {
             if (propagation_head_ < literals_.size())
-            {
                 ++propagation_head_;
-            }
         }
 
         literal literal_at(const std::uint32_t position) const noexcept
         {
             if (position >= literals_.size())
-            {
                 return {};
-            }
             return literals_[position];
         }
 

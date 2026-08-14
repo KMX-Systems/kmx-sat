@@ -50,9 +50,7 @@ namespace kmx::sat::cdcl::engine
         {
             const auto variable_literal = pick_decision_variable();
             if (!variable_literal.has_value())
-            {
-                return std::nullopt;
-            }
+                return {};
 
             const auto phase = pick_decision_phase();
             last_decision_variable_ = variable_literal->variable_of();
@@ -68,8 +66,7 @@ namespace kmx::sat::cdcl::engine
             {
                 if (chb_enabled_)
                 {
-                    const auto chb_candidate = chb_.best_candidate(
-                        [this](const variable var) noexcept { return is_selectable(var); });
+                    const auto chb_candidate = chb_.best_candidate([this](const variable var) noexcept { return is_selectable(var); });
                     if (chb_candidate.has_value())
                     {
                         last_decision_variable_ = chb_candidate.value();
@@ -81,9 +78,7 @@ namespace kmx::sat::cdcl::engine
                 {
                     const auto vmtf_candidate = vmtf_.front_candidate();
                     if (!vmtf_candidate.has_value())
-                    {
                         break;
-                    }
                     if (is_selectable(*vmtf_candidate))
                     {
                         last_decision_variable_ = *vmtf_candidate;
@@ -96,9 +91,7 @@ namespace kmx::sat::cdcl::engine
                 {
                     const auto evsids_candidate = evsids_.extract_best();
                     if (!evsids_candidate.has_value())
-                    {
                         break;
-                    }
                     if (is_selectable(*evsids_candidate))
                     {
                         last_decision_variable_ = *evsids_candidate;
@@ -108,9 +101,7 @@ namespace kmx::sat::cdcl::engine
             }
 
             if (next_variable_ == 0 || !is_selectable(variable {next_variable_}))
-            {
-                return std::nullopt;
-            }
+                return {};
             last_decision_variable_ = variable {next_variable_};
             return literal {variable {next_variable_}, false};
         }
@@ -121,9 +112,7 @@ namespace kmx::sat::cdcl::engine
         bool pick_decision_phase() const noexcept
         {
             if (last_decision_variable_.index() != 0u && has_saved_phase(last_decision_variable_))
-            {
                 return phase_.saved_phase(last_decision_variable_);
-            }
             return phase_bias_;
         }
 
@@ -149,9 +138,8 @@ namespace kmx::sat::cdcl::engine
 
             if (last_decision_variable_.index() != 0u)
             {
-                const auto inverted_saved_phase = has_saved_phase(last_decision_variable_) ?
-                                                      !phase_.saved_phase(last_decision_variable_) :
-                                                      phase_bias_;
+                const auto inverted_saved_phase =
+                    has_saved_phase(last_decision_variable_) ? !phase_.saved_phase(last_decision_variable_) : phase_bias_;
                 phase_.set_saved_phase(last_decision_variable_, inverted_saved_phase);
                 evsids_.increase_score(last_decision_variable_);
                 chb_.update_on_conflict(last_decision_variable_);
@@ -166,9 +154,7 @@ namespace kmx::sat::cdcl::engine
         void notify_conflict_variables(const std::span<const variable> variables) noexcept
         {
             if (variables.empty())
-            {
                 return;
-            }
 
             selected_blend_ = 1u;
             std::vector<variable> seen_variables {};
@@ -177,14 +163,9 @@ namespace kmx::sat::cdcl::engine
             for (auto it = variables.rbegin(); it != variables.rend(); ++it)
             {
                 const auto seen_it = std::find_if(seen_variables.begin(), seen_variables.end(),
-                                                  [it](const variable existing) noexcept
-                                                  {
-                                                      return existing.index() == it->index();
-                                                  });
+                                                  [it](const variable existing) noexcept { return existing.index() == it->index(); });
                 if (seen_it != seen_variables.end())
-                {
                     continue;
-                }
                 seen_variables.push_back(*it);
 
                 evsids_.increase_score(*it);
@@ -200,9 +181,7 @@ namespace kmx::sat::cdcl::engine
         void notify_conflict_clause(const std::span<const literal> conflict_clause) noexcept
         {
             if (conflict_clause.empty())
-            {
                 return;
-            }
 
             selected_blend_ = 1u;
             std::vector<variable> seen_variables {};
@@ -212,14 +191,9 @@ namespace kmx::sat::cdcl::engine
             {
                 const auto var = it->variable_of();
                 const auto seen_it = std::find_if(seen_variables.begin(), seen_variables.end(),
-                                                  [var](const variable existing) noexcept
-                                                  {
-                                                      return existing.index() == var.index();
-                                                  });
+                                                  [var](const variable existing) noexcept { return existing.index() == var.index(); });
                 if (seen_it != seen_variables.end())
-                {
                     continue;
-                }
                 seen_variables.push_back(var);
 
                 phase_.set_saved_phase(var, !it->is_negated());
@@ -236,9 +210,7 @@ namespace kmx::sat::cdcl::engine
         void notify_propagated_variables(const std::span<const variable> variables) noexcept
         {
             if (variables.empty())
-            {
                 return;
-            }
 
             selected_blend_ = 1u;
             std::vector<variable> seen_variables {};
@@ -247,14 +219,9 @@ namespace kmx::sat::cdcl::engine
             for (auto it = variables.rbegin(); it != variables.rend(); ++it)
             {
                 const auto seen_it = std::find_if(seen_variables.begin(), seen_variables.end(),
-                                                  [it](const variable existing) noexcept
-                                                  {
-                                                      return existing.index() == it->index();
-                                                  });
+                                                  [it](const variable existing) noexcept { return existing.index() == it->index(); });
                 if (seen_it != seen_variables.end())
-                {
                     continue;
-                }
                 seen_variables.push_back(*it);
 
                 evsids_.increase_score(*it);
@@ -283,9 +250,7 @@ namespace kmx::sat::cdcl::engine
         void notify_learned_clause(const std::span<const literal> learned_clause) noexcept
         {
             if (learned_clause.empty())
-            {
                 return;
-            }
 
             selected_blend_ = 1u;
             const auto bump_rounds = learned_clause_bump_rounds(learned_clause.size());
@@ -299,14 +264,9 @@ namespace kmx::sat::cdcl::engine
             {
                 const auto var = it->variable_of();
                 const auto seen_it = std::find_if(unique_variables.begin(), unique_variables.end(),
-                                                  [var](const variable existing) noexcept
-                                                  {
-                                                      return existing.index() == var.index();
-                                                  });
+                                                  [var](const variable existing) noexcept { return existing.index() == var.index(); });
                 if (seen_it == unique_variables.end())
-                {
                     unique_variables.push_back(var);
-                }
             }
 
             for (std::uint32_t round = 0; round < bump_rounds; ++round)
@@ -343,9 +303,7 @@ namespace kmx::sat::cdcl::engine
             }
 
             if (last_decision_variable_.index() != 0u)
-            {
                 chb_.update_on_assignment(last_decision_variable_);
-            }
         }
 
         /// @brief Notifies the decision heuristics that a rephase just occurred.
@@ -363,9 +321,7 @@ namespace kmx::sat::cdcl::engine
         {
             selected_blend_ = 1u;
             if (next_variable_ != 0u)
-            {
                 vmtf_.activate(variable {next_variable_});
-            }
         }
 
         /// @brief Registers an unassigned formula variable as a heuristic branch candidate.
@@ -374,9 +330,7 @@ namespace kmx::sat::cdcl::engine
         void activate_variable(const variable var) noexcept
         {
             if (var.index() == 0u)
-            {
                 return;
-            }
             vmtf_.activate(var);
             selected_blend_ = 1u;
         }
@@ -414,8 +368,7 @@ namespace kmx::sat::cdcl::engine
         /// @param conflict_maintenance_interval EVSIDS rescale interval in conflicts (0 disables).
         /// @param chb_decay_interval CHB decay interval in conflicts (0 disables).
         /// @param restart_decay_interval CHB decay interval in restarts (0 disables).
-        void set_maintenance_intervals(const std::uint32_t conflict_maintenance_interval,
-                                       const std::uint32_t chb_decay_interval,
+        void set_maintenance_intervals(const std::uint32_t conflict_maintenance_interval, const std::uint32_t chb_decay_interval,
                                        const std::uint32_t restart_decay_interval) noexcept
         {
             conflict_maintenance_interval_ = conflict_maintenance_interval;
@@ -432,9 +385,7 @@ namespace kmx::sat::cdcl::engine
         std::optional<variable> last_selected_variable() const noexcept
         {
             if (last_decision_variable_.index() == 0u)
-            {
-                return std::nullopt;
-            }
+                return {};
             return last_decision_variable_;
         }
 
@@ -459,13 +410,9 @@ namespace kmx::sat::cdcl::engine
         static std::uint32_t learned_clause_bump_rounds(const std::size_t clause_size) noexcept
         {
             if (clause_size <= 2u)
-            {
                 return 3u;
-            }
             if (clause_size <= 4u)
-            {
                 return 2u;
-            }
             return 1u;
         }
 
@@ -477,9 +424,7 @@ namespace kmx::sat::cdcl::engine
         bool is_selectable(const variable var) const noexcept
         {
             if (selectable_predicate_ == nullptr)
-            {
                 return true;
-            }
             return selectable_predicate_(var, selectable_context_);
         }
 

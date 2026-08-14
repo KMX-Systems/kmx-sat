@@ -29,12 +29,8 @@ namespace kmx::sat::cdcl
             std::size_t value {};
             std::string unit;
             while (status >> name >> value >> unit)
-            {
                 if (name == "VmRSS:")
-                {
                     return value;
-                }
-            }
             return 0u;
         }
     }
@@ -87,8 +83,8 @@ namespace kmx::sat::cdcl
         auto peak_rss_kb = initial_rss_kb;
         for (std::uint32_t cycle {}; cycle < 256u; ++cycle)
         {
-            const auto garbage_ref = database.add_clause(
-                std::array<literal, 1> {literal {variable {static_cast<std::uint32_t>(1500u + cycle)}, false}}, true);
+            const auto garbage_ref =
+                database.add_clause(std::array<literal, 1> {literal {variable {static_cast<std::uint32_t>(1500u + cycle)}, false}}, true);
             database.mark_garbage(garbage_ref);
             collector.collect();
             collector.relocate_live_clause();

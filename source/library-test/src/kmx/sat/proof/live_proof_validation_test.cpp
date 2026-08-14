@@ -19,8 +19,8 @@ namespace kmx::sat
         solver solver;
         solver.attach_proof_sink(sink);
 
-        solver.add_clause(std::array<literal, 3> {
-            literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}});
+        solver.add_clause(
+            std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}});
         solver.add_clause(std::array<literal, 1> {literal {variable {1u}, true}});
         solver.add_clause(std::array<literal, 1> {literal {variable {2u}, true}});
         solver.add_clause(std::array<literal, 1> {literal {variable {3u}, true}});
@@ -38,18 +38,16 @@ namespace kmx::sat
             {
                 const auto& event = events[index];
                 if (event.kind != proof::event_kind::add_derived)
-                {
                     continue;
-                }
                 REQUIRE(!event.antecedent_ids.empty());
                 for (const auto antecedent: event.antecedent_ids)
                 {
                     bool appeared_earlier = false;
                     for (std::size_t prior {}; prior < index; ++prior)
                     {
-                        if ((events[prior].kind == proof::event_kind::add_original
-                             || events[prior].kind == proof::event_kind::add_derived)
-                            && events[prior].clause_id.equals(antecedent))
+                        if ((events[prior].kind == proof::event_kind::add_original ||
+                             events[prior].kind == proof::event_kind::add_derived) &&
+                            events[prior].clause_id.equals(antecedent))
                         {
                             appeared_earlier = true;
                             break;
@@ -61,8 +59,8 @@ namespace kmx::sat
 
             solver.reset_session();
             REQUIRE(solver.proof_buffered_event_count() == 0u);
-            solver.add_clause(std::array<literal, 3> {
-                literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}});
+            solver.add_clause(
+                std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}});
             solver.add_clause(std::array<literal, 1> {literal {variable {1u}, true}});
             solver.add_clause(std::array<literal, 1> {literal {variable {2u}, true}});
             solver.add_clause(std::array<literal, 1> {literal {variable {3u}, true}});

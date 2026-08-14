@@ -3,9 +3,9 @@
 #include <array>
 #include <string>
 
-#include <kmx/sat/test_support/incremental_replay_trace.hpp>
-#include <kmx/sat/test_support/incremental_replay_executor.hpp>
 #include <kmx/sat/solver_state_machine.hpp>
+#include <kmx/sat/test_support/incremental_replay_executor.hpp>
+#include <kmx/sat/test_support/incremental_replay_trace.hpp>
 
 namespace kmx::sat
 {
@@ -19,28 +19,15 @@ namespace kmx::sat
         trace.seed = 20260814u;
         trace.variable_count = 4u;
         trace.operations = {
-            incremental_replay_operation {
-                .kind = replay_operation_kind::add_clause,
-                .literals = {literal {variable {1u}, false}, literal {variable {2u}, true}}},
-            incremental_replay_operation {
-                .kind = replay_operation_kind::assume,
-                .literals = {literal {variable {1u}, true}}},
-            incremental_replay_operation {
-                .kind = replay_operation_kind::solve,
-                .conflict_limit = 3u,
-                .decision_limit = 7u},
+            incremental_replay_operation {.kind = replay_operation_kind::add_clause,
+                                          .literals = {literal {variable {1u}, false}, literal {variable {2u}, true}}},
+            incremental_replay_operation {.kind = replay_operation_kind::assume, .literals = {literal {variable {1u}, true}}},
+            incremental_replay_operation {.kind = replay_operation_kind::solve, .conflict_limit = 3u, .decision_limit = 7u},
             incremental_replay_operation {.kind = replay_operation_kind::release_assumptions},
             incremental_replay_operation {.kind = replay_operation_kind::reset_session},
-            incremental_replay_operation {
-                .kind = replay_operation_kind::set_option,
-                .option_name = "chb_enabled",
-                .option_value = 1},
-            incremental_replay_operation {
-                .kind = replay_operation_kind::value_of,
-                .variable_operand = variable {2u}},
-            incremental_replay_operation {
-                .kind = replay_operation_kind::failed,
-                .literal_operand = literal {variable {1u}, true}},
+            incremental_replay_operation {.kind = replay_operation_kind::set_option, .option_name = "chb_enabled", .option_value = 1},
+            incremental_replay_operation {.kind = replay_operation_kind::value_of, .variable_operand = variable {2u}},
+            incremental_replay_operation {.kind = replay_operation_kind::failed, .literal_operand = literal {variable {1u}, true}},
         };
 
         const auto serialized = trace.serialize_json_lines();
@@ -72,22 +59,14 @@ namespace kmx::sat
         incremental_replay_trace trace;
         trace.variable_count = 2u;
         trace.operations = {
-            incremental_replay_operation {
-                .kind = replay_operation_kind::add_clause,
-                .literals = {literal {variable {1u}, false}}},
+            incremental_replay_operation {.kind = replay_operation_kind::add_clause, .literals = {literal {variable {1u}, false}}},
             incremental_replay_operation {.kind = replay_operation_kind::solve},
-            incremental_replay_operation {
-                .kind = replay_operation_kind::assume,
-                .literals = {literal {variable {1u}, true}}},
+            incremental_replay_operation {.kind = replay_operation_kind::assume, .literals = {literal {variable {1u}, true}}},
             incremental_replay_operation {.kind = replay_operation_kind::solve},
-            incremental_replay_operation {
-                .kind = replay_operation_kind::failed,
-                .literal_operand = literal {variable {1u}, true}},
+            incremental_replay_operation {.kind = replay_operation_kind::failed, .literal_operand = literal {variable {1u}, true}},
             incremental_replay_operation {.kind = replay_operation_kind::release_assumptions},
             incremental_replay_operation {.kind = replay_operation_kind::solve},
-            incremental_replay_operation {
-                .kind = replay_operation_kind::value_of,
-                .variable_operand = variable {1u}},
+            incremental_replay_operation {.kind = replay_operation_kind::value_of, .variable_operand = variable {1u}},
             incremental_replay_operation {.kind = replay_operation_kind::reset_session},
         };
 
@@ -111,8 +90,7 @@ namespace kmx::sat
         trace.seed = 7u;
         trace.variable_count = 1u;
         trace.operations = {
-            {.kind = test_support::replay_operation_kind::add_clause,
-             .literals = {literal {variable {1u}, false}}},
+            {.kind = test_support::replay_operation_kind::add_clause, .literals = {literal {variable {1u}, false}}},
             {.kind = test_support::replay_operation_kind::solve},
         };
         const auto parsed = test_support::incremental_replay_trace::parse_json_lines(trace.serialize_json_lines());

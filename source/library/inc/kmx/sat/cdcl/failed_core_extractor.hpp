@@ -44,9 +44,7 @@ namespace kmx::sat::cdcl
         void shrink_failed_core_if_possible() noexcept
         {
             if (failed_assumptions_.size() > 1u)
-            {
                 failed_assumptions_.pop_back();
-            }
         }
 
     private:

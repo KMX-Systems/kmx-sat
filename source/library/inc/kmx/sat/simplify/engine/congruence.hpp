@@ -76,20 +76,14 @@ namespace kmx::sat::simplify::engine
             for (const auto& record: gate_.gate_records())
             {
                 if (record.kind == extractor::gate::gate_kind::xor_gate || record.kind == extractor::gate::gate_kind::ite_gate)
-                {
                     continue;
-                }
 
                 if (record.inputs[0] != record.inputs[1])
-                {
                     continue;
-                }
 
                 const auto representative = std::min(record.inputs[0], record.inputs[1]);
                 if (representative == 0u || record.output == 0u || record.output == representative)
-                {
                     continue;
-                }
 
                 equivalence_substitutor_.apply_equivalence_class(record.output, representative);
                 ++equivalence_count_;

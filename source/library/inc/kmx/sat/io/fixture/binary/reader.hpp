@@ -59,9 +59,7 @@ namespace kmx::sat::io::fixture::binary
         bool read_header() noexcept
         {
             if (source_ == nullptr)
-            {
                 return false;
-            }
 
             raw_fixture_.clear();
             char buffer[4096] {};
@@ -69,22 +67,16 @@ namespace kmx::sat::io::fixture::binary
             {
                 const auto read_count = source_->read(buffer, sizeof(buffer));
                 if (read_count == 0)
-                {
                     break;
-                }
                 raw_fixture_.append(buffer, read_count);
             }
 
             if (raw_fixture_.empty())
-            {
                 return false;
-            }
 
             const auto newline = raw_fixture_.find('\n');
             if (newline == std::string::npos)
-            {
                 return false;
-            }
 
             std::string_view header {raw_fixture_.data(), newline};
             return parse_header_line(header);
@@ -101,9 +93,7 @@ namespace kmx::sat::io::fixture::binary
         bool load_payload() noexcept
         {
             if (raw_fixture_.empty())
-            {
                 return false;
-            }
 
             clauses_.clear();
             assumptions_.clear();
@@ -125,23 +115,17 @@ namespace kmx::sat::io::fixture::binary
                 line_start = line_end == std::string::npos ? raw_fixture_.size() : line_end + 1u;
 
                 if (line.empty())
-                {
                     continue;
-                }
 
                 if (line == "c")
                 {
                     const auto clause_end = raw_fixture_.find('\n', line_start);
                     if (clause_end == std::string::npos)
-                    {
                         return false;
-                    }
                     std::string_view clause_line {raw_fixture_.data() + line_start, clause_end - line_start};
                     auto clause = parse_clause_line(clause_line);
                     if (!clause.has_value() || clause->empty())
-                    {
                         return false;
-                    }
                     clauses_.push_back(std::move(*clause));
                     ++parsed_clause_count;
                     line_start = clause_end + 1u;
@@ -152,15 +136,11 @@ namespace kmx::sat::io::fixture::binary
                 {
                     const auto assumptions_end = raw_fixture_.find('\n', line_start);
                     if (assumptions_end == std::string::npos)
-                    {
                         return false;
-                    }
                     std::string_view assumptions_line {raw_fixture_.data() + line_start, assumptions_end - line_start};
                     auto parsed_assumptions = parse_clause_line(assumptions_line);
                     if (!parsed_assumptions.has_value())
-                    {
                         return false;
-                    }
                     assumptions_ = std::move(*parsed_assumptions);
                     parsed_assumption_count = assumptions_.size();
                     request_.assumptions = assumptions_;
@@ -199,24 +179,18 @@ namespace kmx::sat::io::fixture::binary
         void materialize_fixture_into_frontend(cdcl::external_frontend& frontend) noexcept
         {
             if (!validate_payload())
-            {
                 return;
-            }
             frontend.clear_clauses();
             frontend.clear_assumptions();
             if (schema_.payload_kind_of() != schema::payload_kind::solve_request_fixture)
             {
                 for (const auto& clause: clauses_)
-                {
                     frontend.push_clause(clause);
-                }
                 return;
             }
 
             for (const auto lit: assumptions_)
-            {
                 frontend.push_assumption(lit);
-            }
 
             solve_request prepared_request {};
             prepared_request.conflict_limit = request_.conflict_limit;
@@ -257,13 +231,9 @@ namespace kmx::sat::io::fixture::binary
         static std::string_view trim(std::string_view input) noexcept
         {
             while (!input.empty() && (input.front() == ' ' || input.front() == '\t' || input.front() == '\r'))
-            {
                 input.remove_prefix(1);
-            }
             while (!input.empty() && (input.back() == ' ' || input.back() == '\t' || input.back() == '\r'))
-            {
                 input.remove_suffix(1);
-            }
             return input;
         }
 
@@ -271,16 +241,12 @@ namespace kmx::sat::io::fixture::binary
         {
             token = trim(token);
             if (token.empty())
-            {
                 return false;
-            }
 
             std::uint64_t parsed {};
             const auto result = std::from_chars(token.data(), token.data() + token.size(), parsed);
             if (result.ec != std::errc {} || result.ptr != token.data() + token.size())
-            {
                 return false;
-            }
             value = parsed;
             return true;
         }
@@ -289,16 +255,12 @@ namespace kmx::sat::io::fixture::binary
         {
             token = trim(token);
             if (token.empty())
-            {
                 return false;
-            }
 
             std::int64_t parsed {};
             const auto result = std::from_chars(token.data(), token.data() + token.size(), parsed);
             if (result.ec != std::errc {} || result.ptr != token.data() + token.size())
-            {
                 return false;
-            }
             value = parsed;
             return true;
         }
@@ -310,13 +272,9 @@ namespace kmx::sat::io::fixture::binary
             while (start < header.size())
             {
                 while (start < header.size() && header[start] == ' ')
-                {
                     ++start;
-                }
                 if (start >= header.size())
-                {
                     break;
-                }
                 const auto end = header.find(' ', start);
                 const auto token_end = end == std::string::npos ? header.size() : end;
                 tokens.push_back(header.substr(start, token_end - start));
@@ -324,9 +282,7 @@ namespace kmx::sat::io::fixture::binary
             }
 
             if (tokens.size() != 12u)
-            {
                 return false;
-            }
 
             std::uint64_t parsed_version {};
             std::uint64_t kind_value {};
@@ -351,9 +307,7 @@ namespace kmx::sat::io::fixture::binary
             }
 
             if (kind_value > static_cast<std::uint64_t>(schema::payload_kind::solve_request_fixture))
-            {
                 return false;
-            }
 
             version_ = static_cast<std::uint16_t>(parsed_version);
             declared_variable_count_ = static_cast<std::uint32_t>(declared_vars);
@@ -379,20 +333,14 @@ namespace kmx::sat::io::fixture::binary
             while (start < line.size())
             {
                 while (start < line.size() && line[start] == ' ')
-                {
                     ++start;
-                }
                 if (start >= line.size())
-                {
                     break;
-                }
                 const auto end = line.find(' ', start);
                 const auto token_end = end == std::string::npos ? line.size() : end;
                 std::int64_t value {};
                 if (!parse_signed(line.substr(start, token_end - start), value))
-                {
-                    return std::nullopt;
-                }
+                    return {};
                 if (value == 0)
                 {
                     terminated = true;
@@ -405,9 +353,7 @@ namespace kmx::sat::io::fixture::binary
             }
 
             if (!terminated)
-            {
-                return std::nullopt;
-            }
+                return {};
             return result;
         }
 

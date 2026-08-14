@@ -71,21 +71,13 @@ namespace kmx::sat::cdcl::clause
         {
             std::uint8_t flags {};
             if (redundant)
-            {
                 flags |= redundant_flag;
-            }
             if (garbage)
-            {
                 flags |= garbage_flag;
-            }
             if (reason)
-            {
                 flags |= reason_flag;
-            }
             if (shrunken)
-            {
                 flags |= shrunken_flag;
-            }
             return flags;
         }
 

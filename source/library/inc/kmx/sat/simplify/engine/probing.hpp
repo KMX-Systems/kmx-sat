@@ -65,15 +65,11 @@ namespace kmx::sat::simplify::engine
                     for (const auto ref: active_refs())
                     {
                         if (!ref.valid() || database_->is_garbage(ref) || !database_->storage_of().is_alive(ref))
-                        {
                             continue;
-                        }
 
                         const auto clause = database_->storage_of().literals_of(ref);
                         if (clause.size() <= 1u)
-                        {
                             continue;
-                        }
 
                         bool satisfied {};
                         std::vector<literal> survivors {};
@@ -95,18 +91,14 @@ namespace kmx::sat::simplify::engine
                         }
 
                         if (satisfied || survivors.size() != 1u || survivors.size() >= clause.size())
-                        {
                             continue;
-                        }
 
                         auto rewritten_clause = clause;
                         rewritten_clause[0] = survivors[0];
                         database_->storage_of().rewrite_clause_literals(ref, rewritten_clause);
                         database_->storage_of().shrink_clause(ref, 1u);
                         if (proof_manager_ != nullptr)
-                        {
                             proof_manager_->on_shrink_clause(ref, survivors);
-                        }
 
                         assignments[survivors[0].variable_of().index()] = !survivors[0].is_negated();
                         ++hyper_binary_count_;
@@ -128,9 +120,7 @@ namespace kmx::sat::simplify::engine
         void record_backbone_candidate(const literal lit) noexcept
         {
             if (std::find(backbone_candidates_.begin(), backbone_candidates_.end(), lit) == backbone_candidates_.end())
-            {
                 backbone_candidates_.push_back(lit);
-            }
             ++backbone_candidate_count_;
         }
 
@@ -151,9 +141,7 @@ namespace kmx::sat::simplify::engine
         {
             std::vector<cdcl::clause::ref_t> refs {};
             if (database_ == nullptr)
-            {
                 return refs;
-            }
 
             const auto stats = database_->stats_snapshot();
             refs.reserve(stats.irredundant_count + stats.redundant_count);
@@ -166,22 +154,16 @@ namespace kmx::sat::simplify::engine
         {
             assignment_map assignments {};
             if (database_ == nullptr)
-            {
                 return assignments;
-            }
 
             for (const auto ref: active_refs())
             {
                 if (!ref.valid() || database_->is_garbage(ref))
-                {
                     continue;
-                }
 
                 const auto clause = database_->storage_of().literals_of(ref);
                 if (clause.size() != 1u)
-                {
                     continue;
-                }
 
                 const auto unit = clause.front();
                 assignments[unit.variable_of().index()] = !unit.is_negated();

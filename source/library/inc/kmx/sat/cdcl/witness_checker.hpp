@@ -47,18 +47,14 @@ namespace kmx::sat::cdcl
         bool check_model_against_original(const model_view model) const noexcept
         {
             if (clauses_ == nullptr)
-            {
                 return true;
-            }
 
             bool satisfied = true;
             clauses_->iterate_irredundant(
                 [&](const clause::ref_t ref) noexcept
                 {
                     if (!satisfied)
-                    {
                         return;
-                    }
                     satisfied = clause_satisfied(ref, model);
                 });
             return satisfied;
@@ -71,27 +67,21 @@ namespace kmx::sat::cdcl
         bool check_model_against_current(const model_view model) const noexcept
         {
             if (clauses_ == nullptr)
-            {
                 return true;
-            }
 
             bool satisfied = true;
             clauses_->iterate_irredundant(
                 [&](const clause::ref_t ref) noexcept
                 {
                     if (!satisfied)
-                    {
                         return;
-                    }
                     satisfied = clause_satisfied(ref, model);
                 });
             clauses_->iterate_redundant(
                 [&](const clause::ref_t ref) noexcept
                 {
                     if (!satisfied)
-                    {
                         return;
-                    }
                     satisfied = clause_satisfied(ref, model);
                 });
             return satisfied;
@@ -104,15 +94,11 @@ namespace kmx::sat::cdcl
         bool check_constraint_satisfaction(const model_view model) const noexcept
         {
             if (constraint_ == nullptr || !constraint_->has_constraint_clause())
-            {
                 return true;
-            }
 
             const auto clause = constraint_->constraint_clause_ref();
             if (!clause.has_value())
-            {
                 return true;
-            }
 
             bool satisfied = false;
             for (const auto lit: *clause)
@@ -130,30 +116,20 @@ namespace kmx::sat::cdcl
         static bool literal_satisfied(const literal lit, const model_view model) noexcept
         {
             for (const auto value: model.values())
-            {
                 if (value.variable_of() == lit.variable_of())
-                {
                     return value.is_negated() == lit.is_negated();
-                }
-            }
             return false;
         }
 
         bool clause_satisfied(const clause::ref_t ref, const model_view model) const noexcept
         {
             if (!ref.valid())
-            {
                 return true;
-            }
 
             const auto literals = clauses_->storage_of().literals_of(ref);
             for (const auto lit: literals)
-            {
                 if (literal_satisfied(lit, model))
-                {
                     return true;
-                }
-            }
             return false;
         }
 

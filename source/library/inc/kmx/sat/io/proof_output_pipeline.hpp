@@ -41,15 +41,11 @@ namespace kmx::sat::io
         void submit() noexcept
         {
             if (!active_)
-            {
                 return;
-            }
             ++submitted_count_;
             const auto buffered = event_stream_.buffered_count();
             if (buffered > 0u)
-            {
                 submitted_count_ += buffered;
-            }
             event_stream_.drain();
         }
 
@@ -59,15 +55,11 @@ namespace kmx::sat::io
         void submit(const proof::event_stream& stream) noexcept
         {
             if (!active_)
-            {
                 return;
-            }
             ++submitted_count_;
             submitted_count_ += stream.buffered_count();
             if (backpressure_policy_enabled_)
-            {
                 submitted_count_ += 1u;
-            }
         }
 
         /// @brief Blocks until all currently submitted data has been written.
@@ -75,9 +67,7 @@ namespace kmx::sat::io
         void flush() noexcept
         {
             if (active_)
-            {
                 event_stream_.flush_sync();
-            }
         }
 
         /// @brief Stops the pipeline, releasing any output resources for this session.

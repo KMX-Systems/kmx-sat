@@ -63,9 +63,7 @@ namespace kmx::sat::simplify
             for (const auto& clause: binary_clauses)
             {
                 if (!clause.ref.valid() || database_->is_garbage(clause.ref))
-                {
                     continue;
-                }
 
                 const auto first_source = clause.first.negated().raw();
                 const auto first_target = clause.second.raw();
@@ -75,9 +73,7 @@ namespace kmx::sat::simplify
                     has_alternative_path(adjacency, second_source, second_target, clause))
                 {
                     if (proof_manager_ != nullptr)
-                    {
                         proof_manager_->on_delete_clause(clause.ref);
-                    }
                     database_->mark_garbage(clause.ref);
                     ++removed_edge_count_;
                 }
@@ -111,15 +107,11 @@ namespace kmx::sat::simplify
             const auto collect_clause = [&](const cdcl::clause::ref_t ref) noexcept
             {
                 if (!ref.valid() || database_->is_garbage(ref))
-                {
                     return;
-                }
 
                 const auto literals = database_->storage_of().literals_of(ref);
                 if (literals.size() != 2u)
-                {
                     return;
-                }
 
                 binary_clauses.push_back(binary_clause {ref, literals[0], literals[1]});
                 adjacency[literals[0].negated().raw()].push_back(literals[1].raw());
@@ -149,21 +141,15 @@ namespace kmx::sat::simplify
                 const auto current = frontier[index];
                 const auto it = adjacency.find(current);
                 if (it == adjacency.end())
-                {
                     continue;
-                }
 
                 for (const auto next: it->second)
                 {
                     if (is_excluded_edge(current, next, excluded_clause))
-                    {
                         continue;
-                    }
 
                     if (next == target && current != source)
-                    {
                         return true;
-                    }
 
                     if (!visited.contains(next))
                     {

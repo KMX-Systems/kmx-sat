@@ -103,19 +103,15 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         static bool snapshot_monotonic(const snapshot& before, const snapshot& after) noexcept
         {
-            return after.conflicts >= before.conflicts && after.decisions >= before.decisions
-                && after.propagations >= before.propagations && after.restarts >= before.restarts
-                && after.learned_clauses >= before.learned_clauses
-                && after.learned_clause_glue_total >= before.learned_clause_glue_total
-                && after.learned_clause_glue_samples >= before.learned_clause_glue_samples
-                && after.reduction_passes >= before.reduction_passes
-                && after.reduced_clauses >= before.reduced_clauses
-                && after.deleted_clauses >= before.deleted_clauses
-                && after.terminate_callback_calls >= before.terminate_callback_calls
-                && after.learn_callback_calls >= before.learn_callback_calls
-                && after.external_propagator_calls >= before.external_propagator_calls
-                && after.option_updates >= before.option_updates
-                && after.configuration_updates >= before.configuration_updates;
+            return after.conflicts >= before.conflicts && after.decisions >= before.decisions &&
+                   after.propagations >= before.propagations && after.restarts >= before.restarts &&
+                   after.learned_clauses >= before.learned_clauses && after.learned_clause_glue_total >= before.learned_clause_glue_total &&
+                   after.learned_clause_glue_samples >= before.learned_clause_glue_samples &&
+                   after.reduction_passes >= before.reduction_passes && after.reduced_clauses >= before.reduced_clauses &&
+                   after.deleted_clauses >= before.deleted_clauses && after.terminate_callback_calls >= before.terminate_callback_calls &&
+                   after.learn_callback_calls >= before.learn_callback_calls &&
+                   after.external_propagator_calls >= before.external_propagator_calls && after.option_updates >= before.option_updates &&
+                   after.configuration_updates >= before.configuration_updates;
         }
 
         /// @brief Computes the non-negative per-counter delta between two snapshots.
@@ -130,29 +126,30 @@ namespace kmx::sat::telemetry
                 .decisions = after.decisions >= before.decisions ? after.decisions - before.decisions : 0u,
                 .propagations = after.propagations >= before.propagations ? after.propagations - before.propagations : 0u,
                 .restarts = after.restarts >= before.restarts ? after.restarts - before.restarts : 0u,
-                .learned_clauses =
-                    after.learned_clauses >= before.learned_clauses ? after.learned_clauses - before.learned_clauses : 0u,
-                .learned_clause_glue_total = after.learned_clause_glue_total >= before.learned_clause_glue_total
-                    ? after.learned_clause_glue_total - before.learned_clause_glue_total : 0u,
-                .learned_clause_glue_samples = after.learned_clause_glue_samples >= before.learned_clause_glue_samples
-                    ? after.learned_clause_glue_samples - before.learned_clause_glue_samples : 0u,
-                .reduction_passes = after.reduction_passes >= before.reduction_passes ? after.reduction_passes - before.reduction_passes : 0u,
+                .learned_clauses = after.learned_clauses >= before.learned_clauses ? after.learned_clauses - before.learned_clauses : 0u,
+                .learned_clause_glue_total = after.learned_clause_glue_total >= before.learned_clause_glue_total ?
+                                                 after.learned_clause_glue_total - before.learned_clause_glue_total :
+                                                 0u,
+                .learned_clause_glue_samples = after.learned_clause_glue_samples >= before.learned_clause_glue_samples ?
+                                                   after.learned_clause_glue_samples - before.learned_clause_glue_samples :
+                                                   0u,
+                .reduction_passes =
+                    after.reduction_passes >= before.reduction_passes ? after.reduction_passes - before.reduction_passes : 0u,
                 .reduced_clauses = after.reduced_clauses >= before.reduced_clauses ? after.reduced_clauses - before.reduced_clauses : 0u,
                 .deleted_clauses = after.deleted_clauses >= before.deleted_clauses ? after.deleted_clauses - before.deleted_clauses : 0u,
-                .terminate_callback_calls = after.terminate_callback_calls >= before.terminate_callback_calls
-                                              ? after.terminate_callback_calls - before.terminate_callback_calls
-                                              : 0u,
-                .learn_callback_calls = after.learn_callback_calls >= before.learn_callback_calls
-                                          ? after.learn_callback_calls - before.learn_callback_calls
-                                          : 0u,
-                .external_propagator_calls = after.external_propagator_calls >= before.external_propagator_calls
-                                                ? after.external_propagator_calls - before.external_propagator_calls
-                                                : 0u,
-                .option_updates =
-                    after.option_updates >= before.option_updates ? after.option_updates - before.option_updates : 0u,
-                .configuration_updates = after.configuration_updates >= before.configuration_updates
-                                             ? after.configuration_updates - before.configuration_updates
-                                             : 0u,
+                .terminate_callback_calls = after.terminate_callback_calls >= before.terminate_callback_calls ?
+                                                after.terminate_callback_calls - before.terminate_callback_calls :
+                                                0u,
+                .learn_callback_calls = after.learn_callback_calls >= before.learn_callback_calls ?
+                                            after.learn_callback_calls - before.learn_callback_calls :
+                                            0u,
+                .external_propagator_calls = after.external_propagator_calls >= before.external_propagator_calls ?
+                                                 after.external_propagator_calls - before.external_propagator_calls :
+                                                 0u,
+                .option_updates = after.option_updates >= before.option_updates ? after.option_updates - before.option_updates : 0u,
+                .configuration_updates = after.configuration_updates >= before.configuration_updates ?
+                                             after.configuration_updates - before.configuration_updates :
+                                             0u,
             };
         }
 

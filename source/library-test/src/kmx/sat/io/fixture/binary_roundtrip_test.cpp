@@ -210,8 +210,8 @@ namespace kmx::sat::io::fixture
         using namespace kmx::sat::io::fixture;
 
         const auto temp_dir = std::filesystem::temp_directory_path();
-        const auto check_fixture = [&](const std::string& name, const std::string& contents, const bool header_valid,
-                                       const bool payload_valid)
+        const auto check_fixture =
+            [&](const std::string& name, const std::string& contents, const bool header_valid, const bool payload_valid)
         {
             const auto path = temp_dir / name;
             {
@@ -286,9 +286,7 @@ namespace kmx::sat::io::fixture
         reader.materialize_fixture_into_frontend(frontend);
         solver binary_solver;
         for (const auto& clause: frontend.clauses())
-        {
             binary_solver.add_clause(clause);
-        }
         binary_solver.assume(literal {variable {1u}, true});
         const auto binary_result = binary_solver.solve(solve_request {});
         REQUIRE(binary_result.status_of() == solve_result::status::unsatisfiable);

@@ -46,13 +46,9 @@ namespace kmx::sat::runtime::controller
         {
             strategy_budget_ = strategy_budget;
             if (strategy_budget_ < 1u)
-            {
                 strategy_budget_ = 1u;
-            }
             if (strategy_budget_ > 64u)
-            {
                 strategy_budget_ = 64u;
-            }
         }
 
         /// @brief Launches the configured set of independently seeded solver instances.
@@ -138,10 +134,8 @@ namespace kmx::sat::runtime::controller
 
         static bool lifecycle_monotonic(const lifecycle_metrics& before, const lifecycle_metrics& after) noexcept
         {
-            return after.launch_count >= before.launch_count
-                && after.launch_epoch >= before.launch_epoch
-                && after.cancel_count >= before.cancel_count
-                && after.collect_count >= before.collect_count;
+            return after.launch_count >= before.launch_count && after.launch_epoch >= before.launch_epoch &&
+                   after.cancel_count >= before.cancel_count && after.collect_count >= before.collect_count;
         }
 
     private:

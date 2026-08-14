@@ -449,8 +449,7 @@ namespace kmx::sat::simplify
         REQUIRE(resets_snapshot.clear_graph_invocation_count == 0u);
         REQUIRE(resets_snapshot.total_reset_invocation_count == 1u);
         REQUIRE(engine::decomposition::reset_metrics_monotonic(resets_before_emit_reset, resets_snapshot));
-        const auto resets_emit_delta =
-            engine::decomposition::reset_metrics_delta_between(resets_before_emit_reset, resets_snapshot);
+        const auto resets_emit_delta = engine::decomposition::reset_metrics_delta_between(resets_before_emit_reset, resets_snapshot);
         REQUIRE(resets_emit_delta.reset_graph_invocation_count == 0u);
         REQUIRE(resets_emit_delta.reset_run_invocation_count == 0u);
         REQUIRE(resets_emit_delta.reset_emit_invocation_count == 1u);
@@ -495,8 +494,7 @@ namespace kmx::sat::simplify
         REQUIRE(resets_snapshot.clear_graph_invocation_count == 0u);
         REQUIRE(resets_snapshot.total_reset_invocation_count == 2u);
         REQUIRE(engine::decomposition::reset_metrics_monotonic(resets_before_run_reset, resets_snapshot));
-        const auto resets_run_delta =
-            engine::decomposition::reset_metrics_delta_between(resets_before_run_reset, resets_snapshot);
+        const auto resets_run_delta = engine::decomposition::reset_metrics_delta_between(resets_before_run_reset, resets_snapshot);
         REQUIRE(resets_run_delta.reset_graph_invocation_count == 0u);
         REQUIRE(resets_run_delta.reset_run_invocation_count == 1u);
         REQUIRE(resets_run_delta.reset_emit_invocation_count == 0u);

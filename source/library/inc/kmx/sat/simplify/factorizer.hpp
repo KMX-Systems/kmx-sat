@@ -78,9 +78,7 @@ namespace kmx::sat::simplify
         void rewrite_formula() noexcept
         {
             if (have_pattern_)
-            {
                 rewritten_clause_count_ = clauses_.size();
-            }
         }
 
         /// @brief Returns how many variables have been introduced by the factorizer.

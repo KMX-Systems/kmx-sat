@@ -26,9 +26,7 @@ namespace kmx::sat::cdcl
         assumption_reuse_advisor advisor;
 
         for (std::uint32_t i = 0; i < 10u; ++i)
-        {
             advisor.record_epoch_outcome();
-        }
 
         REQUIRE(advisor.suggest_trail_reuse_depth() == 4u);
     }

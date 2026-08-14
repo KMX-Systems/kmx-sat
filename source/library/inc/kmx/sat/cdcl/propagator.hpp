@@ -47,9 +47,7 @@ namespace kmx::sat::cdcl
         {
             ++propagation_call_count_;
             if (has_staged_conflicts())
-            {
                 return consume_staged_conflict();
-            }
             return {};
         }
 
@@ -70,9 +68,7 @@ namespace kmx::sat::cdcl
 
             pending_assumption_count_ = 0;
             if (has_staged_conflicts())
-            {
                 return consume_staged_conflict();
-            }
             return {};
         }
 
@@ -83,9 +79,7 @@ namespace kmx::sat::cdcl
         {
             ++beyond_conflict_propagation_call_count_;
             if (has_staged_conflicts())
-            {
                 return consume_staged_conflict();
-            }
             return {};
         }
 
@@ -95,9 +89,7 @@ namespace kmx::sat::cdcl
         void watch_clause(const clause::ref_t ref) noexcept
         {
             if (!ref.valid() || is_watched(ref))
-            {
                 return;
-            }
             watched_.push_back(ref);
         }
 
@@ -120,9 +112,7 @@ namespace kmx::sat::cdcl
         void stage_conflict(const clause::ref_t ref) noexcept
         {
             if (!ref.valid())
-            {
                 return;
-            }
             staged_conflicts_.push_back(ref);
         }
 
@@ -185,9 +175,7 @@ namespace kmx::sat::cdcl
         clause::ref_t consume_staged_conflict() noexcept
         {
             if (!has_staged_conflicts())
-            {
                 return {};
-            }
 
             const auto conflict = staged_conflicts_[staged_conflict_head_++];
 
@@ -198,7 +186,8 @@ namespace kmx::sat::cdcl
             }
             else if (staged_conflict_head_ >= staged_conflict_compaction_threshold_)
             {
-                staged_conflicts_.erase(staged_conflicts_.begin(), staged_conflicts_.begin() + static_cast<std::ptrdiff_t>(staged_conflict_head_));
+                staged_conflicts_.erase(staged_conflicts_.begin(),
+                                        staged_conflicts_.begin() + static_cast<std::ptrdiff_t>(staged_conflict_head_));
                 staged_conflict_head_ = 0u;
             }
 

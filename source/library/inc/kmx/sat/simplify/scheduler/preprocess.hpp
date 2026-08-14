@@ -67,14 +67,23 @@ namespace kmx::sat::simplify::scheduler
             std::optional<bool> was_effective {};
         };
 
-        static constexpr std::array<pass_id, 13> baseline_passes {
-            pass_id::transitive_reducer, pass_id::decomposition, pass_id::probing, pass_id::forward_subsumer, pass_id::blocked,
-            pass_id::covered, pass_id::bounded, pass_id::fast, pass_id::instantiation, pass_id::factorizer, pass_id::gate,
-            pass_id::congruence, pass_id::vivifier};
+        static constexpr std::array<pass_id, 13> baseline_passes {pass_id::transitive_reducer,
+                                                                  pass_id::decomposition,
+                                                                  pass_id::probing,
+                                                                  pass_id::forward_subsumer,
+                                                                  pass_id::blocked,
+                                                                  pass_id::covered,
+                                                                  pass_id::bounded,
+                                                                  pass_id::fast,
+                                                                  pass_id::instantiation,
+                                                                  pass_id::factorizer,
+                                                                  pass_id::gate,
+                                                                  pass_id::congruence,
+                                                                  pass_id::vivifier};
 
         static constexpr std::array<std::string_view, 14> pass_names {
-            "transitive_reducer", "decomposition", "probing", "forward_subsumer", "blocked", "covered", "bounded", "fast",
-            "instantiation", "factorizer", "gate", "congruence", "vivifier", "sweep"};
+            "transitive_reducer", "decomposition", "probing", "forward_subsumer", "blocked",  "covered", "bounded", "fast",
+            "instantiation",      "factorizer",    "gate",    "congruence",       "vivifier", "sweep"};
 
         static constexpr std::string_view pass_name(const pass_id id) noexcept
         {
@@ -83,10 +92,7 @@ namespace kmx::sat::simplify::scheduler
         }
 
         /// @brief Returns the reporting label for an enum-backed pass summary.
-        static constexpr std::string_view pass_name_of(const pass_summary& summary) noexcept
-        {
-            return pass_name(summary.id);
-        }
+        static constexpr std::string_view pass_name_of(const pass_summary& summary) noexcept { return pass_name(summary.id); }
 
         /// @brief Constructs a preprocess scheduler with every baseline pass enabled.
         /// @throws None (noexcept).
@@ -149,11 +155,11 @@ namespace kmx::sat::simplify::scheduler
         /// @param reduction_pressure_ema Reduction-pressure EMA from inprocess scheduler.
         /// @param learned_clause_pressure_ema Learned-clause-pressure EMA from inprocess scheduler.
         void set_inprocess_telemetry_snapshot(const double conflict_density_ema, const double structural_gain_ema,
-                              const double restart_pressure_ema, const double reduction_pressure_ema,
-                              const double learned_clause_pressure_ema) noexcept
+                                              const double restart_pressure_ema, const double reduction_pressure_ema,
+                                              const double learned_clause_pressure_ema) noexcept
         {
             profile_selector_.set_inprocess_telemetry(conflict_density_ema, structural_gain_ema, restart_pressure_ema,
-                                  reduction_pressure_ema, learned_clause_pressure_ema);
+                                                      reduction_pressure_ema, learned_clause_pressure_ema);
         }
 
         /// @brief Attaches the proof manager used for format-aware pass gating.
@@ -193,13 +199,9 @@ namespace kmx::sat::simplify::scheduler
             {
                 const auto id = static_cast<pass_id>(value);
                 if (!is_enabled(id))
-                {
                     continue;
-                }
                 if (should_abort_pipeline())
-                {
                     break;
-                }
 
                 if (!profile_selector_.should_run_pass(id))
                 {
@@ -236,9 +238,7 @@ namespace kmx::sat::simplify::scheduler
 
                 std::optional<bool> pass_was_effective {std::nullopt};
                 if (clause_count_before.has_value() && clause_count_after.has_value())
-                {
                     pass_was_effective = *clause_count_after < *clause_count_before;
-                }
                 profile_selector_.record_pass_effectiveness(id, pass_was_effective);
                 last_run_summaries_.push_back(pass_summary {
                     id,
@@ -261,9 +261,7 @@ namespace kmx::sat::simplify::scheduler
         {
             const auto id = pass_id_from_name(pass_name);
             if (!id.has_value())
-            {
                 return;
-            }
             enable_pass(id.value());
         }
 
@@ -285,9 +283,7 @@ namespace kmx::sat::simplify::scheduler
         {
             const auto id = pass_id_from_name(pass_name);
             if (id.has_value())
-            {
                 disable_pass(id.value());
-            }
         }
 
         void disable_pass(const pass_id id) noexcept
@@ -358,35 +354,60 @@ namespace kmx::sat::simplify::scheduler
             std::optional<pass_id> candidate {};
             switch (hash)
             {
-                case 0xb70710c1u: candidate = pass_id::transitive_reducer; break;
-                case 0xda4c4018u: candidate = pass_id::decomposition; break;
-                case 0xd6a79702u: candidate = pass_id::probing; break;
-                case 0x5ef40fb1u: candidate = pass_id::forward_subsumer; break;
-                case 0x5a5d6eb3u: candidate = pass_id::blocked; break;
-                case 0xf6358681u: candidate = pass_id::covered; break;
-                case 0xff54b66au: candidate = pass_id::bounded; break;
-                case 0x029402afu: candidate = pass_id::fast; break;
-                case 0x9a6bf24au: candidate = pass_id::instantiation; break;
-                case 0x587fb7f6u: candidate = pass_id::factorizer; break;
-                case 0x1660eb12u: candidate = pass_id::gate; break;
-                case 0x60fe7efau: candidate = pass_id::congruence; break;
-                case 0x1171d8a3u: candidate = pass_id::vivifier; break;
-                case 0x518432e3u: candidate = pass_id::sweep; break;
-                default: return std::nullopt;
+                case 0xb70710c1u:
+                    candidate = pass_id::transitive_reducer;
+                    break;
+                case 0xda4c4018u:
+                    candidate = pass_id::decomposition;
+                    break;
+                case 0xd6a79702u:
+                    candidate = pass_id::probing;
+                    break;
+                case 0x5ef40fb1u:
+                    candidate = pass_id::forward_subsumer;
+                    break;
+                case 0x5a5d6eb3u:
+                    candidate = pass_id::blocked;
+                    break;
+                case 0xf6358681u:
+                    candidate = pass_id::covered;
+                    break;
+                case 0xff54b66au:
+                    candidate = pass_id::bounded;
+                    break;
+                case 0x029402afu:
+                    candidate = pass_id::fast;
+                    break;
+                case 0x9a6bf24au:
+                    candidate = pass_id::instantiation;
+                    break;
+                case 0x587fb7f6u:
+                    candidate = pass_id::factorizer;
+                    break;
+                case 0x1660eb12u:
+                    candidate = pass_id::gate;
+                    break;
+                case 0x60fe7efau:
+                    candidate = pass_id::congruence;
+                    break;
+                case 0x1171d8a3u:
+                    candidate = pass_id::vivifier;
+                    break;
+                case 0x518432e3u:
+                    candidate = pass_id::sweep;
+                    break;
+                default:
+                    return {};
             }
             if (pass_name(candidate.value()) == name)
-            {
                 return candidate;
-            }
-            return std::nullopt;
+            return {};
         }
 
         std::optional<std::size_t> clause_count_snapshot() const noexcept
         {
             if (clause_database_ == nullptr)
-            {
-                return std::nullopt;
-            }
+                return {};
 
             const auto stats = clause_database_->stats_snapshot();
             return stats.irredundant_count + stats.redundant_count;
@@ -401,14 +422,10 @@ namespace kmx::sat::simplify::scheduler
         bool is_proof_format_compatible(const pass_id id) const noexcept
         {
             if (proof_manager_ == nullptr || !proof_manager_->has_enabled_formats())
-            {
                 return true;
-            }
 
             if (id != pass_id::gate && id != pass_id::congruence)
-            {
                 return true;
-            }
 
             // Conservative gating: these passes currently rely on native gate-level reasoning support.
             return proof_manager_->has_enabled_format("veripb");
@@ -418,55 +435,73 @@ namespace kmx::sat::simplify::scheduler
         {
             switch (id)
             {
-            case pass_id::transitive_reducer:
-                transitive_reducer_.run();
-                transitive_reducer_.prune_binary_edges();
-                transitive_reducer_.report_removed_edges();
-                return;
-            case pass_id::decomposition:
-                decomposition_.run_scc();
-                decomposition_.find_equivalences();
-                decomposition_.emit_substitutions();
-                decomposition_substitutor_.rewrite_clauses();
-                decomposition_substitutor_.rewrite_watches();
-                decomposition_substitutor_.rewrite_external_mapping();
-                return;
-            case pass_id::probing:
-                probing_.run_failed_literal_probing();
-                for (const auto candidate: probing_.backbone_candidates())
+                case pass_id::transitive_reducer:
+                    transitive_reducer_.run();
+                    transitive_reducer_.prune_binary_edges();
+                    transitive_reducer_.report_removed_edges();
+                    return;
+                case pass_id::decomposition:
+                    decomposition_.run_scc();
+                    decomposition_.find_equivalences();
+                    decomposition_.emit_substitutions();
+                    decomposition_substitutor_.rewrite_clauses();
+                    decomposition_substitutor_.rewrite_watches();
+                    decomposition_substitutor_.rewrite_external_mapping();
+                    return;
+                case pass_id::probing:
+                    probing_.run_failed_literal_probing();
+                    for (const auto candidate: probing_.backbone_candidates())
+                    {
+                        backbone_.record_candidate(candidate);
+                        backbone_.confirm_candidate(candidate);
+                        backbone_.emit_unit_fact(candidate);
+                    }
+                    return;
+                case pass_id::forward_subsumer:
+                    forward_subsumer_.run();
+                    return;
+                case pass_id::blocked:
+                    blocked_.run();
+                    return;
+                case pass_id::covered:
+                    covered_.run();
+                    return;
+                case pass_id::bounded:
+                    bounded_.run();
+                    return;
+                case pass_id::fast:
+                    fast_.run_fast_round();
+                    return;
+                case pass_id::instantiation:
+                    instantiation_.run();
+                    return;
+                case pass_id::factorizer:
+                    factorizer_.run();
+                    return;
+                case pass_id::gate:
                 {
-                    backbone_.record_candidate(candidate);
-                    backbone_.confirm_candidate(candidate);
-                    backbone_.emit_unit_fact(candidate);
+                    auto& gate_extractor = congruence_.gate_extractor();
+                    gate_extractor.clear();
+                    gate_extractor.find_and_gate();
+                    gate_extractor.find_xor_gate();
+                    gate_extractor.find_ite_gate();
+                    gate_extractor.find_definition_gate();
+                    gate_extractor.materialize_gate_summary();
+                    return;
                 }
-                return;
-            case pass_id::forward_subsumer: forward_subsumer_.run(); return;
-            case pass_id::blocked: blocked_.run(); return;
-            case pass_id::covered: covered_.run(); return;
-            case pass_id::bounded: bounded_.run(); return;
-            case pass_id::fast: fast_.run_fast_round(); return;
-            case pass_id::instantiation: instantiation_.run(); return;
-            case pass_id::factorizer: factorizer_.run(); return;
-            case pass_id::gate:
-            {
-                auto& gate_extractor = congruence_.gate_extractor();
-                gate_extractor.clear();
-                gate_extractor.find_and_gate();
-                gate_extractor.find_xor_gate();
-                gate_extractor.find_ite_gate();
-                gate_extractor.find_definition_gate();
-                gate_extractor.materialize_gate_summary();
-                return;
-            }
-            case pass_id::congruence: congruence_.run(); return;
-            case pass_id::vivifier: vivifier_.run(); return;
-            case pass_id::sweep:
-                sweep_.build_micro_instance();
-                sweep_.run();
-                sweep_.extract_backbone();
-                sweep_.extract_equivalences();
-                sweep_.transfer_facts();
-                return;
+                case pass_id::congruence:
+                    congruence_.run();
+                    return;
+                case pass_id::vivifier:
+                    vivifier_.run();
+                    return;
+                case pass_id::sweep:
+                    sweep_.build_micro_instance();
+                    sweep_.run();
+                    sweep_.extract_backbone();
+                    sweep_.extract_equivalences();
+                    sweep_.transfer_facts();
+                    return;
             }
             /* unreachable: every pass_id is handled above */
             return;

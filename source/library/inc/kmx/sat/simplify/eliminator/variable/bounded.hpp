@@ -41,9 +41,7 @@ namespace kmx::sat::simplify::eliminator::variable
         void run() noexcept
         {
             if (clauses_.empty())
-            {
                 return;
-            }
 
             eliminated_variables_.clear();
             for (const auto& clause: clauses_)

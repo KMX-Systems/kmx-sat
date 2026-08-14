@@ -35,9 +35,7 @@ namespace kmx::sat::cdcl
         bool try_strengthen(const clause::ref_t ref) noexcept
         {
             if (!ref.valid())
-            {
                 return false;
-            }
 
             ++strengthened_clause_count_;
             last_action_ = action::strengthened;
@@ -52,9 +50,7 @@ namespace kmx::sat::cdcl
         bool try_subsume(const clause::ref_t ref) noexcept
         {
             if (!ref.valid())
-            {
                 return false;
-            }
 
             ++subsumed_clause_count_;
             last_action_ = action::subsumed;
@@ -68,9 +64,7 @@ namespace kmx::sat::cdcl
         void rewrite_reason_if_needed(const clause::ref_t ref) noexcept
         {
             if (!ref.valid())
-            {
                 return;
-            }
             ++rewritten_reason_count_;
             last_rewritten_ref_ = ref;
         }

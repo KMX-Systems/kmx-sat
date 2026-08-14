@@ -102,8 +102,8 @@ namespace kmx::sat::cdcl
             binary_watch_scan_count_ = 0u;
             binary_watch_conflict_count_ = 0u;
             learned_clause_shrink_event_count_ = 0u;
-                learned_clause_glue_total_ = 0u;
-                learned_clause_glue_sample_count_ = 0u;
+            learned_clause_glue_total_ = 0u;
+            learned_clause_glue_sample_count_ = 0u;
             watch_list_.reset_diagnostics();
             status_ = status::unknown;
             rebind_internal_views();
@@ -160,9 +160,7 @@ namespace kmx::sat::cdcl
             std::uint64_t conflicts = 0;
 
             for (std::uint32_t index = 1u; index <= max_variable; ++index)
-            {
                 search_coordinator_.activate_variable(variable {index});
-            }
 
             for (const auto assumption: request.assumptions)
             {
@@ -173,20 +171,14 @@ namespace kmx::sat::cdcl
                     for (const auto prior_assumption: request.assumptions)
                     {
                         if (prior_assumption.variable_of().index() != assumption.variable_of().index())
-                        {
                             continue;
-                        }
                         if (prior_assumption.raw() == assumption.raw())
-                        {
                             continue;
-                        }
                         failed_core_.push_back(prior_assumption);
                         break;
                     }
                     if (failed_core_.size() < 2u)
-                    {
                         failed_core_ = request.assumptions;
-                    }
                     return finalize_epoch(status::unsatisfiable);
                 }
 
@@ -199,19 +191,15 @@ namespace kmx::sat::cdcl
             if (assumption_conflict.valid())
             {
                 const auto assumption_clause = clause_database_.storage_of().literals_of(assumption_conflict);
-                const auto assumption_status = handle_clause_conflict(assumption_conflict, assumption_clause, decision_levels,
-                                                                      reasons, request, conflicts, trail, 0u);
+                const auto assumption_status =
+                    handle_clause_conflict(assumption_conflict, assumption_clause, decision_levels, reasons, request, conflicts, trail, 0u);
                 if (assumption_status != status::satisfiable)
                 {
                     failed_core_ = build_failed_core_from_reasons(request.assumptions, reasons);
                     if (failed_core_.empty())
-                    {
                         failed_core_ = build_failed_core_from_conflict(request.assumptions);
-                    }
                     if (failed_core_.empty() && !request.assumptions.empty())
-                    {
                         failed_core_ = request.assumptions;
-                    }
                     return finalize_epoch(assumption_status);
                 }
             }
@@ -219,20 +207,14 @@ namespace kmx::sat::cdcl
             status_ = solve_recursive(assignment, decision_levels, reasons, request, conflicts, 0u, trail, request.assumptions);
 
             if (status_ == status::satisfiable)
-            {
                 build_internal_model(assignment);
-            }
             else if (status_ == status::unsatisfiable)
             {
                 failed_core_ = build_failed_core_from_reasons(request.assumptions, reasons);
                 if (failed_core_.empty())
-                {
                     failed_core_ = build_failed_core_from_conflict(request.assumptions);
-                }
                 if (failed_core_.empty() && !request.assumptions.empty())
-                {
                     failed_core_ = request.assumptions;
-                }
             }
 
             run_inprocess_if_due();
@@ -315,9 +297,7 @@ namespace kmx::sat::cdcl
         void finalize_proof() noexcept
         {
             if (proof_enabled())
-            {
                 proof_manager_.on_conclusion();
-            }
         }
 
         /// @brief Returns the latest outcome produced by the coordinator-backed search episode.
@@ -424,13 +404,11 @@ namespace kmx::sat::cdcl
         /// @param conflict_maintenance_interval EVSIDS rescale interval in conflicts (0 disables).
         /// @param chb_decay_interval CHB decay interval in conflicts (0 disables).
         /// @param restart_decay_interval CHB decay interval in restarts (0 disables).
-        void set_decision_maintenance_intervals(const std::uint32_t conflict_maintenance_interval,
-                                                const std::uint32_t chb_decay_interval,
+        void set_decision_maintenance_intervals(const std::uint32_t conflict_maintenance_interval, const std::uint32_t chb_decay_interval,
                                                 const std::uint32_t restart_decay_interval) noexcept
         {
-            search_coordinator_.set_decision_maintenance_intervals(conflict_maintenance_interval,
-                                                                    chb_decay_interval,
-                                                                    restart_decay_interval);
+            search_coordinator_.set_decision_maintenance_intervals(conflict_maintenance_interval, chb_decay_interval,
+                                                                   restart_decay_interval);
         }
 
         void set_restart_interval(const std::uint64_t interval) noexcept { search_coordinator_.set_restart_interval(interval); }
@@ -479,10 +457,7 @@ namespace kmx::sat::cdcl
         }
 
         /// @brief Returns the configured glue EMA restart ratio in percentage points.
-        std::uint32_t glue_restart_threshold_percent() const noexcept
-        {
-            return search_coordinator_.glue_restart_threshold_percent();
-        }
+        std::uint32_t glue_restart_threshold_percent() const noexcept { return search_coordinator_.glue_restart_threshold_percent(); }
 
         /// @brief Enables or disables research-track cold clause storage.
         void set_cold_storage_enabled(const bool enabled) noexcept { clause_cold_.set_enabled(enabled); }
@@ -494,10 +469,7 @@ namespace kmx::sat::cdcl
         std::size_t cold_footprint_bytes() const noexcept { return clause_cold_.cold_footprint_bytes(); }
 
         /// @brief Returns the number of EVSIDS rescale maintenance steps observed in decision heuristics.
-        std::uint32_t decision_evsids_rescale_count() const noexcept
-        {
-            return search_coordinator_.decision_evsids_rescale_count();
-        }
+        std::uint32_t decision_evsids_rescale_count() const noexcept { return search_coordinator_.decision_evsids_rescale_count(); }
 
         /// @brief Returns the number of CHB decay maintenance steps observed in decision heuristics.
         std::uint32_t decision_chb_decay_count() const noexcept { return search_coordinator_.decision_chb_decay_count(); }
@@ -515,10 +487,8 @@ namespace kmx::sat::cdcl
         inprocess_telemetry_snapshot current_inprocess_telemetry_snapshot() const noexcept
         {
             return inprocess_telemetry_snapshot {
-                inprocess_scheduler_.conflict_density_ema(),
-                inprocess_scheduler_.structural_gain_ema(),
-                inprocess_scheduler_.restart_pressure_ema(),
-                inprocess_scheduler_.reduction_pressure_ema(),
+                inprocess_scheduler_.conflict_density_ema(),        inprocess_scheduler_.structural_gain_ema(),
+                inprocess_scheduler_.restart_pressure_ema(),        inprocess_scheduler_.reduction_pressure_ema(),
                 inprocess_scheduler_.learned_clause_pressure_ema(),
             };
         }
@@ -570,9 +540,7 @@ namespace kmx::sat::cdcl
         {
             const auto* ctx = static_cast<const conflict_resolution_context*>(context);
             if (ctx == nullptr)
-            {
                 return 0u;
-            }
             const auto index = static_cast<std::size_t>(var.index());
             return index < ctx->levels->size() ? (*ctx->levels)[index] : 0u;
         }
@@ -582,19 +550,13 @@ namespace kmx::sat::cdcl
         {
             const auto* ctx = static_cast<const conflict_resolution_context*>(context);
             if (ctx == nullptr)
-            {
                 return {};
-            }
             const auto index = static_cast<std::size_t>(var.index());
             if (index >= ctx->reasons->size())
-            {
                 return {};
-            }
             const auto ref = (*ctx->reasons)[index];
             if (!ref.valid())
-            {
                 return {};
-            }
             const auto reason_literals = ctx->database->storage_of().literals_of(ref);
             ctx->reason_scratch.assign(reason_literals.begin(), reason_literals.end());
             return ctx->reason_scratch;
@@ -612,9 +574,7 @@ namespace kmx::sat::cdcl
         void attach_clause_for_propagation(const clause::ref_t ref) noexcept
         {
             if (!ref.valid())
-            {
                 return;
-            }
 
             const auto literals = clause_database_.storage_of().literals_of(ref);
             if (literals.size() <= 1u)
@@ -650,24 +610,16 @@ namespace kmx::sat::cdcl
         static bool contains_clause_id(const std::vector<proof::clause::id>& ids, const proof::clause::id id) noexcept
         {
             for (const auto existing: ids)
-            {
                 if (existing.equals(id))
-                {
                     return true;
-                }
-            }
             return false;
         }
 
         static bool contains_clause_ref(const std::vector<clause::ref_t>& refs, const clause::ref_t ref) noexcept
         {
             for (const auto existing: refs)
-            {
                 if (existing.offset() == ref.offset())
-                {
                     return true;
-                }
-            }
             return false;
         }
 
@@ -680,13 +632,9 @@ namespace kmx::sat::cdcl
                 {
                     const auto rhs = literals[inner];
                     if (lhs.variable_of().index() != rhs.variable_of().index())
-                    {
                         continue;
-                    }
                     if (lhs.is_negated() != rhs.is_negated())
-                    {
                         return true;
-                    }
                 }
             }
             return false;
@@ -701,15 +649,11 @@ namespace kmx::sat::cdcl
             {
                 const auto variable_index = static_cast<std::size_t>(lit.variable_of().index());
                 if (variable_index >= reasons.size())
-                {
                     continue;
-                }
 
                 const auto reason_ref = reasons[variable_index];
                 if (!reason_ref.valid() || contains_clause_ref(ordered_reason_refs, reason_ref))
-                {
                     continue;
-                }
 
                 ordered_reason_refs.push_back(reason_ref);
             }
@@ -724,17 +668,13 @@ namespace kmx::sat::cdcl
 
             const auto conflict_id = proof_manager_.stable_id_for_clause(conflict_ref);
             if (conflict_id.valid())
-            {
                 antecedents.push_back(conflict_id);
-            }
 
             for (const auto reason_ref: ordered_reason_refs)
             {
                 const auto reason_id = proof_manager_.stable_id_for_clause(reason_ref);
                 if (!reason_id.valid() || contains_clause_id(antecedents, reason_id))
-                {
                     continue;
-                }
                 antecedents.push_back(reason_id);
             }
 
@@ -746,23 +686,13 @@ namespace kmx::sat::cdcl
             std::uint32_t max_variable = 0;
 
             for (const auto ref: active_clause_refs())
-            {
                 for (const auto lit: clause_database_.storage_of().literals_of(ref))
-                {
                     if (lit.variable_of().index() > max_variable)
-                    {
                         max_variable = lit.variable_of().index();
-                    }
-                }
-            }
 
             for (const auto lit: assumptions)
-            {
                 if (lit.variable_of().index() > max_variable)
-                {
                     max_variable = lit.variable_of().index();
-                }
-            }
 
             return max_variable;
         }
@@ -772,9 +702,7 @@ namespace kmx::sat::cdcl
         {
             const auto index = lit.variable_of().index();
             if (index >= assignment.size() || index >= reasons.size())
-            {
                 return false;
-            }
 
             const std::int8_t required_value = lit.is_negated() ? false_value : true_value;
             const auto current_value = assignment[index];
@@ -791,13 +719,9 @@ namespace kmx::sat::cdcl
         static bool literal_is_satisfied(const literal lit, const std::int8_t variable_value) noexcept
         {
             if (variable_value == unassigned_value)
-            {
                 return false;
-            }
             if (lit.is_negated())
-            {
                 return variable_value == false_value;
-            }
             return variable_value == true_value;
         }
 
@@ -820,23 +744,17 @@ namespace kmx::sat::cdcl
         {
             std::vector<literal> core {};
             if (assumptions.empty() || last_conflict_clause_.empty())
-            {
                 return core;
-            }
 
             core.reserve(assumptions.size());
             for (const auto assumption: assumptions)
             {
                 const auto negated_assumption = assumption.negated();
-                const auto conflict_it = std::find_if(last_conflict_clause_.begin(), last_conflict_clause_.end(),
-                                                      [negated_assumption](const literal lit) noexcept
-                                                      {
-                                                          return lit.raw() == negated_assumption.raw();
-                                                      });
+                const auto conflict_it =
+                    std::find_if(last_conflict_clause_.begin(), last_conflict_clause_.end(),
+                                 [negated_assumption](const literal lit) noexcept { return lit.raw() == negated_assumption.raw(); });
                 if (conflict_it != last_conflict_clause_.end())
-                {
                     core.push_back(assumption);
-                }
             }
 
             return core;
@@ -847,9 +765,7 @@ namespace kmx::sat::cdcl
         {
             std::vector<literal> core {};
             if (assumptions.empty() || last_conflict_clause_.empty() || reasons.empty())
-            {
                 return core;
-            }
 
             std::vector<literal> pending_literals {last_conflict_clause_.begin(), last_conflict_clause_.end()};
             std::vector<bool> visited_variable(reasons.size(), false);
@@ -861,48 +777,32 @@ namespace kmx::sat::cdcl
 
                 const auto variable_index = static_cast<std::size_t>(lit.variable_of().index());
                 if (variable_index == 0u || variable_index >= reasons.size() || variable_index >= visited_variable.size())
-                {
                     continue;
-                }
                 if (visited_variable[variable_index])
-                {
                     continue;
-                }
                 visited_variable[variable_index] = true;
 
-                const auto assumption_it = std::find_if(assumptions.begin(), assumptions.end(),
-                                                        [lit](const literal assumption) noexcept
-                                                        {
-                                                            return assumption.variable_of().index() == lit.variable_of().index();
-                                                        });
+                const auto assumption_it = std::find_if(assumptions.begin(), assumptions.end(), [lit](const literal assumption) noexcept
+                                                        { return assumption.variable_of().index() == lit.variable_of().index(); });
                 if (assumption_it != assumptions.end())
                 {
-                    const auto duplicate_it = std::find_if(core.begin(), core.end(),
-                                                           [assumption_it](const literal existing) noexcept
-                                                           {
-                                                               return existing.raw() == assumption_it->raw();
-                                                           });
+                    const auto duplicate_it = std::find_if(core.begin(), core.end(), [assumption_it](const literal existing) noexcept
+                                                           { return existing.raw() == assumption_it->raw(); });
                     if (duplicate_it == core.end())
-                    {
                         core.push_back(*assumption_it);
-                    }
                     continue;
                 }
 
                 const auto reason_ref = reasons[variable_index];
                 if (!reason_ref.valid())
-                {
                     continue;
-                }
 
                 const auto reason_clause = clause_database_.storage_of().literals_of(reason_ref);
                 for (const auto reason_literal: reason_clause)
                 {
                     const auto reason_variable_index = static_cast<std::size_t>(reason_literal.variable_of().index());
                     if (reason_variable_index == variable_index)
-                    {
                         continue;
-                    }
                     pending_literals.push_back(reason_literal);
                 }
             }
@@ -916,9 +816,7 @@ namespace kmx::sat::cdcl
         {
             const auto staged_conflict = propagator_.propagate();
             if (!staged_conflict.valid())
-            {
                 return status::satisfiable;
-            }
 
             const auto conflict_clause = clause_database_.storage_of().literals_of(staged_conflict);
             if (conflict_clause.empty())
@@ -956,9 +854,7 @@ namespace kmx::sat::cdcl
                         ++conflicts;
                         run_inprocess_if_due();
                         if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
-                        {
                             return status::unknown;
-                        }
                         return conflict_limit_reached(request, conflicts) ? status::unknown : status::unsatisfiable;
                     }
 
@@ -997,9 +893,7 @@ namespace kmx::sat::cdcl
             run_inprocess_if_due();
 
             if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
-            {
                 return status::unknown;
-            }
             return conflict_limit_reached(request, conflicts) ? status::unknown : status::unsatisfiable;
         }
 
@@ -1039,9 +933,7 @@ namespace kmx::sat::cdcl
             {
                 const auto staged_status = consume_staged_conflict(decision_levels, reasons, request, conflicts, trail, current_level);
                 if (staged_status != status::satisfiable)
-                {
                     return staged_status;
-                }
             }
 
             propagation_queue_scratch_.clear();
@@ -1051,9 +943,7 @@ namespace kmx::sat::cdcl
             const auto enqueue_assignment = [&](const literal lit, const clause::ref_t reason_ref) noexcept -> bool
             {
                 if (!assign_literal(assignment, decision_levels, reasons, lit, current_level, reason_ref))
-                {
                     return false;
-                }
                 if (reason_ref.valid())
                 {
                     clause_database_.mark_reason_clause(reason_ref);
@@ -1069,9 +959,7 @@ namespace kmx::sat::cdcl
             for (const auto ref: unit_clause_refs_)
             {
                 if (!clause_database_.storage_of().is_alive(ref))
-                {
                     continue;
-                }
 
                 const auto literals = clause_database_.storage_of().literals_of(ref);
                 if (literals.empty())
@@ -1083,31 +971,23 @@ namespace kmx::sat::cdcl
                 const auto lit = literals.front();
                 const auto index = lit.variable_of().index();
                 if (index >= assignment.size())
-                {
                     continue;
-                }
 
                 const auto value = assignment[index];
                 if (value == unassigned_value)
                 {
                     if (!enqueue_assignment(lit, ref))
-                    {
                         propagator_.stage_conflict(ref);
-                    }
                 }
                 else if (!literal_is_satisfied(lit, value))
-                {
                     propagator_.stage_conflict(ref);
-                }
             }
 
             {
                 const auto unit_conflict_status =
                     consume_staged_conflict(decision_levels, reasons, request, conflicts, trail, current_level);
                 if (unit_conflict_status != status::satisfiable)
-                {
                     return unit_conflict_status;
-                }
             }
 
             watch_snapshot_scratch_.clear();
@@ -1137,9 +1017,7 @@ namespace kmx::sat::cdcl
                     const auto blocking_index = blocking.variable_of().index();
                     const auto blocking_value = blocking_index < assignment.size() ? assignment[blocking_index] : unassigned_value;
                     if (literal_is_satisfied(blocking, blocking_value))
-                    {
                         continue;
-                    }
 
                     if (entry.is_binary())
                     {
@@ -1147,9 +1025,7 @@ namespace kmx::sat::cdcl
                         if (blocking_value == unassigned_value)
                         {
                             if (enqueue_assignment(blocking, ref))
-                            {
                                 continue;
-                            }
                         }
                         ++binary_watch_conflict_count_;
                         propagator_.stage_conflict(ref);
@@ -1163,24 +1039,19 @@ namespace kmx::sat::cdcl
                     for (const auto candidate: literals)
                     {
                         if (candidate.raw() == false_literal.raw() || candidate.raw() == blocking.raw())
-                        {
                             continue;
-                        }
 
                         const auto candidate_index = candidate.variable_of().index();
                         const auto candidate_value = candidate_index < assignment.size() ? assignment[candidate_index] : unassigned_value;
-                        const auto candidate_is_false = candidate_value != unassigned_value && !literal_is_satisfied(candidate, candidate_value);
+                        const auto candidate_is_false =
+                            candidate_value != unassigned_value && !literal_is_satisfied(candidate, candidate_value);
                         if (candidate_is_false)
-                        {
                             continue;
-                        }
 
                         replacement_watch = candidate;
                         replacement_found = true;
                         if (candidate_value != unassigned_value)
-                        {
                             break;
-                        }
                     }
 
                     if (replacement_found)
@@ -1193,9 +1064,7 @@ namespace kmx::sat::cdcl
                     if (blocking_value == unassigned_value)
                     {
                         if (enqueue_assignment(blocking, ref))
-                        {
                             continue;
-                        }
                     }
 
                     propagator_.stage_conflict(ref);
@@ -1208,9 +1077,7 @@ namespace kmx::sat::cdcl
                 std::vector<variable> propagated_variables {};
                 propagated_variables.reserve(propagation_queue.size());
                 for (const auto lit: propagation_queue)
-                {
                     propagated_variables.push_back(lit.variable_of());
-                }
                 search_coordinator_.notify_propagated_variables(propagated_variables);
             }
 
@@ -1220,12 +1087,8 @@ namespace kmx::sat::cdcl
         static std::uint32_t pick_unassigned_variable(const assignment_vector& assignment) noexcept
         {
             for (std::uint32_t index = 1; index < assignment.size(); ++index)
-            {
                 if (assignment[index] == unassigned_value)
-                {
                     return index;
-                }
-            }
             return 0;
         }
 
@@ -1233,12 +1096,10 @@ namespace kmx::sat::cdcl
                                const solve_request& request, std::uint64_t& conflicts, const std::uint32_t current_level,
                                trail_vector& trail, const std::span<const literal> seed_literals = {}) noexcept
         {
-            const auto propagation_status = propagate_units(assignment, decision_levels, reasons, request, conflicts, current_level,
-                                                             trail, seed_literals);
+            const auto propagation_status =
+                propagate_units(assignment, decision_levels, reasons, request, conflicts, current_level, trail, seed_literals);
             if (propagation_status != status::satisfiable)
-            {
                 return propagation_status;
-            }
 
             bool has_unassigned_variable = false;
             for (std::size_t index = 1u; index < assignment.size(); ++index)
@@ -1250,21 +1111,15 @@ namespace kmx::sat::cdcl
                 }
             }
             if (!has_unassigned_variable)
-            {
                 return status::satisfiable;
-            }
 
             search_coordinator_.set_variable_selectability_filter(&solver_core::is_unassigned_candidate, &assignment);
 
             const auto branch_literal = search_coordinator_.take_branch_literal(0u);
             if (decision_limit_reached(request, search_coordinator_.decision_event_count()))
-            {
                 return status::unknown;
-            }
             if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
-            {
                 return status::unknown;
-            }
             if (!branch_literal.has_value())
             {
                 return search_coordinator_.current_outcome() == search_coordinator::outcome::satisfiable ? status::satisfiable :
@@ -1277,9 +1132,7 @@ namespace kmx::sat::cdcl
             {
                 const auto fallback_variable = pick_unassigned_variable(assignment);
                 if (fallback_variable == 0u)
-                {
                     return status::satisfiable;
-                }
                 selected_branch_literal = literal {variable {fallback_variable}, selected_branch_literal.is_negated()};
             }
 
@@ -1291,16 +1144,14 @@ namespace kmx::sat::cdcl
                 auto branch_trail = trail;
 
                 if (!assign_literal(branch_assignment, branch_levels, branch_reasons, candidate_literal, current_level + 1u))
-                {
                     continue;
-                }
 
                 search_coordinator_.notify_assignment_literal(candidate_literal);
                 branch_trail.push_back(candidate_literal);
 
                 const std::array<literal, 1> branch_seed {candidate_literal};
                 const auto branch_status = solve_recursive(branch_assignment, branch_levels, branch_reasons, request, conflicts,
-                                                            current_level + 1u, branch_trail, std::span<const literal> {branch_seed});
+                                                           current_level + 1u, branch_trail, std::span<const literal> {branch_seed});
                 if (branch_status == status::satisfiable)
                 {
                     assignment = std::move(branch_assignment);
@@ -1310,9 +1161,7 @@ namespace kmx::sat::cdcl
                     return status::satisfiable;
                 }
                 if (branch_status == status::unknown)
-                {
                     return status::unknown;
-                }
             }
 
             return status::unsatisfiable;
@@ -1321,16 +1170,12 @@ namespace kmx::sat::cdcl
         static bool is_unassigned_candidate(const variable var, const void* context) noexcept
         {
             if (context == nullptr)
-            {
                 return true;
-            }
 
             const auto* assignment = static_cast<const assignment_vector*>(context);
             const auto index = static_cast<std::size_t>(var.index());
             if (index >= assignment->size())
-            {
                 return false;
-            }
             return (*assignment)[index] == unassigned_value;
         }
 
@@ -1338,9 +1183,7 @@ namespace kmx::sat::cdcl
         {
             internal_model_.clear();
             if (assignment.size() <= 1)
-            {
                 return;
-            }
 
             internal_model_.reserve(assignment.size() - 1);
             for (std::uint32_t index = 1; index < assignment.size(); ++index)
@@ -1366,9 +1209,7 @@ namespace kmx::sat::cdcl
                     // Only stamp an external cause if the coordinator has not already recorded a specific one
                     // (decision_limit/conflict_limit); otherwise this would clobber that more precise cause.
                     if (search_coordinator_.current_termination_cause() == search_coordinator::termination_cause::none)
-                    {
                         search_coordinator_.handle_termination();
-                    }
                     break;
             }
         }

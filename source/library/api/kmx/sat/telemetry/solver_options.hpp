@@ -58,9 +58,7 @@ namespace kmx::sat::telemetry
         std::int64_t get(const std::string_view name) const noexcept
         {
             if (const auto it = values_.find(std::string {name}); it != values_.end())
-            {
                 return it->second;
-            }
             return 0;
         }
 

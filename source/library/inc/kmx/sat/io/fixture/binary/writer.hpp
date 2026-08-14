@@ -77,9 +77,7 @@ namespace kmx::sat::io::fixture::binary
         void finalize_fixture() noexcept
         {
             if (checksum_ == 0u)
-            {
                 write_checksum();
-            }
 
             format_.clear();
             format_.write_report_line("SATB " + std::to_string(schema_.current_version()) + " " +
@@ -135,22 +133,14 @@ namespace kmx::sat::io::fixture::binary
             const auto update = [&max_index](const literal lit) noexcept
             {
                 if (lit.variable_of().index() > max_index)
-                {
                     max_index = lit.variable_of().index();
-                }
             };
 
             for (const auto& clause: clauses_)
-            {
                 for (const auto lit: clause)
-                {
                     update(lit);
-                }
-            }
             for (const auto lit: assumptions_)
-            {
                 update(lit);
-            }
             return max_index;
         }
 

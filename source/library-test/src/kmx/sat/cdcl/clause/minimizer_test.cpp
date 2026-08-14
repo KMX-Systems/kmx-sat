@@ -45,26 +45,21 @@ namespace kmx::sat::cdcl
         REQUIRE(database.tier_of(ref) == 0u);
 
         const std::array<literal, 3> lbd_literals {literal {variable {20u}, false}, literal {variable {21u}, false},
-                                                    literal {variable {22u}, false}};
+                                                   literal {variable {22u}, false}};
         const auto lbd_ref = storage.create_learned_clause(lbd_literals);
-        const auto level_of = [](const void*, const variable var) noexcept -> std::uint32_t
-        {
-            return var.index() == 22u ? 2u : 1u;
-        };
+        const auto level_of = [](const void*, const variable var) noexcept -> std::uint32_t { return var.index() == 22u ? 2u : 1u; };
 
         minimizer.recompute_glue(lbd_ref, level_of, nullptr);
         REQUIRE(minimizer.last_glue() == 2u);
 
         const std::array<literal, 3> closure_literals {literal {variable {30u}, false}, literal {variable {31u}, false},
-                                                        literal {variable {32u}, false}};
+                                                       literal {variable {32u}, false}};
         const auto closure_ref = storage.create_learned_clause(closure_literals);
         const std::array<literal, 2> reason_for_31 {literal {variable {31u}, false}, literal {variable {32u}, false}};
         const auto reason_of = [](const void* context, const variable var) noexcept -> std::span<const literal>
         {
             if (var.index() != 31u)
-            {
                 return {};
-            }
             return *static_cast<const std::array<literal, 2>*>(context);
         };
 

@@ -94,24 +94,16 @@ namespace kmx::sat::telemetry
         const event& last_literal() const noexcept
         {
             for (auto it = events_.rbegin(); it != events_.rend(); ++it)
-            {
                 if (it->kind == event_kind::literal)
-                {
                     return *it;
-                }
-            }
             return last_event();
         }
 
         std::uint64_t last_clause_ref() const noexcept
         {
             for (auto it = events_.rbegin(); it != events_.rend(); ++it)
-            {
                 if (it->kind == event_kind::clause)
-                {
                     return it->ref_offset;
-                }
-            }
             return last_ref_offset_;
         }
 
