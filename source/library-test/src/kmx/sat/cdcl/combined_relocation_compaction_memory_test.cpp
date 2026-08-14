@@ -20,19 +20,16 @@
 
 namespace kmx::sat::cdcl
 {
-    namespace
+    static std::size_t resident_set_kb() noexcept
     {
-        std::size_t resident_set_kb() noexcept
-        {
-            std::ifstream status {"/proc/self/status"};
-            std::string name;
-            std::size_t value {};
-            std::string unit;
-            while (status >> name >> value >> unit)
-                if (name == "VmRSS:")
-                    return value;
-            return 0u;
-        }
+        std::ifstream status {"/proc/self/status"};
+        std::string name;
+        std::size_t value {};
+        std::string unit;
+        while (status >> name >> value >> unit)
+            if (name == "VmRSS:")
+                return value;
+        return 0u;
     }
 
     TEST_CASE("combined relocation and compaction keeps memory bounded", "[sat]")
