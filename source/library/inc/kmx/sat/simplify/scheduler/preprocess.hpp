@@ -326,6 +326,8 @@ namespace kmx::sat::simplify::scheduler
 
         const std::vector<pass_summary>& last_reported_summaries() const noexcept { return last_reported_summaries_; }
 
+        [[nodiscard]] std::size_t subsumed_clause_count() const noexcept { return forward_subsumer_.subsumed_count(); }
+
         bool abort_requested() const noexcept { return abort_requested_; }
 
         simplify::engine::decomposition& decomposition_engine() noexcept { return decomposition_; }

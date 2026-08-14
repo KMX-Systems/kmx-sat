@@ -246,6 +246,7 @@ namespace kmx::sat
     {
         impl_->pending_clause_.reserve(variable_count);
         impl_->assumptions_.reserve(variable_count);
+        impl_->core_.reserve(variable_count);
     }
 
     /// @brief Adds or registers data in the subsystem.

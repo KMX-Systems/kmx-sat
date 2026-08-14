@@ -5,7 +5,7 @@ CppApplication {
     Depends { name: "cpp" }
     Depends { name: "kmx-sat-lib" }
     cpp.cxxLanguageVersion: "c++26"
-    cpp.enableRtti: true
+    cpp.enableRtti: false
     cpp.enableExceptions: true
     cpp.warningLevel: "all"
     files: [

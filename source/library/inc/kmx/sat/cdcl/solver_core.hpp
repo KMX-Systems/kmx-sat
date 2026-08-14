@@ -91,7 +91,6 @@ namespace kmx::sat::cdcl
             variable_mapper_ = {};
             clause_cold_ = {};
             flush_restore_manager_ = {};
-            forward_subsumer_ = {};
             clause_minimizer_ = {};
             preprocess_scheduler_ = {};
             inprocess_scheduler_ = {};
@@ -101,7 +100,6 @@ namespace kmx::sat::cdcl
             failed_core_.clear();
             last_conflict_clause_.clear();
             propagation_queue_scratch_.clear();
-            watch_snapshot_scratch_.clear();
             propagation_assignment_count_ = 0u;
             watch_entry_scan_count_ = 0u;
             binary_watch_scan_count_ = 0u;
@@ -135,7 +133,6 @@ namespace kmx::sat::cdcl
             incremental_context_.begin_solve_epoch();
             memory_governor_.reset_epoch_usage();
             clause_database_.clear_reason_clauses();
-            forward_subsumer_.run();
             preprocess_scheduler_.clear_abort();
             preprocess_scheduler_.set_inprocess_telemetry_snapshot(
                 inprocess_scheduler_.conflict_density_ema(), inprocess_scheduler_.structural_gain_ema(),
@@ -166,6 +163,8 @@ namespace kmx::sat::cdcl
 
             for (std::uint32_t index = 1u; index <= max_variable; ++index)
                 search_coordinator_.activate_variable(variable {index});
+
+            watch_list_.reserve(static_cast<std::size_t>(max_variable) * 2u + 2u);
 
             for (const auto assumption: request.assumptions)
             {
@@ -236,6 +235,17 @@ namespace kmx::sat::cdcl
             solve_request request {};
             request.assumptions.assign(assumptions.begin(), assumptions.end());
             return solve(request);
+        }
+
+        /// @brief Pre-reserves capacity for the given variable count.
+        /// @param variable_bound Upper bound on variable index.
+        /// @throws None (noexcept).
+        void reserve(const variable::index_t variable_bound) noexcept
+        {
+            if (variable_bound == 0)
+                return;
+            const auto slots = static_cast<std::size_t>(variable_bound) * 2u + 2u;
+            watch_list_.reserve(slots);
         }
 
         /// @brief Registers an original (non-redundant) problem clause with the internal clause database.
@@ -336,7 +346,7 @@ namespace kmx::sat::cdcl
 
         /// @brief Returns how many clauses the subsumption pass removed.
         /// @return Subsumed clause count accumulated by the attached forward subsumer.
-        std::size_t subsumed_clause_count() const noexcept { return forward_subsumer_.subsumed_count(); }
+        std::size_t subsumed_clause_count() const noexcept { return preprocess_scheduler_.subsumed_clause_count(); }
 
         /// @brief Returns how many preprocess pipeline runs have been executed.
         /// @return Number of preprocess runs.
@@ -508,8 +518,6 @@ namespace kmx::sat::cdcl
         {
             search_coordinator_.attach_database(clause_database_);
             flush_restore_manager_.attach_database(clause_database_);
-            forward_subsumer_.attach_database(clause_database_);
-            forward_subsumer_.attach_proof_manager(proof_manager_);
             clause_minimizer_.attach_storage(clause_database_.storage_of());
             clause_minimizer_.attach_database(clause_database_);
             preprocess_scheduler_.attach_memory_governor(memory_governor_);
@@ -1046,8 +1054,6 @@ namespace kmx::sat::cdcl
                 }
             }
 
-            watch_snapshot_scratch_.clear();
-            auto& watch_snapshot = watch_snapshot_scratch_;
             std::size_t queue_head = 0u;
 
             while (queue_head < propagation_queue.size())
@@ -1055,35 +1061,40 @@ namespace kmx::sat::cdcl
                 const auto assigned_literal = propagation_queue[queue_head++];
                 const auto false_literal = assigned_literal.negated();
 
-                watch_snapshot.clear();
-                watch_snapshot.reserve(watch_list_.size_of(false_literal));
-                watch_list_.iterate(false_literal, [&](const watch& entry) noexcept { watch_snapshot.push_back(entry); });
+                auto& ws = watch_list_.watches_of(false_literal);
+                std::size_t i = 0u;
+                std::size_t j = 0u;
 
-                for (const auto& entry: watch_snapshot)
+                while (i < ws.size())
                 {
+                    const auto entry = ws[i++];
                     ++watch_entry_scan_count_;
                     const auto ref = entry.clause_ref();
                     if (!clause_database_.storage_of().is_alive(ref))
-                    {
-                        watch_list_.unwatch_literal(false_literal, entry);
                         continue;
-                    }
 
                     const auto blocking = entry.blocking_literal();
                     const auto blocking_index = blocking.variable_of().index();
                     const auto blocking_value = blocking_index < assignment.size() ? assignment[blocking_index] : unassigned_value;
                     if (literal_is_satisfied(blocking, blocking_value))
+                    {
+                        ws[j++] = entry;
                         continue;
+                    }
 
                     if (entry.is_binary())
                     {
                         ++binary_watch_scan_count_;
+                        ws[j++] = entry;
                         if (blocking_value == unassigned_value)
                         {
                             if (enqueue_assignment(blocking, ref))
                                 continue;
                         }
                         ++binary_watch_conflict_count_;
+                        while (i < ws.size())
+                            ws[j++] = ws[i++];
+                        ws.resize(j);
                         propagator_.stage_conflict(ref);
                         return propagator_.propagate();
                     }
@@ -1112,10 +1123,11 @@ namespace kmx::sat::cdcl
 
                     if (replacement_found)
                     {
-                        watch_list_.unwatch_literal(false_literal, entry);
                         watch_list_.watch_literal(replacement_watch, watch {blocking, ref, false});
                         continue;
                     }
+
+                    ws[j++] = entry;
 
                     if (blocking_value == unassigned_value)
                     {
@@ -1123,9 +1135,13 @@ namespace kmx::sat::cdcl
                             continue;
                     }
 
+                    while (i < ws.size())
+                        ws[j++] = ws[i++];
+                    ws.resize(j);
                     propagator_.stage_conflict(ref);
                     return propagator_.propagate();
                 }
+                ws.resize(j);
             }
 
             if (!propagation_queue.empty())
@@ -1353,7 +1369,6 @@ namespace kmx::sat::cdcl
         variable_mapper variable_mapper_ {};
         proof_manager proof_manager_ {};
         simplify::flush_restore_manager flush_restore_manager_ {};
-        simplify::forward_subsumer forward_subsumer_ {};
         clause::minimizer clause_minimizer_ {};
         simplify::scheduler::preprocess preprocess_scheduler_ {};
         simplify::scheduler::inprocess inprocess_scheduler_ {};
@@ -1363,7 +1378,6 @@ namespace kmx::sat::cdcl
         std::vector<literal> failed_core_ {};
         std::vector<literal> last_conflict_clause_ {};
         std::vector<literal> propagation_queue_scratch_ {};
-        std::vector<watch> watch_snapshot_scratch_ {};
         std::size_t propagation_assignment_count_ {};
         std::size_t watch_entry_scan_count_ {};
         std::size_t binary_watch_scan_count_ {};

@@ -20,56 +20,101 @@ namespace fs = std::filesystem;
 
 static int read_dimacs_cnf(const fs::path& cnf_file, kmx::sat::solver& solver) noexcept
 {
-    std::ifstream stream(cnf_file);
-    if (!stream.is_open())
+    FILE* file = std::fopen(cnf_file.c_str(), "rb");
+    if (!file)
     {
         std::cerr << "Error: cannot open file " << cnf_file << "\n";
         return 1;
     }
 
-    std::string line;
-    int var_count = 0;
-    int clause_count = 0;
-    int line_number = 0;
+    char buffer[65536];
+    std::size_t buf_pos = 0;
+    std::size_t buf_len = 0;
 
-    while (std::getline(stream, line))
+    const auto read_char = [&]() noexcept -> int
     {
-        ++line_number;
-        if (line.empty() || line[0] == 'c')
-            continue;
-
-        if (line[0] == 'p')
+        if (buf_pos >= buf_len)
         {
-            if (std::sscanf(line.c_str(), "p cnf %d %d", &var_count, &clause_count) != 2)
+            buf_len = std::fread(buffer, 1, sizeof(buffer), file);
+            buf_pos = 0;
+            if (buf_len == 0)
+                return EOF;
+        }
+        return static_cast<unsigned char>(buffer[buf_pos++]);
+    };
+
+    int ch = 0;
+    while ((ch = read_char()) != EOF)
+    {
+        if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n')
+            continue;
+        if (ch == 'c')
+        {
+            while ((ch = read_char()) != EOF && ch != '\n')
+                ;
+            continue;
+        }
+        if (ch == 'p')
+        {
+            while ((ch = read_char()) != EOF && ch != '\n')
             {
-                std::cerr << "Error: invalid problem line (expected 'p cnf <variables> <clauses>')\n";
-                return 1;
+                if (ch == 'c' && (ch = read_char()) == 'n' && (ch = read_char()) == 'f')
+                {
+                    while ((ch = read_char()) != EOF && (ch == ' ' || ch == '\t'))
+                        ;
+                    int vars = 0;
+                    while (ch >= '0' && ch <= '9')
+                    {
+                        vars = vars * 10 + (ch - '0');
+                        ch = read_char();
+                    }
+                    if (vars > 0)
+                        solver.reserve(static_cast<kmx::sat::variable::index_t>(vars));
+                }
             }
-            solver.reserve(static_cast<kmx::sat::variable::index_t>(var_count));
             continue;
         }
 
-        std::istringstream clause_stream(line);
-        int lit_value = 0;
-        while (clause_stream >> lit_value && lit_value != 0)
+        int sign = 1;
+        if (ch == '-')
         {
-            kmx::sat::variable var(static_cast<kmx::sat::variable::index_t>(std::abs(lit_value)));
-            kmx::sat::literal lit {var, lit_value < 0};
-            solver.add_literal(lit);
+            sign = -1;
+            ch = read_char();
         }
-        if (lit_value != 0)
+        else if (ch == '+')
         {
-            std::cerr << "Error: clause at line " << line_number << " does not end with 0\n";
-            return 1;
+            ch = read_char();
         }
-        solver.add_literal(kmx::sat::literal(0));
+
+        if (ch >= '0' && ch <= '9')
+        {
+            int val = 0;
+            while (ch >= '0' && ch <= '9')
+            {
+                val = val * 10 + (ch - '0');
+                ch = read_char();
+            }
+            if (val == 0)
+            {
+                solver.add_literal(kmx::sat::literal(0));
+            }
+            else
+            {
+                kmx::sat::variable var(static_cast<kmx::sat::variable::index_t>(val));
+                solver.add_literal(kmx::sat::literal {var, sign < 0});
+            }
+        }
     }
 
+    std::fclose(file);
     return 0;
 }
 
 int main(int argc, char* argv[])
 {
+    std::ios_base::sync_with_stdio(false);
+    std::cin.tie(nullptr);
+
     if (argc < 2)
     {
         std::cerr << "usage: " << argv[0] << " <cnf-file> [--assume <lit>]... [--decision-limit <n>]"
