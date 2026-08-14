@@ -61,20 +61,79 @@ def main() -> int:
     if missing:
         parser.error(f"missing solver executable(s): {', '.join(missing)}")
 
-    header = f"{'Input':<32} {'Solver':<10} {'Status':<14} {'Time (ms)':>12} {'Timed Out':>10}"
+    header_parts = [
+        f"{'Input':<32}",
+        f"{'kissat (ms)':>11}",
+        f"{'cadical (ms)':>12}",
+        f"{'kmx-sat (ms)':>12}",
+        f"{'kmx-sat/cadical':>14}",
+        f"{'kmx-sat/kissat':>13}",
+    ]
+    header = " | ".join(header_parts)
     print()
     print(header)
     print("-" * len(header))
+
     exit_code = 0
+    any_mismatch = False
     for instance in instances:
         if not instance.is_file():
-            print(f"{instance.name:<32} {'-':<10} {'MISSING':<14} {'-':>12} {'-':>10}")
+            print(f"{instance.name:<32} | {'MISSING':>12} | {'-':>13} | {'-':>13} | {'-':>28} | {'-':>27}")
             exit_code = 1
             continue
+
+        results: dict[str, float] = {}
+        statuses: dict[str, str] = {}
+        timed_out_solvers: set[str] = set()
         for name, executable in solvers:
             status, elapsed_ms, timed_out = run_solver(executable, instance, args.timeout)
-            print(f"{instance.name:<32} {name:<10} {status:<14} {elapsed_ms:>12.3f} {'yes' if timed_out else 'no':>10}")
-        print("-" * len(header))
+            results[name] = elapsed_ms
+            statuses[name] = status
+            if timed_out:
+                timed_out_solvers.add(name)
+
+        unique_statuses = {s for s in statuses.values() if s != "UNKNOWN"}
+        status_mismatch = len(unique_statuses) > 1
+        if status_mismatch:
+            any_mismatch = True
+        instance_name_str = f"{instance.name}{'*' if status_mismatch else ''}"
+
+        row_data: dict[str, str] = {"instance": instance_name_str}
+        for name in ("kissat", "cadical", "kmx-sat"):
+            if name in timed_out_solvers:
+                row_data[name] = "T/O"
+            else:
+                row_data[name] = f"{results.get(name, 0.0):.3f}"
+
+        kmx_time = results.get("kmx-sat")
+        cadical_time = results.get("cadical")
+        kissat_time = results.get("kissat")
+
+        vs_cadical_str = "-"
+        if "cadical" in timed_out_solvers:
+            vs_cadical_str = "T/O"
+        elif "kmx-sat" not in timed_out_solvers and kmx_time is not None and cadical_time is not None and cadical_time > 0:
+            vs_cadical = ((kmx_time / cadical_time) - 1) * 100
+            vs_cadical_str = f"{vs_cadical:+.1f}%"
+
+        vs_kissat_str = "-"
+        if "kissat" in timed_out_solvers:
+            vs_kissat_str = "T/O"
+        elif "kmx-sat" not in timed_out_solvers and kmx_time is not None and kissat_time is not None and kissat_time > 0:
+            vs_kissat = ((kmx_time / kissat_time) - 1) * 100
+            vs_kissat_str = f"{vs_kissat:+.1f}%"
+
+        print(
+            f"{row_data['instance']:<32} | "
+            f"{row_data['kissat']:>11} | "
+            f"{row_data['cadical']:>12} | "
+            f"{row_data['kmx-sat']:>12} | "
+            f"{vs_cadical_str:>15} | "
+            f"{vs_kissat_str:>14}"
+        )
+
+    if any_mismatch:
+        print("\n* indicates status mismatch between solvers for that instance.")
     print()
     return exit_code
 
