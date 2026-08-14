@@ -9,7 +9,7 @@
 namespace kmx::sat::runtime
 {
     /// @brief Excluded from the architectural core; may exist only as a separate control-plane experiment.
-    ///
+    /// @details
     /// This type exists only to document a deliberate exclusion: the plan considered a coroutine-based FSM
     /// (`co_fsm`) framework for orchestration and concluded it does not provide enough architectural value relative
     /// to its conceptual cost, and explicitly forbids the CDCL core from depending on asynchronous orchestration or

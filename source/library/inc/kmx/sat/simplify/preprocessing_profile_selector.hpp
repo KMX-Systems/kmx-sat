@@ -56,7 +56,7 @@ namespace kmx::sat::simplify
     /// @brief Instance-aware selection and ordering of preprocessing passes from cheap structural fingerprints, avoiding
     /// fixed-pipeline time wasted on passes unlikely to help. Research-track scheduler policy layered on top of
     /// scheduler::preprocess, not a replacement for it.
-    ///
+    /// @details
     /// A fixed preprocessing pipeline spends time on every enabled pass regardless of whether the current instance's
     /// structure makes that pass likely to help; `preprocessing_profile_selector` instead computes cheap structural
     /// fingerprints (variable/clause ratio, clause-length distribution, gate density from `extractor::gate`) via

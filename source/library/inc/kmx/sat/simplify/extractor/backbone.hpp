@@ -17,7 +17,7 @@
 namespace kmx::sat::simplify::extractor
 {
     /// @brief Binary or sweep-discovered backbone extraction.
-    ///
+    /// @details
     /// A backbone literal is true in every model of the formula; knowing one lets the solver fix it as a permanent
     /// unit fact instead of re-deriving it repeatedly. `extractor::backbone` consolidates candidates from two
     /// sources: `engine::probing::record_backbone_candidate` (a literal implied identically under both polarities

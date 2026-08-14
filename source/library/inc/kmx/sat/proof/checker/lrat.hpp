@@ -13,7 +13,7 @@
 namespace kmx::sat::proof::checker
 {
     /// @brief Stricter LRAT validation.
-    ///
+    /// @details
     /// Where `checker::online` mirrors events for a cheap real-time sanity check, `checker::lrat` performs the
     /// stronger, format-specific validation LRAT's explicit antecedent chains enable: `check_chain` verifies that
     /// each derived clause's recorded antecedent sequence actually resolves to that clause (in linear time, since

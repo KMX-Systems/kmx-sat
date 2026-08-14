@@ -15,7 +15,6 @@
 namespace kmx::sat::cdcl
 {
     /// @brief e2i/i2e mapping and semantic stability of external variables.
-    ///
     /// @details
     /// `variable_mapper` owns the external-to-internal (e2i) and internal-to-external (i2e) variable tables consumed
     /// by `external_frontend`. `ensure_external_variable` allocates or looks up the internal slot for a caller-facing

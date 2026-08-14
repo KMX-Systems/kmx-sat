@@ -9,7 +9,7 @@
 namespace kmx::sat::cdcl
 {
     /// @brief On-the-fly strengthening/subsumption without corrupting reason pointers.
-    ///
+    /// @details
     /// While `conflict_analyzer` resolves toward the 1-UIP clause, it sometimes discovers that an existing clause on
     /// the trail could be strengthened (a literal removed) or subsumed (rendered redundant) by the clause under
     /// construction; `otf_strengthener` performs that in the CaDiCaL/Kissat on-the-fly style rather than deferring to

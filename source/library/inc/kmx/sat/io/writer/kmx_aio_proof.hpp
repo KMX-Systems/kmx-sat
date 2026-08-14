@@ -11,7 +11,7 @@
 namespace kmx::sat::io::writer
 {
     /// @brief Optional adapter to KMX-AIO for non-blocking output.
-    ///
+    /// @details
     /// This is the optional asynchronous backend `io::proof_output_pipeline` may use for proof output: `open_sink`
     /// establishes a non-blocking output channel through the KMX-AIO/P2300-based asynchronous I/O layer;
     /// `submit_buffer` hands a serialized proof buffer to that channel without blocking the caller; `await_flush`

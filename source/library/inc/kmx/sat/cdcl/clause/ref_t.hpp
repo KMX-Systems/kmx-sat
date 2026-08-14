@@ -11,7 +11,6 @@ namespace kmx::sat::cdcl::clause
 {
     /// @brief Compressed reference, invalid state, comparisons, offset conversion; physical clause identifier in the
     /// current arena.
-    ///
     /// @details
     /// `ref_t` deliberately encodes only a byte/word offset into the currently active `bank::arena`, never a pointer,
     /// so that a moving `garbage_collector` cycle or `compaction_service` pass can relocate clause storage and simply

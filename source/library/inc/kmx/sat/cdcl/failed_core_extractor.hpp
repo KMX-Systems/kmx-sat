@@ -11,7 +11,7 @@
 namespace kmx::sat::cdcl
 {
     /// @brief Incremental UNSAT path for assumptions.
-    ///
+    /// @details
     /// When `search_coordinator::handle_unsat` detects a conflict traceable to active assumptions rather than the
     /// permanent clause database, `failed_core_extractor` derives the minimal-effort subset of
     /// `store::assumption`'s literals jointly responsible for that conflict: `mark_failed_assumption` records each

@@ -20,7 +20,6 @@
 namespace kmx::sat::io
 {
     /// @brief Incremental/streaming CNF parser.
-    ///
     /// @details
     /// `dimacs_parser` implements the DIMACS CNF input grammar (`p cnf <num_vars> <num_clauses>` header, `c` comment
     /// lines, signed-integer clause lines terminated by `0`) over a `file_source`, applying every mandatory

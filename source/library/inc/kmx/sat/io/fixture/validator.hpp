@@ -16,7 +16,6 @@
 namespace kmx::sat::io::fixture
 {
     /// @brief Structural and semantic validation before any clause insertion side effects.
-    ///
     /// @details
     /// `validator` implements every mandatory binary-fixture validation rule as an isolated, side-effect-free check
     /// that `binary::reader` calls before any clause/assumption is materialized into `external_frontend`, so a

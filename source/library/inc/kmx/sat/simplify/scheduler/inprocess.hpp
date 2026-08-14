@@ -25,7 +25,7 @@
 namespace kmx::sat::simplify::scheduler
 {
     /// @brief All periodic simplifications that run during search.
-    ///
+    /// @details
     /// Unlike `scheduler::preprocess`, `scheduler::inprocess` runs repeatedly, interleaved with CDCL search epochs
     /// (the Kissat/CaDiCaL "inprocessing" style): `should_run` decides, based on conflict count and
     /// `telemetry::ema_tracker` signals, whether it is time for another simplification epoch;

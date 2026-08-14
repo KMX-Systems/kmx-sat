@@ -13,7 +13,6 @@
 namespace kmx::sat::cdcl::engine
 {
     /// @brief Correct state unwind after conflict or restart.
-    ///
     /// @details
     /// `engine::backtrack` is the only subsystem allowed to unwind `trail`/`stack::decision_frame`/`store::assignment`
     /// state together, ensuring the three stay consistent. `backtrack_to_level` performs a standard non-chronological

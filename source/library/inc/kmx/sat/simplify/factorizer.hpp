@@ -12,7 +12,7 @@
 namespace kmx::sat::simplify
 {
     /// @brief BVA/factoring and control of newly created internal variables.
-    ///
+    /// @details
     /// Bounded Variable Addition (BVA/factoring) reduces overall clause count by finding a recurring literal pattern
     /// shared across several clauses and replacing it with one fresh internal variable that stands for it (the
     /// inverse of variable elimination: it adds a variable to remove clauses, rather than the other way around).

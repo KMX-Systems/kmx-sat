@@ -10,7 +10,7 @@ namespace kmx::sat::cdcl
 {
     /// @brief Learns lightweight ordering and trail-reuse hints from prior solve epochs to reduce repeated
     /// propagation/restart work on assumption-heavy incremental workloads. Research-track optimization.
-    ///
+    /// @details
     /// Repeated-solving use cases (bounded model checking, ILP-style repeated calls) tend to re-issue similar
     /// assumption sets across many `solver::solve` episodes; naive handling re-propagates and potentially re-decides
     /// the same prefix every time. `record_epoch_outcome` observes, after each episode, which assumption prefix

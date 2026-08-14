@@ -11,7 +11,7 @@
 namespace kmx::sat::simplify::eliminator::clause
 {
     /// @brief CCE, as the asymmetric extension of BCE.
-    ///
+    /// @details
     /// Covered Clause Elimination generalizes `blocked` by first temporarily adding literals implied by unit
     /// propagation on the clause's negation ("covering" it) before re-testing the blocked-clause condition,
     /// catching additional redundant clauses that plain BCE misses. `run` sweeps candidates;

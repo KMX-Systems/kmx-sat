@@ -19,7 +19,6 @@
 namespace kmx::sat::io::fixture::binary
 {
     /// @brief Deterministic fixture generation from normalized internal input representations.
-    ///
     /// @details
     /// `writer` is the counterpart to `binary::reader`: it produces the `SATB`-tagged binary envelope defined by
     /// `schema` from already-normalized in-memory data rather than from live solver state, ensuring fixtures are

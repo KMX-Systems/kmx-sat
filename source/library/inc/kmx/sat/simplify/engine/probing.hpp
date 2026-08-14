@@ -15,7 +15,7 @@
 namespace kmx::sat::simplify::engine
 {
     /// @brief Failed literal probing and its useful implications.
-    ///
+    /// @details
     /// Failed-literal probing tentatively assumes one literal, propagates it, and observes the consequences without
     /// committing to a real search decision: if propagating a literal leads to a conflict, its negation is a unit
     /// fact (the literal is "failed"); if propagating it forces another literal true regardless of which polarity

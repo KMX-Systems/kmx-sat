@@ -22,7 +22,6 @@ namespace kmx::sat::cdcl::engine
 {
     /// @brief Combines VMTF, EVSIDS, phase policies, randomization, and optionally chb_tracker scores under an explicit,
     /// benchmarked blending policy rather than a silent heuristic swap.
-    ///
     /// @details
     /// `engine::decision` is the single point `search_coordinator` calls to obtain the next branching literal:
     /// `pick_decision_variable` selects the variable (currently querying `vmtf_` and `evsids_` per

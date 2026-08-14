@@ -13,7 +13,7 @@
 namespace kmx::sat::simplify::eliminator::variable
 {
     /// @brief Full BVE with cost limits and model reconstruction support.
-    ///
+    /// @details
     /// Bounded Variable Elimination removes a variable `v` by resolving every clause containing `v` against every
     /// clause containing `\lnot v` and replacing them all with the (bounded) set of resolvents, provided the
     /// resulting clause count/size growth stays within cost limits ("bounded", following MiniSat/CaDiCaL/Kissat

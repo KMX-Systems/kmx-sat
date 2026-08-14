@@ -11,7 +11,6 @@
 namespace kmx::sat::proof::tracer
 {
     /// @brief Requires `Tracer` to expose the uniform proof-event surface every concrete tracer implements.
-    ///
     /// @details
     /// `drat`, `lrat`, `frat`, `idrup`, `lidrup`, and `veripb` all differ only in how they encode a proof, never in
     /// the shape of the events they receive; this concept names that shared shape structurally instead of through a

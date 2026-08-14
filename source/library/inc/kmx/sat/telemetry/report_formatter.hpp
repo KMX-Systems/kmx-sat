@@ -12,7 +12,6 @@
 namespace kmx::sat::telemetry
 {
     /// @brief Reporting output and benchmark harness compatibility.
-    ///
     /// @details
     /// `report_formatter` renders `solver_statistics::snapshot`/`profile_clock`/`memory_governor` data into the
     /// human- and tool-readable text lines expected by SAT competition/benchmark tooling and interactive use:

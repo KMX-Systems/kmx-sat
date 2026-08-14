@@ -10,7 +10,7 @@
 namespace kmx::sat::proof::clause
 {
     /// @brief Stable logical clause identity for proof/checking, separate from clause::ref_t.
-    ///
+    /// @details
     /// Proof formats such as LRAT and FRAT require every clause to keep one stable identifier across its entire
     /// lifetime, independent of where the clause physically lives; `proof::clause::id` is that identifier, allocated
     /// by `proof::clause::id_allocator` when a clause is created and retired only when the clause is deleted, never

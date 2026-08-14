@@ -13,7 +13,7 @@
 namespace kmx::sat::proof::tracer
 {
     /// @brief Concrete LRAT proof format tracer.
-    ///
+    /// @details
     /// LRAT (Linear RAT) extends DRAT with explicit antecedent clause-id chains for every derivation, letting a
     /// checker verify each step in linear time instead of DRAT's more expensive RAT search. Per the compatibility
     /// matrix, LRAT carries the same resolution-only representational constraint as DRAT, with the added requirement

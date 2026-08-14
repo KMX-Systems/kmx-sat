@@ -13,7 +13,7 @@ namespace kmx::sat::cdcl
 {
     /// @brief Atomic unit stored in the extension stack: variant type for BVE eliminations, BCE blockings, factoring
     /// transformations, and other reversible operations.
-    ///
+    /// @details
     /// Every simplification pass that removes information a satisfying assignment might need (a bounded-variable
     /// elimination, a blocked/covered clause removal, a factoring/BVA substitution) must record enough to reverse
     /// that removal when reconstructing the external model; `extension_record` is the closed-set (`std::variant`)

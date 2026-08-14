@@ -12,7 +12,7 @@
 namespace kmx::sat::proof::tracer
 {
     /// @brief Concrete DRAT proof format tracer.
-    ///
+    /// @details
     /// DRAT (Deletion Resolution Asymmetric Tautology) is the de facto standard unsatisfiability proof format for SAT
     /// competitions: each derived clause must be RAT (resolution asymmetric tautology) with respect to the current
     /// clause set, which a DRAT checker can verify without needing explicit antecedent information. Per the proof

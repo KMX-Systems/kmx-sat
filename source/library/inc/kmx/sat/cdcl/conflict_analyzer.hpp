@@ -18,7 +18,7 @@
 namespace kmx::sat::cdcl
 {
     /// @brief Conflict analysis and learned-clause construction.
-    ///
+    /// @details
     /// When `propagator::propagate` detects a falsified clause, `conflict_analyzer::analyze` walks the implication
     /// graph backward from that conflicting clause using `store::assignment::reason_of` and the current decision
     /// level's trail range (from `stack::decision_frame`), resolving reason clauses together until exactly one

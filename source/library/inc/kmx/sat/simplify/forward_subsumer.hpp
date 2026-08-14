@@ -18,7 +18,7 @@
 namespace kmx::sat::simplify
 {
     /// @brief Forward/backward subsumption, with SIMD acceleration where justified.
-    ///
+    /// @details
     /// A clause `A` subsumes clause `B` when every literal of `A` also occurs in `B`, making `B` redundant; forward
     /// subsumption checks new/recently-added clauses against existing ones, while backward subsumption checks
     /// existing clauses against a newly added one. `run` sweeps the clause database using an occurrence-index-driven

@@ -10,7 +10,6 @@
 namespace kmx::sat::runtime::controller
 {
     /// @brief Orderly response to SIGINT/SIGTERM.
-    ///
     /// @details
     /// `controller::signal` lets the solver respond to an OS termination request (Ctrl-C or a competition
     /// wall-clock-limit `SIGTERM`) without corrupting state: `install_handlers` registers OS signal handlers that

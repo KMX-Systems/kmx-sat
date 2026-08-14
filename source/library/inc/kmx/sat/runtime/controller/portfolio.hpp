@@ -10,7 +10,6 @@
 namespace kmx::sat::runtime::controller
 {
     /// @brief Advanced option, kept strictly separate from the single-engine core.
-    ///
     /// @details
     /// `controller::portfolio` runs several independent `solver_core` instances concurrently, each with a distinct
     /// `random_engine` seed, racing them against the same input to reduce wall-clock time on hard instances at the

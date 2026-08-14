@@ -9,7 +9,7 @@
 namespace kmx::sat::cdcl
 {
     /// @brief Declares exactly what survives between two solve() calls.
-    ///
+    /// @details
     /// Incremental SAT+UNSAT semantics require an explicit boundary between per-episode transient state (assumptions,
     /// temporary constraint, decision trail above level zero) and state that must persist across episodes (learned
     /// clauses, external variable mapping, a caller-selected subset of options). `begin_solve_epoch`/`end_solve_epoch`

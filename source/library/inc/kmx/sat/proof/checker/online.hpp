@@ -11,7 +11,6 @@
 namespace kmx::sat::proof::checker
 {
     /// @brief Internal forward validation of derivations.
-    ///
     /// @details
     /// `checker::online` is a lightweight, always-available forward checker that mirrors
     /// `proof::proof_manager`'s event stream in real time, independent of any external tracer format: `on_add`/

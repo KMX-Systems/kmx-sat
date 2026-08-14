@@ -12,7 +12,7 @@
 namespace kmx::sat::proof::tracer
 {
     /// @brief Concrete LIDRUP proof format tracer.
-    ///
+    /// @details
     /// LIDRUP (Linear Incremental DRUP) combines IDRUP's incremental-session epoch bookkeeping with LRAT-style
     /// explicit antecedent chains, giving linear-time checkability for incremental SAT+UNSAT sessions rather than
     /// IDRUP's DRAT-style search-based checking. Like `tracer::lrat`, it requires `proof::clause::id_allocator` to

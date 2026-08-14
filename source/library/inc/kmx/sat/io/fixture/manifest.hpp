@@ -11,7 +11,6 @@
 namespace kmx::sat::io::fixture
 {
     /// @brief Reproducibility and provenance for CI and benchmark artifacts.
-    ///
     /// @details
     /// `manifest` records provenance metadata alongside a binary fixture so CI and benchmark tooling can trace a
     /// result back to exactly how it was produced: `fixture_id` uniquely identifies the fixture artifact;

@@ -11,7 +11,7 @@ namespace kmx::sat::runtime
 {
     /// @brief Executes embarrassingly parallel, order-independent preprocessing sub-tasks across worker threads, with a
     /// deterministic merge step; never parallelizes the sequential CDCL search itself. Research-track.
-    ///
+    /// @details
     /// Some preprocessing sub-tasks (occurrence-list construction, subsumption candidate scanning) are
     /// embarrassingly parallel and order-independent, making them safe to run across multiple worker threads on
     /// multi-core machines without touching the sequential CDCL search's determinism guarantee.

@@ -18,7 +18,7 @@ namespace kmx::sat::cdcl::store
 {
     /// @brief Delta/varint-compressed storage for rarely accessed redundant clauses, shrinking the resident set of the
     /// active clause database without discarding potentially useful clauses. Research-track optimization.
-    ///
+    /// @details
     /// Neither CaDiCaL nor Kissat compresses cold learned clauses; this component targets that gap by allowing
     /// `reduce_controller`/`memory_governor` to `demote_to_cold` a redundant clause that has not been used recently
     /// instead of deleting it outright, storing it delta/varint-encoded to shrink the arena's resident set.

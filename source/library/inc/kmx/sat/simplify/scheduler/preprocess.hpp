@@ -36,7 +36,6 @@
 namespace kmx::sat::simplify::scheduler
 {
     /// @brief Simplification phases that run before the main search.
-    ///
     /// @details
     /// `scheduler::preprocess` runs the fixed pipeline of one-time simplification passes
     /// (`transitive_reducer`, `engine::decomposition`, `engine::probing`, `forward_subsumer`,

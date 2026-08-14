@@ -11,7 +11,6 @@
 namespace kmx::sat::cdcl::stack
 {
     /// @brief Journal of transformations that must be replayed during model reconstruction.
-    ///
     /// @details
     /// `stack::extension` is the ordered log of `extension_record` entries pushed by
     /// `bounded_variable_eliminator`/`blocked_clause_eliminator`/`covered_clause_eliminator`/`factorizer` as they

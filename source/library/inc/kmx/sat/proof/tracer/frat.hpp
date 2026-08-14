@@ -12,7 +12,7 @@
 namespace kmx::sat::proof::tracer
 {
     /// @brief Concrete FRAT proof format tracer.
-    ///
+    /// @details
     /// FRAT (Flexible RAT) records the same resolution-only derivations as DRAT/LRAT but as structured,
     /// self-describing records (with optional antecedent information) rather than DRAT's terse line format, making it
     /// cheaper to emit on the hot path while still supporting out-of-band checking, at the cost of a larger proof

@@ -9,7 +9,7 @@
 namespace kmx::sat::simplify::engine
 {
     /// @brief SAT sweeping and use of a kitten-like micro-solver.
-    ///
+    /// @details
     /// SAT sweeping bundles a small cluster of variables into a self-contained micro-instance and hands it to a tiny
     /// embedded solver ("kitten", following Kissat's naming) to exhaustively check for backbone literals (always true
     /// in every model of the micro-instance) and equivalences (pairs of literals that always agree), which is cheaper

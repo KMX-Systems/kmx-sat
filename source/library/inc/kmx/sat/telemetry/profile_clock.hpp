@@ -16,7 +16,6 @@
 namespace kmx::sat::telemetry
 {
     /// @brief Phase profiling and predictable accounting.
-    ///
     /// @details
     /// `profile_clock` measures wall-clock and process (CPU) time spent in named phases (parsing, preprocessing,
     /// search, proof checking) so `report_formatter`/`solver_statistics` can attribute time accurately and so the

@@ -13,7 +13,6 @@
 namespace kmx::sat::cdcl::clause
 {
     /// @brief Single entry point for all clauses derived from conflict analysis.
-    ///
     /// @details
     /// `clause::learner` is the funnel every clause produced by `conflict_analyzer`/`clause::minimizer` passes
     /// through before it becomes part of `clause::database`: `learn_clause` handles the general case, while

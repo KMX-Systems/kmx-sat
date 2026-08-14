@@ -19,7 +19,7 @@
 namespace kmx::sat::simplify
 {
     /// @brief Propagates ELS results across all subsystems.
-    ///
+    /// @details
     /// Once `engine::decomposition::find_equivalences` determines that a set of literals are all equivalent,
     /// `equivalence_substitutor` is the single place that applies the chosen representative literal everywhere it
     /// matters, so no subsystem is left referencing a superseded literal: `apply_equivalence_class` records the

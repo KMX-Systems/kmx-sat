@@ -12,7 +12,7 @@ namespace kmx::sat::cdcl
 {
     /// @brief Single authority for tracking and enforcing memory ceilings across all clause, index, and
     /// proof-buffering subsystems, decoupled from the mechanics of any one allocator.
-    ///
+    /// @details
     /// Per the resource-limits policy, ceilings are optional and, when set through `register_budget`, apply to a
     /// total process-relevant budget spanning clause arenas (`bank::arena`), watch lists (`bank::watch_list`),
     /// transient preprocessing indexes, proof buffering (`proof::event_stream`/`io::proof_output_pipeline`), and

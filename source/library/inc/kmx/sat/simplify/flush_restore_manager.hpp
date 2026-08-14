@@ -15,7 +15,7 @@
 namespace kmx::sat::simplify
 {
     /// @brief Flush/restore policies and the balance between memory use and clause quality.
-    ///
+    /// @details
     /// After `controller::reduce` marks low-quality redundant clauses garbage, `flush_restore_manager` decides how
     /// aggressively to actually remove them versus keeping them available for potential future reuse:
     /// `flush_redundant` physically removes garbage-marked redundant clauses to reclaim memory; `restore_all`/

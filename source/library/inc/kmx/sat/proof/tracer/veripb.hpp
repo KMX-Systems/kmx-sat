@@ -12,7 +12,7 @@
 namespace kmx::sat::proof::tracer
 {
     /// @brief Concrete VeriPB proof format tracer.
-    ///
+    /// @details
     /// VeriPB is the only format in this baseline that can natively express gate/XOR-level and cardinality reasoning
     /// rather than expanding it into resolution steps; per the compatibility matrix, when this tracer is active,
     /// `congruence_engine`/`gate_extractor` may emit native gate-level proof events instead of the resolution-only

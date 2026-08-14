@@ -16,7 +16,7 @@
 namespace kmx::sat::cdcl
 {
     /// @brief Reconstructs the external model after eliminations and compaction.
-    ///
+    /// @details
     /// After `solver_core::extract_internal_model` produces a satisfying assignment over the reduced (post-BVE/
     /// BCE/factoring) internal variable set, `model_reconstructor` walks `stack::extension` in reverse
     /// (`reconstruct_full_model` calling `apply_extension_record` per entry) to derive correct values for every

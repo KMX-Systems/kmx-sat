@@ -16,7 +16,6 @@
 namespace kmx::sat::cdcl
 {
     /// @brief BCP with two-watched literals and a blocking-literal fast path.
-    ///
     /// @details
     /// `propagator` implements Boolean Constraint Propagation using the two-watched-literals scheme (Chaff/MiniSat
     /// lineage): each clause watches exactly two of its literals in `bank::watch_list`, and only an assignment to one

@@ -9,7 +9,7 @@
 namespace kmx::sat::simplify::engine
 {
     /// @brief Auxiliary literal removal to unlock future eliminations.
-    ///
+    /// @details
     /// Some clauses carry "auxiliary" literals that make a variable appear more entangled than it really is,
     /// blocking `eliminator::variable::bounded`/`fast` from eliminating it economically; instantiation removes such
     /// literals when they can be shown redundant given the current clause set, shrinking clauses and reducing

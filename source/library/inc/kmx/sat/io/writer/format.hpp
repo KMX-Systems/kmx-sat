@@ -15,7 +15,6 @@
 namespace kmx::sat::io::writer
 {
     /// @brief Text/binary serialization for proof and reporting.
-    ///
     /// @details
     /// `writer::format` is the shared low-level text/binary serialization primitive used by both the proof output
     /// path and human-facing reporting: `write_clause` serializes a literal span in the encoding a given proof format

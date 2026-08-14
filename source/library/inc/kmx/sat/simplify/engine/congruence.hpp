@@ -13,7 +13,7 @@
 namespace kmx::sat::simplify::engine
 {
     /// @brief Congruence closure over extracted structures.
-    ///
+    /// @details
     /// Once `extractor::gate` identifies functional structures (AND/XOR/ITE/definition gates), `engine::congruence`
     /// treats each as an equality constraint between the gate's output literal and its logical definition, then
     /// computes the congruence closure over all such constraints (extending plain equivalent-literal substitution to

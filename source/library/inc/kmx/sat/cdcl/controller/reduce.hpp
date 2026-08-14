@@ -15,7 +15,6 @@
 namespace kmx::sat::cdcl::controller
 {
     /// @brief Learned-clause database management based on glue, activity, and usage.
-    ///
     /// @details
     /// `controller::reduce` periodically shrinks `clause::database`'s redundant (learned) clause set so it does not
     /// grow without bound, following the glue/activity-based retention policy common to CaDiCaL/Kissat: low-glue,

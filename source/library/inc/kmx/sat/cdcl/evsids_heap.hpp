@@ -14,7 +14,7 @@
 namespace kmx::sat::cdcl
 {
     /// @brief EVSIDS heuristic for branching variables.
-    ///
+    /// @details
     /// EVSIDS (Exponential Variable State Independent Decaying Sum, the MiniSat/Kissat-style descendant of VSIDS)
     /// keeps one floating-point activity score per variable in a binary max-heap: `increase_score` bumps a
     /// variable's score when it participates in conflict analysis, using an exponentially increasing bump amount

@@ -8,20 +8,17 @@
 namespace kmx::sat
 {
     /// @brief Models legal API transitions instead of relying on historical bit masks.
-    ///
     /// Historically, solvers in the CaDiCaL/Kissat family track legal API usage with ad hoc boolean/bitmask fields
     /// (for example "clause adding allowed", "currently solving") checked ad hoc at each call site. This type
     /// replaces that pattern with one explicit `state` value so that `solver` can express its lifecycle contract
     /// ("add only while configuring/adding", "solve only once per episode", "no mutation after an unrecoverable
     /// error") as a single small state machine instead of scattered flags.
-    ///
     /// @details
     /// `error` is a terminal state reached only through an explicit `to(state::error)` call from a caller that has
     /// detected a `state_error`, `domain_error`, or `consistency_error`; per the library's error-recovery semantics,
     /// once in `error` every mutating operation must be rejected by the caller except a full `reset_session`, which is
     /// expected to transition the machine back to `configuring` only after clause database, assignment store,
     /// extension stack, and proof epoch state have all been reset consistently.
-    ///
     /// @note This type intentionally has no dependency on `solver_core` or any other subsystem; it only tracks the
     /// `state` value itself; enforcing the transition legality (which callers may call which methods) is the
     /// responsibility of `solver`/`external_frontend`, not of this class.

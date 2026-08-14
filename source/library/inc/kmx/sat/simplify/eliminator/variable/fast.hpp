@@ -14,7 +14,6 @@
 namespace kmx::sat::simplify::eliminator::variable
 {
     /// @brief Lightweight variant of BVE for fast preprocessing.
-    ///
     /// @details
     /// `variable::fast` wraps a `variable::bounded` instance with cheaper, less precise scoring and eligibility
     /// checks (`cheap_score_variable`/`cheap_can_eliminate`), trading elimination thoroughness for speed on early or

@@ -18,7 +18,6 @@
 namespace kmx::sat::cdcl
 {
     /// @brief Moving GC with updates to every affected reference.
-    ///
     /// @details
     /// `garbage_collector` runs the copying-collection cycle over `bank::arena`: `should_collect` decides, based on
     /// garbage-clause density/wasted arena bytes, whether a cycle is worthwhile; `collect` drives the cycle, calling

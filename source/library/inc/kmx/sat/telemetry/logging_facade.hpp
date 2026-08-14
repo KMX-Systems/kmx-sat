@@ -15,7 +15,6 @@
 namespace kmx::sat::telemetry
 {
     /// @brief Optionally compiled logging that does not contaminate the hot path in non-logging builds.
-    ///
     /// @details
     /// `logging_facade` is the structured-tracing counterpart to `kmx::logger`'s free-function logging: it exposes
     /// domain-specific log points (`log_clause`, `log_literal`, `log_gate`, `log_extension`, `log_phase_summary`) so

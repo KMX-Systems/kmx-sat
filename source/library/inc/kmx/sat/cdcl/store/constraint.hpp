@@ -12,7 +12,7 @@
 namespace kmx::sat::cdcl::store
 {
     /// @brief Support for temporary constraints or incremental clauses.
-    ///
+    /// @details
     /// Some incremental workflows (for example IPASIR-UP-style external propagators, or CaDiCaL's single "constraint"
     /// clause feature) need one extra clause that is scoped to a single solve episode without being permanently
     /// added to the clause database. `store::constraint` holds that at most one clause between

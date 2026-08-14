@@ -9,7 +9,6 @@
 namespace kmx::sat::io::fixture
 {
     /// @brief Versioned schema contract for binary fixtures and compatibility checks.
-    ///
     /// @details
     /// `schema` centralizes every piece of metadata `binary::reader`/`binary::writer` need to agree on: the current
     /// schema version this build writes (`current_version`) and which versions it can still read

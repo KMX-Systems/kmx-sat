@@ -18,7 +18,7 @@
 namespace kmx::sat::cdcl
 {
     /// @brief Variable reindexing and state compaction after eliminations.
-    ///
+    /// @details
     /// After `bounded_variable_eliminator`/`blocked_clause_eliminator` remove enough variables, sparsely-numbered
     /// remaining variables waste cache lines and array capacity; `compaction_service` renumbers the live variable set
     /// densely. `should_compact` decides whether the eliminated fraction justifies a pass; `build_variable_permutation`

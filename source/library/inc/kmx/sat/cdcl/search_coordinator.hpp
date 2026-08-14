@@ -21,7 +21,6 @@
 namespace kmx::sat::cdcl
 {
     /// @brief Complete control flow of one CDCL episode.
-    ///
     /// @details
     /// `search_coordinator` implements the classic CDCL main loop (`run_search_epoch`) by orchestrating the concrete,
     /// non-virtual components it owns by direct reference/composition (`propagator`, `conflict_analyzer`,

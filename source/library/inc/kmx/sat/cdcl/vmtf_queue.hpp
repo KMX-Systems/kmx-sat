@@ -15,7 +15,7 @@
 namespace kmx::sat::cdcl
 {
     /// @brief Variable Move To Front heuristic.
-    ///
+    /// @details
     /// VMTF (as used by CaDiCaL) maintains variables in a doubly-linked queue ordered by recency of conflict
     /// involvement rather than a numeric score: `bump` moves a variable to the front of the queue whenever it
     /// participates in a learned clause, `front_candidate` hands `engine::decision` the frontmost currently

@@ -13,7 +13,7 @@
 namespace kmx::sat::runtime
 {
     /// @brief Bounded, explicit cross-engine clause sharing without coupling the CDCL core to orchestration concerns.
-    ///
+    /// @details
     /// When `controller::portfolio` runs multiple independent `solver_core` instances, sharing learned clauses
     /// between them can speed up the overall race, but naive sharing would silently affect the single-engine
     /// determinism guarantee; `shared_clause_exchange` makes that sharing bounded and explicit instead.

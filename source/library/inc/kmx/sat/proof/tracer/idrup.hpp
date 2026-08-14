@@ -12,7 +12,7 @@
 namespace kmx::sat::proof::tracer
 {
     /// @brief Concrete IDRUP proof format tracer.
-    ///
+    /// @details
     /// IDRUP (Incremental DRUP) extends the DRAT/DRUP family with the extra bookkeeping needed to certify
     /// incremental SAT+UNSAT sessions: assumption introduction/retraction and multiple `solve()` calls against an
     /// evolving clause set, rather than one static formula. Per the compatibility matrix, this format is required

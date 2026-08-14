@@ -12,7 +12,7 @@
 namespace kmx::sat::simplify
 {
     /// @brief Clause strengthening through temporary assumptions and propagation.
-    ///
+    /// @details
     /// Vivification strengthens a clause `C` by temporarily assuming the negation of each of its literals in turn and
     /// propagating: if propagation falsifies another literal already in `C`, that literal is redundant and can be
     /// removed; if propagation reaches a conflict outright, `C` is implied and can be simplified more aggressively.

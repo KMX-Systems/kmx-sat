@@ -10,7 +10,6 @@
 namespace kmx::sat::io
 {
     /// @brief Output pipeline for proof data, synchronous or asynchronous.
-    ///
     /// @details
     /// `proof_output_pipeline` is the delivery mechanism `proof::event_stream::flush_sync`/`flush_async` hand events
     /// to: `start`/`stop` bracket the pipeline's lifetime for one solve session; `submit` accepts a batch of drained

@@ -10,7 +10,6 @@
 namespace kmx::sat::cdcl::controller
 {
     /// @brief All rephasing strategies and lucky phase management.
-    ///
     /// @details
     /// `controller::rephase` periodically overwrites `store::phase`'s saved polarities with a different source to
     /// help the search escape a locally unproductive polarity assignment, following the CaDiCaL/Kissat rephasing

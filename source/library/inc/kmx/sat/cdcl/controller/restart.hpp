@@ -9,7 +9,6 @@
 namespace kmx::sat::cdcl::controller
 {
     /// @brief Reluctant doubling, conflict intervals, and EMA-based triggers.
-    ///
     /// @details
     /// `controller::restart` decides when `search_coordinator::handle_restart` should unwind the trail back to
     /// decision level zero and let `engine::decision` branch afresh, a key CDCL technique for escaping

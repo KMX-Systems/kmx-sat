@@ -16,7 +16,7 @@
 namespace kmx::sat::simplify::extractor
 {
     /// @brief Detects exploitable logical structures (AND/XOR/ITE/definition gates).
-    ///
+    /// @details
     /// Many CNF instances are Tseitin-encoded from a higher-level circuit; `extractor::gate` recovers that structure
     /// by pattern-matching clause groups around one variable: `find_and_gate`/`find_xor_gate`/`find_ite_gate` detect
     /// the clause patterns characteristic of AND, XOR, and if-then-else gate encodings respectively, and

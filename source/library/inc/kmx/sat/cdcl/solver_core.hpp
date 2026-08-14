@@ -33,7 +33,6 @@
 namespace kmx::sat::cdcl
 {
     /// @brief The main internal solver container, but without degenerating back into an opaque monolith.
-    ///
     /// @details
     /// `solver_core` plays the same coordinating role as CaDiCaL's `Internal` struct, but as a composition root over
     /// separately testable objects (`clause::database`, `search_coordinator`, and transitively every CDCL component)

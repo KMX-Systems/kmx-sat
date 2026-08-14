@@ -13,7 +13,6 @@
 namespace kmx::sat::cdcl
 {
     /// @brief Separate validator for the SAT path.
-    ///
     /// @details
     /// `witness_checker` is an independent double-check on a reconstructed model, deliberately kept separate from
     /// `model_reconstructor` so a bug in reconstruction cannot silently validate itself: `check_model_against_original`

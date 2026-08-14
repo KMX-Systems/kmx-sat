@@ -17,7 +17,6 @@
 namespace kmx::sat::cdcl::clause
 {
     /// @brief Logical orchestration of clauses, clause tiers, and their relation to watched literals.
-    ///
     /// @details
     /// `clause::database` is the logical layer built on top of `clause::storage`: it decides which clauses are
     /// irredundant (original) versus redundant (learned), tracks tier membership used by `reduce_controller` for

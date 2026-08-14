@@ -15,7 +15,6 @@
 namespace kmx::sat::cdcl::bank
 {
     /// @brief All watch lists, partitioned by literal.
-    ///
     /// @details
     /// `bank::watch_list` holds one list of `watch` entries per literal (positive and negative occurrence of every
     /// variable get independent lists), the core data structure `propagator::propagate` scans on every unit

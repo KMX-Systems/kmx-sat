@@ -19,7 +19,7 @@
 namespace kmx::sat::cdcl
 {
     /// @brief The External-inspired layer that isolates external/internal mapping and incremental semantics.
-    ///
+    /// @details
     /// Modeled on CaDiCaL's `External` class, this type is the boundary between the public `solver` facade and the
     /// internal `solver_core`: every literal a caller adds or queries passes through `import_external_literal`/
     /// `export_internal_literal`, every frozen/melted variable request is recorded here before `variable_mapper`

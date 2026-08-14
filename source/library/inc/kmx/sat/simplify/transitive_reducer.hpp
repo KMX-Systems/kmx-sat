@@ -16,7 +16,7 @@
 namespace kmx::sat::simplify
 {
     /// @brief Simplifies the binary implication graph before more expensive passes.
-    ///
+    /// @details
     /// The binary implication graph (one node per literal, one edge per binary clause) often contains redundant
     /// edges implied transitively by other edges; `transitive_reducer` removes such edges so later passes that
     /// traverse this graph (`engine::decomposition`'s SCC computation, `engine::probing`'s hyper-binary learning,

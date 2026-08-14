@@ -13,7 +13,6 @@
 namespace kmx::sat::io
 {
     /// @brief File abstraction inspired by CaDiCaL/Kissat, with support for compressed files when enabled.
-    ///
     /// @details
     /// `file_source` is the single abstraction `dimacs_parser` and `io::fixture::binary::reader` read through,
     /// covering plain files, optionally compressed streams (gzip/xz-style, when built with that support enabled, in

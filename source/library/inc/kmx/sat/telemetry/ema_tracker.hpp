@@ -6,7 +6,6 @@
 namespace kmx::sat::telemetry
 {
     /// @brief Moving averages for restart, reduce, and focused/stable modes.
-    ///
     /// @details
     /// `ema_tracker` maintains the fast/slow exponential-moving-average pairs that drive Glucose/Kissat-style
     /// adaptive search-mode switching: `update_glue_fast`/`update_glue_slow` track short- and long-window averages of

@@ -16,7 +16,7 @@
 namespace kmx::sat::cdcl::clause
 {
     /// @brief Learned-clause minimization and clause-quality recomputation.
-    ///
+    /// @details
     /// A freshly 1-UIP-derived clause from `conflict_analyzer` often contains literals that are themselves
     /// implied by other literals already in the clause; `minimize_learned_clause` removes such redundant literals
     /// through recursive/self-subsuming resolution against the implication graph (the MiniSat/Kissat-style

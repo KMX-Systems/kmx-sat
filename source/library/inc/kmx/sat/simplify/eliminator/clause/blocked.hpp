@@ -11,7 +11,7 @@
 namespace kmx::sat::simplify::eliminator::clause
 {
     /// @brief BCE and its correct integration with the extension stack and proof system.
-    ///
+    /// @details
     /// A clause is blocked on one of its literals `l` if every resolvent obtained by resolving it against a clause
     /// containing `\lnot l` is a tautology; such a clause can be removed without changing satisfiability, because any
     /// model of the reduced formula can be extended by choosing `l` true. `run` sweeps candidate clauses;

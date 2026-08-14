@@ -22,7 +22,7 @@
 namespace kmx::sat::io::fixture::binary
 {
     /// @brief Fast binary ingestion path for tests, replay, and benchmarks; never replaces the canonical DIMACS path.
-    ///
+    /// @details
     /// The binary fixture channel is a feature-gated shortcut around DIMACS's text parsing overhead for CI/benchmark
     /// corpora, following the envelope defined by `schema`: `open_fixture` reads the `SATB`-tagged envelope from a
     /// `file_source`; `read_header`/`validate_header` parse and check the magic/version/endianness/feature-flag

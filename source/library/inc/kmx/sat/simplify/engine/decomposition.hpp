@@ -17,7 +17,6 @@
 namespace kmx::sat::simplify::engine
 {
     /// @brief SCC/ELS and decomposition in the CaDiCaL/Kissat style.
-    ///
     /// @details
     /// `engine::decomposition` finds Equivalent Literal Substitution (ELS) opportunities by computing Strongly
     /// Connected Components (SCC, via Tarjan's algorithm) over the binary implication graph: two literals in the

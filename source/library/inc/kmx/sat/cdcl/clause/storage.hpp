@@ -18,7 +18,6 @@
 namespace kmx::sat::cdcl::clause
 {
     /// @brief The real owner of physical clauses and of their relation to proof ids.
-    ///
     /// @details
     /// `clause::storage` sits directly on top of `bank::arena` and is the only subsystem allowed to create, destroy,
     /// relocate, or shrink clauses at the byte level; `clause::database` (logical tiers/watch relationship) and every
