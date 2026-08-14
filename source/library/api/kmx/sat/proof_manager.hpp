@@ -252,9 +252,16 @@ namespace kmx::sat
             return lit.is_negated() ? -index : index;
         }
 
+        bool proof_activity_enabled() const noexcept
+        {
+            return event_stream_.has_sink() || !enabled_formats_.empty() || !registered_tracers_.empty() || online_checker_enabled_ || lrat_checker_enabled_;
+        }
+
         void dispatch_event(const proof::event_kind kind, const cdcl::clause::ref_t ref, const std::span<const literal> literals = {},
                             const std::span<const proof::clause::id> antecedents = {}) noexcept
         {
+            if (!proof_activity_enabled())
+                return;
             proof::proof_event event {};
             event.kind = kind;
             event.clause_ref = ref;

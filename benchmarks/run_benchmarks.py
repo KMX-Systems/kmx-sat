@@ -50,6 +50,8 @@ def run_command(template: str, instance: Path, seed: int, timeout: float, measur
         timed_out = True
         exit_code = None
         output = error.stdout or ""
+        if isinstance(output, bytes):
+            output = output.decode(errors="replace")
     elapsed_ns = time.perf_counter_ns() - started
     status = "UNKNOWN"
     if "s SATISFIABLE" in output:

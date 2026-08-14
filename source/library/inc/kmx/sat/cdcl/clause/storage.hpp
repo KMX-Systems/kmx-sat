@@ -99,6 +99,9 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         ref_t resolve_ref(const ref_t ref) const noexcept
         {
+            if (relocated_refs_.empty())
+                return ref;
+
             auto resolved = ref;
             const auto original = ref.offset();
             while (resolved.valid())

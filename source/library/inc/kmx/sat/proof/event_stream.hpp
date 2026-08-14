@@ -53,7 +53,11 @@ namespace kmx::sat::proof
         /// @brief Registers a sink that receives buffered proof events.
         /// @param sink Handler invoked for each buffered event during drain/flush.
         /// @throws None (noexcept).
-        void set_sink(sink_t sink) noexcept { sink_ = std::move(sink); }
+        void set_sink(sink_t sink) noexcept
+        {
+            sink_ = std::move(sink);
+            sink_enabled_ = static_cast<bool>(sink_);
+        }
 
         /// @brief Appends one structural proof event to the internal buffer without blocking on I/O.
         /// @throws None (noexcept).
@@ -104,8 +108,11 @@ namespace kmx::sat::proof
         /// @return Last flush count.
         [[nodiscard]] std::size_t last_flush_count() const noexcept { return last_flush_count_; }
 
+        [[nodiscard]] bool has_sink() const noexcept { return sink_enabled_; }
+
     private:
         sink_t sink_ {};
+        bool sink_enabled_ {};
         std::vector<proof_event> buffered_events_ {};
         std::size_t last_drain_count_ {};
         std::size_t last_flush_count_ {};

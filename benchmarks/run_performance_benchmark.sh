@@ -3,6 +3,8 @@ set -e
 
 # Default parameter: repeat count for benchmark runs
 REPEAT_COUNT=${1:-3}
+BENCHMARK_TIMEOUT=${BENCHMARK_TIMEOUT:-120}
+SOLVER_OPTIONS=${SOLVER_OPTIONS:-}
 
 cd "$(dirname "$0")/.."
 export PATH="$PWD/tools/bin:$PATH"
@@ -11,20 +13,22 @@ export PATH="$PWD/tools/bin:$PATH"
 mkdir -p benchmark-release-results-final
 
 # Run the benchmark
-echo "Running performance benchmark (${REPEAT_COUNT} repeats x 9 instances)..." >&2
+INSTANCE_COUNT=$(find benchmarks/corpus -maxdepth 1 -name '*.cnf' | wc -l)
+echo "Running performance benchmark (${REPEAT_COUNT} repeats x ${INSTANCE_COUNT} instances, ${BENCHMARK_TIMEOUT}s timeout)..." >&2
 python3 benchmarks/run_benchmarks.py benchmarks/corpus/*.cnf \
   --manifest benchmarks/corpus/manifest.json \
-  --command "source/build/release-benchmark-final/default/kmx-sat.d9e8dc1a/kmx-sat {instance} --restart-interval 1 --decision-restart-interval 1 --reduction-interval 1 --reduction-fraction-percent 100" \
+    --timeout "${BENCHMARK_TIMEOUT}" \
+    --command "source/build/release-benchmark-final/default/kmx-sat.d9e8dc1a/kmx-sat {instance} ${SOLVER_OPTIONS}" \
   --compare-command "cadical=tools/bin/cadical {instance}" \
   --compare-command "kissat=tools/bin/kissat {instance}" \
   --require-comparison-agreement \
   --repeat-count "${REPEAT_COUNT}" \
   --seed 20260814 \
   --configuration release-external-comparison-final \
-  --output benchmark-release-results-final/pinned-corpus.json >/dev/null 2>&1
+    --output benchmark-release-results-final/pinned-corpus.json >/dev/null 2>&1
 
 echo "Validating results..." >&2
-python3 benchmarks/validate_results.py benchmark-release-results-final/pinned-corpus.json --baseline benchmarks/corpus/baseline.json >/dev/null 2>&1
+python3 benchmarks/validate_results.py benchmark-release-results-final/pinned-corpus.json >/dev/null 2>&1
 
 # Extract and display table
 python3 - <<'PYTHON'

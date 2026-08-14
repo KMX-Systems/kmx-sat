@@ -45,6 +45,24 @@
       "file": "wide_clause_sat.cnf",
       "sha256": "5bc6bb04b0c1520f5f6794f4a5ff53768c887fde50d067217f2ffb5536e47705",
       "expected_status": "SATISFIABLE"
+    },
+    {
+      "file": "satlib_aim100_16_yes_01.cnf",
+      "sha256": "74560a84735393495e1665fb2999f6b7948fb7f12b11c23e530aedccbf8cbbec",
+      "expected_status": "SATISFIABLE",
+      "source": "SATLIB AIM benchmark"
+    },
+    {
+      "file": "satlib_aim100_20_yes_01.cnf",
+      "sha256": "c2d8d8d1a0723ed0502b185b757a068b4df088e059bd51e39a0837579fe15114",
+      "expected_status": "SATISFIABLE",
+      "source": "SATLIB AIM benchmark"
+    },
+    {
+      "file": "satlib_aim100_34_yes_01.cnf",
+      "sha256": "28bed18fc63fc15ddd8d7d6de295d5dd50933346e901594d8fc0429bf50a0b9c",
+      "expected_status": "SATISFIABLE",
+      "source": "SATLIB AIM benchmark"
     }
   ]
 }

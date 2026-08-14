@@ -52,3 +52,5 @@ __pycache__/
 clean-checkout-gates/
 tools/bin/
 tools/veripb-venv/
+tools/src/
+benchmark-release-results*/

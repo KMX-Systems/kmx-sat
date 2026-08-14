@@ -15,6 +15,22 @@
 
 namespace kmx::sat::simplify
 {
+    TEST_CASE("forward subsumption finds shorter later clauses", "[sat]")
+    {
+        cdcl::clause::database database;
+        const auto longer_ref = database.add_clause(
+            std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}});
+        const auto shorter_ref =
+            database.add_clause(std::array<literal, 2> {literal {variable {1u}, false}, literal {variable {2u}, false}});
+
+        forward_subsumer subsumer;
+        subsumer.attach_database(database);
+        subsumer.run();
+
+        REQUIRE(!database.storage_of().is_alive(longer_ref));
+        REQUIRE(database.storage_of().is_alive(shorter_ref));
+        REQUIRE(subsumer.subsumed_count() == 1u);
+    }
 
     TEST_CASE("elimination policy", "[sat]")
     {

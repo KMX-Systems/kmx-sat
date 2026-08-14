@@ -4,6 +4,9 @@
 #pragma once
 #ifndef PCH
     #include <algorithm>
+    #include <cstddef>
+    #include <cstdint>
+    #include <span>
     #include <vector>
 #endif
 
@@ -50,44 +53,67 @@ namespace kmx::sat::simplify
             if (database_ == nullptr)
                 return;
 
-            std::vector<cdcl::clause::ref_t> refs {};
-            database_->iterate_irredundant([&](const cdcl::clause::ref_t ref) noexcept { refs.push_back(ref); });
-            database_->iterate_redundant([&](const cdcl::clause::ref_t ref) noexcept { refs.push_back(ref); });
-
             auto& storage = database_->storage_of();
-            for (std::size_t left_index {}; left_index < refs.size(); ++left_index)
+            clauses_.clear();
+            const auto append_clause = [&](const cdcl::clause::ref_t ref) noexcept
+            { clauses_.push_back(indexed_clause {ref, storage.view_literals(ref), true}); };
+            database_->iterate_irredundant(append_clause);
+            database_->iterate_redundant(append_clause);
+
+            build_occurrence_index();
+
+            candidate_marks_.assign(clauses_.size(), no_candidate_mark);
+            for (std::uint32_t left_index {}; left_index < clauses_.size(); ++left_index)
             {
-                if (database_->is_garbage(refs[left_index]))
+                auto& left = clauses_[left_index];
+                if (!left.active || left.literals.empty())
                     continue;
 
-                const auto left_size = storage.literal_count(refs[left_index]);
-                const auto left_clause = storage.view_literals(refs[left_index]);
-                for (std::size_t right_index {left_index + 1u}; right_index < refs.size(); ++right_index)
+                std::span<const std::uint32_t> rarest_candidates {};
+                bool has_rarest {};
+                bool left_subsumed {};
+                for (const auto lit: left.literals)
                 {
-                    const auto right_ref = refs[right_index];
-                    if (database_->is_garbage(right_ref))
+                    const auto candidates = occurrences_of(lit);
+                    if (candidates.empty())
+                        continue;
+                    if (!has_rarest || candidates.size() < rarest_candidates.size())
+                    {
+                        rarest_candidates = candidates;
+                        has_rarest = true;
+                    }
+
+                    for (const auto candidate_index: candidates)
+                    {
+                        if (candidate_index == left_index || !clauses_[candidate_index].active ||
+                            candidate_marks_[candidate_index] == left_index)
+                            continue;
+                        candidate_marks_[candidate_index] = left_index;
+
+                        const auto& candidate = clauses_[candidate_index];
+                        const bool precedes_equal_clause = candidate_index < left_index && candidate.literals.size() == left.literals.size();
+                        if ((candidate.literals.size() < left.literals.size() || precedes_equal_clause) &&
+                            clause_subsumes(candidate.literals, left.literals))
+                        {
+                            mark_subsumed(left);
+                            left_subsumed = true;
+                            break;
+                        }
+                    }
+                    if (left_subsumed)
+                        break;
+                }
+                if (left_subsumed || !has_rarest)
+                    continue;
+
+                for (const auto candidate_index: rarest_candidates)
+                {
+                    if (candidate_index == left_index || !clauses_[candidate_index].active)
                         continue;
 
-                    const auto right_size = storage.literal_count(right_ref);
-                    const auto right_clause = storage.view_literals(right_ref);
-                    if (left_size <= right_size && clause_subsumes(left_clause, right_clause))
-                    {
-                        if (proof_manager_ != nullptr)
-                            proof_manager_->on_delete_clause(right_ref);
-                        database_->mark_garbage(right_ref);
-                        last_subsumed_ref_ = right_ref;
-                        ++subsumed_count_;
-                    }
-                    else if (right_size <= left_size && clause_subsumes(right_clause, left_clause))
-                    {
-                        const auto left_ref = refs[left_index];
-                        if (proof_manager_ != nullptr)
-                            proof_manager_->on_delete_clause(left_ref);
-                        database_->mark_garbage(left_ref);
-                        last_subsumed_ref_ = left_ref;
-                        ++subsumed_count_;
-                        break;
-                    }
+                    auto& candidate = clauses_[candidate_index];
+                    if (left.literals.size() <= candidate.literals.size() && clause_subsumes(left.literals, candidate.literals))
+                        mark_subsumed(candidate);
                 }
             }
 
@@ -109,13 +135,8 @@ namespace kmx::sat::simplify
             bool subsumed {};
             const auto scan = [&](const cdcl::clause::ref_t other_ref) noexcept
             {
-                if (subsumed || other_ref == ref)
-                    return;
-                if (storage.literal_count(other_ref) > candidate_size)
-                    return;
-                const auto other_clause = storage.view_literals(other_ref);
-                if (clause_subsumes(other_clause, candidate_clause))
-                    subsumed = true;
+                if (!subsumed)
+                    subsumed = subsumes_candidate(other_ref, ref, candidate_size, candidate_clause);
             };
 
             database_->iterate_irredundant(scan);
@@ -152,6 +173,78 @@ namespace kmx::sat::simplify
         cdcl::clause::ref_t last_subsumed_ref() const noexcept { return last_subsumed_ref_; }
 
     private:
+        static constexpr std::uint32_t no_candidate_mark {~std::uint32_t {}};
+
+        struct indexed_clause final
+        {
+            cdcl::clause::ref_t ref {};
+            std::span<const literal> literals {};
+            bool active {};
+        };
+
+        /// Compressed literal-to-clause occurrence index; avoids per-literal container allocation.
+        void build_occurrence_index() noexcept
+        {
+            literal::raw_t highest_raw {};
+            std::size_t total_occurrences {};
+            for (const auto& clause: clauses_)
+            {
+                total_occurrences += clause.literals.size();
+                for (const auto lit: clause.literals)
+                    if (lit.raw() > highest_raw)
+                        highest_raw = lit.raw();
+            }
+
+            const auto literal_slots = total_occurrences == 0u ? 0u : static_cast<std::size_t>(highest_raw) + 1u;
+            occurrence_start_.assign(literal_slots + 1u, 0u);
+            occurrence_entries_.clear();
+            if (literal_slots == 0u)
+                return;
+
+            for (const auto& clause: clauses_)
+                for (const auto lit: clause.literals)
+                    ++occurrence_start_[static_cast<std::size_t>(lit.raw()) + 1u];
+            for (std::size_t slot {1u}; slot <= literal_slots; ++slot)
+                occurrence_start_[slot] += occurrence_start_[slot - 1u];
+
+            occurrence_entries_.resize(total_occurrences);
+            occurrence_fill_.assign(occurrence_start_.begin(), occurrence_start_.end() - 1);
+            for (std::uint32_t index {}; index < clauses_.size(); ++index)
+                for (const auto lit: clauses_[index].literals)
+                    occurrence_entries_[occurrence_fill_[lit.raw()]++] = index;
+        }
+
+        [[nodiscard]] std::span<const std::uint32_t> occurrences_of(const literal lit) const noexcept
+        {
+            const auto slot = static_cast<std::size_t>(lit.raw());
+            if (slot + 1u >= occurrence_start_.size())
+                return {};
+            const auto begin = occurrence_start_[slot];
+            return {occurrence_entries_.data() + begin, occurrence_start_[slot + 1u] - begin};
+        }
+
+        void mark_subsumed(indexed_clause& clause) noexcept
+        {
+            if (proof_manager_ != nullptr)
+                proof_manager_->on_delete_clause(clause.ref);
+            database_->mark_garbage(clause.ref);
+            clause.active = false;
+            last_subsumed_ref_ = clause.ref;
+            ++subsumed_count_;
+        }
+
+        bool subsumes_candidate(const cdcl::clause::ref_t other_ref, const cdcl::clause::ref_t candidate_ref,
+                                const std::uint32_t candidate_size, const std::span<const literal> candidate_clause) const noexcept
+        {
+            if (other_ref == candidate_ref)
+                return false;
+
+            const auto& storage = database_->storage_of();
+            if (storage.literal_count(other_ref) > candidate_size)
+                return false;
+            return clause_subsumes(storage.view_literals(other_ref), candidate_clause);
+        }
+
         static bool clause_subsumes(const std::span<const literal> left, const std::span<const literal> right) noexcept
         {
             if (left.empty() || left.size() > right.size())
@@ -174,5 +267,10 @@ namespace kmx::sat::simplify
         std::size_t subsumed_count_ {};
         std::size_t strengthened_count_ {};
         cdcl::clause::ref_t last_subsumed_ref_ {};
+        std::vector<indexed_clause> clauses_ {};
+        std::vector<std::uint32_t> candidate_marks_ {};
+        std::vector<std::uint32_t> occurrence_start_ {};
+        std::vector<std::uint32_t> occurrence_entries_ {};
+        std::vector<std::uint32_t> occurrence_fill_ {};
     };
 }

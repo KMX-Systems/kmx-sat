@@ -117,6 +117,9 @@ namespace kmx::sat::proof
         manager.record_checker_antecedents(derived_id, bad_chain);
         REQUIRE(!manager.validate_checkers());
 
+        constexpr bool tracer_concept_ok = tracer::like<tracer::drat>;
+        static_assert(tracer_concept_ok, "drat tracer must satisfy tracer::like");
+
         REQUIRE(manager.buffered_event_count() >= 4);
         manager.on_conclusion();
         REQUIRE(manager.last_event().kind == event_kind::conclusion);
@@ -124,8 +127,12 @@ namespace kmx::sat::proof
         manager.flush();
         REQUIRE(manager.buffered_event_count() == 0);
 
-        constexpr bool tracer_concept_ok = tracer::like<tracer::drat>;
-        static_assert(tracer_concept_ok, "drat tracer must satisfy tracer::like");
+        SECTION("proof manager stays idle without proof consumers")
+        {
+            proof_manager idle_manager;
+            idle_manager.on_add_original(ref_1, std::array<literal, 1>{x_pos});
+            REQUIRE(idle_manager.buffered_event_count() == 0u);
+        }
 
         SECTION("event stream sink receives buffered proof events")
         {
