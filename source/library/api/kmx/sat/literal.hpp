@@ -11,7 +11,7 @@
 namespace kmx::sat
 {
     /// @brief Strong wrapper for literals; removes raw int usage from the public hot path.
-    ///
+    /// @details
     /// A `literal` packs a `variable` index and its polarity into one `raw_t` value using the classic
     /// "index-times-two plus sign-bit" encoding (`(var.index() << 1) | negated`), the same scheme used by
     /// MiniSat-family solvers because it lets `index_in_watch_bank()` double as a dense, cache-friendly index into
