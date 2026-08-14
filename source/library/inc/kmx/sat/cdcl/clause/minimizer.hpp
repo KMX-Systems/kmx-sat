@@ -49,20 +49,18 @@ namespace kmx::sat::cdcl::clause
             if (storage_ == nullptr || !ref.valid())
                 return;
 
-            auto literals = storage_->literals_of(ref);
+            const auto literals = storage_->view_literals(ref);
             if (literals.size() <= 1u)
                 return;
 
-            std::vector<literal> deduplicated {};
-            deduplicated.reserve(literals.size());
-            std::unordered_set<literal::raw_t> seen {};
+            distinct_scratch_.clear();
             for (const auto lit: literals)
-                if (seen.insert(lit.raw()).second)
-                    deduplicated.push_back(lit);
+                if (std::find(distinct_scratch_.begin(), distinct_scratch_.end(), lit.raw()) == distinct_scratch_.end())
+                    distinct_scratch_.push_back(lit.raw());
 
-            if (!deduplicated.empty())
+            if (!distinct_scratch_.empty())
             {
-                target_sizes_[ref.offset()] = static_cast<std::uint32_t>(deduplicated.size());
+                target_sizes_[ref.offset()] = static_cast<std::uint32_t>(distinct_scratch_.size());
                 minimized_.insert(ref.offset());
             }
         }
@@ -82,7 +80,7 @@ namespace kmx::sat::cdcl::clause
                 return;
             }
 
-            const auto literals = storage_->literals_of(ref);
+            const auto literals = storage_->view_literals(ref);
             if (literals.size() <= 1u)
                 return;
 
@@ -189,13 +187,16 @@ namespace kmx::sat::cdcl::clause
             if (storage_ == nullptr || !ref.valid() || level_of == nullptr)
                 return;
 
-            const auto literals = storage_->literals_of(ref);
-            std::unordered_set<std::uint32_t> levels {};
-            levels.reserve(literals.size());
+            const auto literals = storage_->view_literals(ref);
+            distinct_scratch_.clear();
             for (const auto lit: literals)
-                levels.insert(level_of(context, lit.variable_of()));
+            {
+                const auto level = level_of(context, lit.variable_of());
+                if (std::find(distinct_scratch_.begin(), distinct_scratch_.end(), level) == distinct_scratch_.end())
+                    distinct_scratch_.push_back(level);
+            }
 
-            last_glue_ = std::max<std::uint32_t>(1u, static_cast<std::uint32_t>(levels.size()));
+            last_glue_ = std::max<std::uint32_t>(1u, static_cast<std::uint32_t>(distinct_scratch_.size()));
             glue_.insert_or_assign(ref.offset(), last_glue_);
             if (database_ != nullptr)
                 database_->set_glue(ref, last_glue_);
@@ -228,6 +229,7 @@ namespace kmx::sat::cdcl::clause
         [[nodiscard]] std::uint32_t last_glue() const noexcept { return last_glue_; }
 
     private:
+        std::vector<std::uint32_t> distinct_scratch_ {};
         storage* storage_ {};
         database* database_ {};
         std::unordered_map<ref_t::offset_t, std::uint32_t> glue_ {};

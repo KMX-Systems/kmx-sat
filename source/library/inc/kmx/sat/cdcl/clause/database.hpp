@@ -90,8 +90,7 @@ namespace kmx::sat::cdcl::clause
             const auto used_it = used_counts_.find(offset);
             const auto activity_it = activities_.find(offset);
             return quality {tier_of(resolved), glue_it != glue_.end() ? glue_it->second : 0u,
-                            used_it != used_counts_.end() ? used_it->second : 0u,
-                            static_cast<std::uint32_t>(storage_.literals_of(resolved).size()),
+                            used_it != used_counts_.end() ? used_it->second : 0u, storage_.literal_count(resolved),
                             activity_it != activities_.end() ? activity_it->second : 0.0};
         }
 

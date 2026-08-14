@@ -121,7 +121,8 @@ namespace kmx::sat::simplify::extractor
             database_->iterate_irredundant(
                 [&](const cdcl::clause::ref_t ref) noexcept
                 {
-                    if (database_->storage_of().literals_of(ref).size() == 1u && database_->storage_of().literals_of(ref).front() == lit)
+                    const auto literals = database_->storage_of().view_literals(ref);
+                    if (literals.size() == 1u && literals.front() == lit)
                         found = true;
                 });
             if (found)
@@ -130,7 +131,8 @@ namespace kmx::sat::simplify::extractor
             database_->iterate_redundant(
                 [&](const cdcl::clause::ref_t ref) noexcept
                 {
-                    if (database_->storage_of().literals_of(ref).size() == 1u && database_->storage_of().literals_of(ref).front() == lit)
+                    const auto literals = database_->storage_of().view_literals(ref);
+                    if (literals.size() == 1u && literals.front() == lit)
                         found = true;
                 });
             return found;

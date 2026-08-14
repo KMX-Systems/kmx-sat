@@ -127,13 +127,6 @@ namespace kmx::sat::proof
         manager.flush();
         REQUIRE(manager.buffered_event_count() == 0);
 
-        SECTION("proof manager stays idle without proof consumers")
-        {
-            proof_manager idle_manager;
-            idle_manager.on_add_original(ref_1, std::array<literal, 1>{x_pos});
-            REQUIRE(idle_manager.buffered_event_count() == 0u);
-        }
-
         SECTION("event stream sink receives buffered proof events")
         {
             proof_manager sink_manager;

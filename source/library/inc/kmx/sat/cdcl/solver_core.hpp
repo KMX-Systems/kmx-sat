@@ -557,7 +557,7 @@ namespace kmx::sat::cdcl
             const auto ref = (*ctx->reasons)[index];
             if (!ref.valid())
                 return {};
-            const auto reason_literals = ctx->database->storage_of().literals_of(ref);
+            const auto reason_literals = ctx->database->storage_of().view_literals(ref);
             ctx->reason_scratch.assign(reason_literals.begin(), reason_literals.end());
             return ctx->reason_scratch;
         }
@@ -576,7 +576,7 @@ namespace kmx::sat::cdcl
             if (!ref.valid())
                 return;
 
-            const auto literals = clause_database_.storage_of().literals_of(ref);
+            const auto literals = clause_database_.storage_of().view_literals(ref);
             if (literals.size() <= 1u)
             {
                 unit_clause_refs_.push_back(ref);
@@ -965,7 +965,7 @@ namespace kmx::sat::cdcl
                 if (!clause_database_.storage_of().is_alive(ref))
                     continue;
 
-                const auto literals = clause_database_.storage_of().literals_of(ref);
+                const auto literals = clause_database_.storage_of().view_literals(ref);
                 if (literals.empty())
                 {
                     propagator_.stage_conflict(ref);
@@ -1036,7 +1036,7 @@ namespace kmx::sat::cdcl
                         return consume_staged_conflict(decision_levels, reasons, request, conflicts, trail, current_level);
                     }
 
-                    const auto literals = clause_database_.storage_of().literals_of(ref);
+                    const auto literals = clause_database_.storage_of().view_literals(ref);
                     literal replacement_watch {};
                     bool replacement_found = false;
 
@@ -1078,11 +1078,11 @@ namespace kmx::sat::cdcl
 
             if (!propagation_queue.empty())
             {
-                std::vector<variable> propagated_variables {};
-                propagated_variables.reserve(propagation_queue.size());
+                propagated_variables_scratch_.clear();
+                propagated_variables_scratch_.reserve(propagation_queue.size());
                 for (const auto lit: propagation_queue)
-                    propagated_variables.push_back(lit.variable_of());
-                search_coordinator_.notify_propagated_variables(propagated_variables);
+                    propagated_variables_scratch_.push_back(lit.variable_of());
+                search_coordinator_.notify_propagated_variables(propagated_variables_scratch_);
             }
 
             return status::satisfiable;
@@ -1248,5 +1248,6 @@ namespace kmx::sat::cdcl
         status status_ {status::unknown};
         mutable std::vector<clause::ref_t> ordered_reason_refs_scratch_ {};
         mutable std::vector<proof::clause::id> antecedents_scratch_ {};
+        std::vector<variable> propagated_variables_scratch_ {};
     };
 }

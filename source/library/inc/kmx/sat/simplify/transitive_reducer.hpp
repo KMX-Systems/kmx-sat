@@ -5,6 +5,7 @@
 #ifndef PCH
     #include <cstddef>
     #include <cstdint>
+    #include <span>
     #include <unordered_map>
     #include <vector>
 #endif
@@ -57,10 +58,9 @@ namespace kmx::sat::simplify
                 return;
             }
 
-            std::vector<binary_clause> binary_clauses {};
-            auto adjacency = collect_binary_implication_graph(binary_clauses);
+            build_binary_implication_graph();
 
-            for (const auto& clause: binary_clauses)
+            for (const auto& clause: binary_clauses_)
             {
                 if (!clause.ref.valid() || database_->is_garbage(clause.ref))
                     continue;
@@ -69,8 +69,8 @@ namespace kmx::sat::simplify
                 const auto first_target = clause.second.raw();
                 const auto second_source = clause.second.negated().raw();
                 const auto second_target = clause.first.raw();
-                if (has_alternative_path(adjacency, first_source, first_target, clause) &&
-                    has_alternative_path(adjacency, second_source, second_target, clause))
+                if (has_alternative_path(first_source, first_target, clause) &&
+                    has_alternative_path(second_source, second_target, clause))
                 {
                     if (proof_manager_ != nullptr)
                         proof_manager_->on_delete_clause(clause.ref);
@@ -101,26 +101,65 @@ namespace kmx::sat::simplify
 
         using adjacency_map = std::unordered_map<literal::raw_t, std::vector<literal::raw_t>>;
 
-        [[nodiscard]] adjacency_map collect_binary_implication_graph(std::vector<binary_clause>& binary_clauses) const noexcept
+        /// Compressed literal-to-successor adjacency, rebuilt into reusable buffers on each prune.
+        void build_binary_implication_graph() noexcept
         {
-            adjacency_map adjacency {};
+            binary_clauses_.clear();
+            literal::raw_t highest_raw {};
             const auto collect_clause = [&](const cdcl::clause::ref_t ref) noexcept
             {
                 if (!ref.valid() || database_->is_garbage(ref))
                     return;
 
-                const auto literals = database_->storage_of().literals_of(ref);
+                const auto literals = database_->storage_of().view_literals(ref);
                 if (literals.size() != 2u)
                     return;
 
-                binary_clauses.push_back(binary_clause {ref, literals[0], literals[1]});
-                adjacency[literals[0].negated().raw()].push_back(literals[1].raw());
-                adjacency[literals[1].negated().raw()].push_back(literals[0].raw());
+                binary_clauses_.push_back(binary_clause {ref, literals[0], literals[1]});
+                for (const auto lit: literals)
+                {
+                    if (lit.raw() > highest_raw)
+                        highest_raw = lit.raw();
+                    if (lit.negated().raw() > highest_raw)
+                        highest_raw = lit.negated().raw();
+                }
             };
 
             database_->iterate_irredundant(collect_clause);
             database_->iterate_redundant(collect_clause);
-            return adjacency;
+
+            const auto slots = binary_clauses_.empty() ? 0u : static_cast<std::size_t>(highest_raw) + 1u;
+            adjacency_start_.assign(slots + 1u, 0u);
+            adjacency_entries_.clear();
+            visit_stamp_.assign(slots, 0u);
+            visit_generation_ = 0u;
+            if (slots == 0u)
+                return;
+
+            for (const auto& clause: binary_clauses_)
+            {
+                ++adjacency_start_[static_cast<std::size_t>(clause.first.negated().raw()) + 1u];
+                ++adjacency_start_[static_cast<std::size_t>(clause.second.negated().raw()) + 1u];
+            }
+            for (std::size_t slot {1u}; slot <= slots; ++slot)
+                adjacency_start_[slot] += adjacency_start_[slot - 1u];
+
+            adjacency_entries_.resize(binary_clauses_.size() * 2u);
+            adjacency_fill_.assign(adjacency_start_.begin(), adjacency_start_.end() - 1);
+            for (const auto& clause: binary_clauses_)
+            {
+                adjacency_entries_[adjacency_fill_[clause.first.negated().raw()]++] = clause.second.raw();
+                adjacency_entries_[adjacency_fill_[clause.second.negated().raw()]++] = clause.first.raw();
+            }
+        }
+
+        [[nodiscard]] std::span<const literal::raw_t> successors_of(const literal::raw_t from) const noexcept
+        {
+            const auto slot = static_cast<std::size_t>(from);
+            if (slot + 1u >= adjacency_start_.size())
+                return {};
+            const auto begin = adjacency_start_[slot];
+            return {adjacency_entries_.data() + begin, adjacency_start_[slot + 1u] - begin};
         }
 
         [[nodiscard]] static bool is_excluded_edge(const literal::raw_t from, const literal::raw_t to, const binary_clause& clause) noexcept
@@ -129,21 +168,26 @@ namespace kmx::sat::simplify
                    (from == clause.second.negated().raw() && to == clause.first.raw());
         }
 
-        [[nodiscard]] static bool has_alternative_path(const adjacency_map& adjacency, const literal::raw_t source,
-                                                       const literal::raw_t target, const binary_clause& excluded_clause) noexcept
+        [[nodiscard]] bool has_alternative_path(const literal::raw_t source, const literal::raw_t target,
+                                                const binary_clause& excluded_clause) noexcept
         {
-            std::vector<literal::raw_t> frontier {source};
-            std::unordered_map<literal::raw_t, bool> visited {};
-            visited[source] = true;
+            if (visit_stamp_.empty())
+                return false;
 
-            for (std::size_t index {}; index < frontier.size(); ++index)
+            if (++visit_generation_ == 0u)
             {
-                const auto current = frontier[index];
-                const auto it = adjacency.find(current);
-                if (it == adjacency.end())
-                    continue;
+                visit_stamp_.assign(visit_stamp_.size(), 0u);
+                visit_generation_ = 1u;
+            }
 
-                for (const auto next: it->second)
+            frontier_.clear();
+            frontier_.push_back(source);
+            visit_stamp_[source] = visit_generation_;
+
+            for (std::size_t index {}; index < frontier_.size(); ++index)
+            {
+                const auto current = frontier_[index];
+                for (const auto next: successors_of(current))
                 {
                     if (is_excluded_edge(current, next, excluded_clause))
                         continue;
@@ -151,10 +195,10 @@ namespace kmx::sat::simplify
                     if (next == target && current != source)
                         return true;
 
-                    if (!visited.contains(next))
+                    if (visit_stamp_[next] != visit_generation_)
                     {
-                        visited[next] = true;
-                        frontier.push_back(next);
+                        visit_stamp_[next] = visit_generation_;
+                        frontier_.push_back(next);
                     }
                 }
             }
@@ -164,6 +208,13 @@ namespace kmx::sat::simplify
 
         cdcl::clause::database* database_ {};
         kmx::sat::proof_manager* proof_manager_ {};
+        std::vector<binary_clause> binary_clauses_ {};
+        std::vector<std::uint32_t> adjacency_start_ {};
+        std::vector<literal::raw_t> adjacency_entries_ {};
+        std::vector<std::uint32_t> adjacency_fill_ {};
+        std::vector<std::uint32_t> visit_stamp_ {};
+        std::vector<literal::raw_t> frontier_ {};
+        std::uint32_t visit_generation_ {};
         std::size_t removed_edge_count_ {};
         bool pruned_ {};
     };

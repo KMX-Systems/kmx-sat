@@ -80,7 +80,7 @@ namespace kmx::sat::simplify
             if (database_ == nullptr || !ref.valid() || !database_->storage_of().is_alive(ref))
                 return;
 
-            const auto current_size = database_->storage_of().literals_of(ref).size();
+            const auto current_size = database_->storage_of().literal_count(ref);
             if (current_size <= 1u)
                 return;
         }
