@@ -720,6 +720,24 @@ namespace kmx::sat::cdcl
             return current_value == required_value;
         }
 
+        /// Retracts every assignment made past `trail_mark`, restoring the caller's pre-branch search state.
+        static void undo_trail_to(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
+                                  trail_vector& trail, const std::size_t trail_mark) noexcept
+        {
+            while (trail.size() > trail_mark)
+            {
+                const auto index = static_cast<std::size_t>(trail.back().variable_of().index());
+                trail.pop_back();
+                if (index >= assignment.size())
+                    continue;
+                assignment[index] = unassigned_value;
+                if (index < decision_levels.size())
+                    decision_levels[index] = 0u;
+                if (index < reasons.size())
+                    reasons[index] = clause::ref_t {};
+            }
+        }
+
         static bool literal_is_satisfied(const literal lit, const std::int8_t variable_value) noexcept
         {
             if (variable_value == unassigned_value)
@@ -1142,28 +1160,22 @@ namespace kmx::sat::cdcl
 
             for (const auto candidate_literal: {selected_branch_literal, selected_branch_literal.negated()})
             {
-                auto branch_assignment = assignment;
-                auto branch_levels = decision_levels;
-                auto branch_reasons = reasons;
-                auto branch_trail = trail;
+                const auto trail_mark = trail.size();
 
-                if (!assign_literal(branch_assignment, branch_levels, branch_reasons, candidate_literal, current_level + 1u))
+                if (!assign_literal(assignment, decision_levels, reasons, candidate_literal, current_level + 1u))
                     continue;
 
                 search_coordinator_.notify_assignment_literal(candidate_literal);
-                branch_trail.push_back(candidate_literal);
+                trail.push_back(candidate_literal);
 
                 const std::array<literal, 1> branch_seed {candidate_literal};
-                const auto branch_status = solve_recursive(branch_assignment, branch_levels, branch_reasons, request, conflicts,
-                                                           current_level + 1u, branch_trail, std::span<const literal> {branch_seed});
+                const auto branch_status = solve_recursive(assignment, decision_levels, reasons, request, conflicts,
+                                                           current_level + 1u, trail, std::span<const literal> {branch_seed});
                 if (branch_status == status::satisfiable)
-                {
-                    assignment = std::move(branch_assignment);
-                    decision_levels = std::move(branch_levels);
-                    reasons = std::move(branch_reasons);
-                    trail = std::move(branch_trail);
                     return status::satisfiable;
-                }
+
+                undo_trail_to(assignment, decision_levels, reasons, trail, trail_mark);
+
                 if (branch_status == status::unknown)
                     return status::unknown;
             }
