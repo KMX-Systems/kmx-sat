@@ -44,12 +44,10 @@ source/build/clean-gate-release/default/kmx-sat.d9e8dc1a/kmx-sat
 For a focused local QBS build:
 
 ```bash
-cd /home/cflaviu/Development/kmx/kmx-sat/source
-qbs build -f source.qbs \
-  -d "$PWD/../tools/qbs-release-build" \
-  config:default \
-  profile:default \
-  config:release
+cd /home/cflaviu/Development/kmx/kmx-sat
+qbs build -f source/source.qbs \
+  -d source/build/release \
+  qbs.buildVariant:release
 ```
 
 The exact QBS profile and build variant can differ between machines. The clean gate is

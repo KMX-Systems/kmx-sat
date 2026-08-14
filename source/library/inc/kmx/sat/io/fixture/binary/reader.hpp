@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <array>
     #include <charconv>
     #include <cstdint>
     #include <optional>
@@ -267,7 +268,8 @@ namespace kmx::sat::io::fixture::binary
 
         bool parse_header_line(const std::string_view header) noexcept
         {
-            std::vector<std::string_view> tokens {};
+            std::array<std::string_view, 12> tokens {};
+            std::size_t token_count {};
             std::size_t start {};
             while (start < header.size())
             {
@@ -277,11 +279,13 @@ namespace kmx::sat::io::fixture::binary
                     break;
                 const auto end = header.find(' ', start);
                 const auto token_end = end == std::string::npos ? header.size() : end;
-                tokens.push_back(header.substr(start, token_end - start));
+                if (token_count >= tokens.size())
+                    return false;
+                tokens[token_count++] = header.substr(start, token_end - start);
                 start = token_end == header.size() ? header.size() : token_end + 1u;
             }
 
-            if (tokens.size() != 12u)
+            if (token_count != tokens.size())
                 return false;
 
             std::uint64_t parsed_version {};

@@ -5,6 +5,7 @@
 #ifndef PCH
     #include <array>
     #include <cstring>
+    #include <cstdio>
     #include <format>
     #include <print>
     #include <source_location>
@@ -69,20 +70,11 @@ namespace kmx::logger
             const char* file = full;
             if (const char* last_slash = std::strrchr(full, '/'))
                 file = last_slash + 1;
-            // Route error messages to stderr (unbuffered), others to stdout
-            // Manually flush to ensure immediate output
-            if (lvl == level::error)
-            {
-                std::println(stderr, "[{}] [{1}:{2}] {3}", detail::level_to_char(lvl), file, loc.line(),
-                             std::format(fmt, std::forward<Args>(args)...));
-                std::fflush(stderr);
-            }
-            else
-            {
-                std::println(stdout, "[{}] [{1}:{2}] {3}", detail::level_to_char(lvl), file, loc.line(),
-                             std::format(fmt, std::forward<Args>(args)...));
-                std::fflush(stdout);
-            }
+            // Route errors to stderr and all other levels to stdout, then flush immediately.
+            auto* output = lvl == level::error ? stderr : stdout;
+            std::println(output, "[{}] [{1}:{2}] {3}", detail::level_to_char(lvl), file, loc.line(),
+                         std::format(fmt, std::forward<Args>(args)...));
+            std::fflush(output);
         }
         catch (...)
         {

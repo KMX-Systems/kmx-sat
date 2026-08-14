@@ -27,11 +27,17 @@ namespace kmx::sat
     public:
         /// @brief Constructs a default-initialized instance.
         /// @throws None (noexcept).
-        impl() noexcept { apply_core_configuration(); }
+        impl() noexcept
+        {
+            emitted_statistics_report_lines_.reserve(max_emitted_statistics_report_lines);
+            emitted_statistics_snapshots_.reserve(max_emitted_statistics_report_lines);
+            apply_core_configuration();
+        }
 
         static constexpr std::uint32_t default_decision_conflict_maintenance_interval {16u};
         static constexpr std::uint32_t default_decision_chb_decay_interval {8u};
         static constexpr std::uint32_t default_decision_restart_decay_interval {4u};
+        static constexpr std::size_t max_emitted_statistics_report_lines {64u};
 
         cdcl::solver_core core_ {};
         telemetry::solver_statistics statistics_ {};
@@ -79,6 +85,7 @@ namespace kmx::sat
         std::size_t last_consumed_proof_event_count_ {};
         std::vector<std::string> emitted_statistics_report_lines_ {};
         std::vector<telemetry::solver_statistics::snapshot> emitted_statistics_snapshots_ {};
+        std::vector<literal> learned_clause_literals_ {};
 
         void emit_statistics_report_checkpoint() noexcept
         {
@@ -90,7 +97,6 @@ namespace kmx::sat
             formatter.write_statistics(snapshot, detail);
             emitted_statistics_report_lines_.emplace_back(formatter.buffer_view());
             emitted_statistics_snapshots_.push_back(snapshot);
-            constexpr std::size_t max_emitted_statistics_report_lines = 64u;
             if (emitted_statistics_report_lines_.size() > max_emitted_statistics_report_lines)
                 emitted_statistics_report_lines_.erase(emitted_statistics_report_lines_.begin());
             if (emitted_statistics_snapshots_.size() > max_emitted_statistics_report_lines)
@@ -315,8 +321,10 @@ namespace kmx::sat
         const auto mapped_status = impl_->map_status(core_status);
         impl_->statistics_.add("propagations", static_cast<std::uint64_t>(impl_->core_.propagation_assignment_count()));
 
-        impl_->last_model_.assign(impl_->core_.extract_internal_model().begin(), impl_->core_.extract_internal_model().end());
-        impl_->last_failed_core_.assign(impl_->core_.extract_failed_core().begin(), impl_->core_.extract_failed_core().end());
+        const auto internal_model = impl_->core_.extract_internal_model();
+        impl_->last_model_.assign(internal_model.begin(), internal_model.end());
+        const auto failed_core_span = impl_->core_.extract_failed_core();
+        impl_->last_failed_core_.assign(failed_core_span.begin(), failed_core_span.end());
 
         impl_->statistics_.add("conflicts", impl_->core_.conflict_event_count());
         impl_->statistics_.add("decisions", impl_->core_.decision_event_count());
@@ -331,7 +339,6 @@ namespace kmx::sat
         if (impl_->learn_callback_)
         {
             std::size_t learn_callback_count = 0u;
-            std::vector<literal> learned_clause_literals {};
 
             const auto buffered_events = impl_->core_.buffered_proof_events();
             if (impl_->last_consumed_proof_event_count_ > buffered_events.size())
@@ -343,19 +350,19 @@ namespace kmx::sat
                 if (event.kind != proof::event_kind::add_derived || event.literals.empty())
                     continue;
 
-                learned_clause_literals.clear();
-                learned_clause_literals.reserve(event.literals.size());
+                impl_->learned_clause_literals_.clear();
+                impl_->learned_clause_literals_.reserve(event.literals.size());
                 for (const auto dimacs_literal: event.literals)
                 {
                     const auto parsed_literal = literal_from_dimacs(dimacs_literal);
                     if (parsed_literal.has_value())
-                        learned_clause_literals.push_back(parsed_literal.value());
+                        impl_->learned_clause_literals_.push_back(parsed_literal.value());
                 }
 
-                if (learned_clause_literals.empty())
+                if (impl_->learned_clause_literals_.empty())
                     continue;
 
-                impl_->learn_callback_(std::span<const literal> {learned_clause_literals});
+                impl_->learn_callback_(std::span<const literal> {impl_->learned_clause_literals_});
                 ++learn_callback_count;
                 impl_->statistics_.inc("learn_callback_calls");
             }

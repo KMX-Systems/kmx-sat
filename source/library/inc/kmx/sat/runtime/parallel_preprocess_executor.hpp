@@ -46,8 +46,9 @@ namespace kmx::sat::runtime
             ++runs_;
             if (thread_budget_ < 1u)
                 thread_budget_ = 1u;
-            last_parallel_chunk_size_ =
-                configured_work_item_count_ == 0u ? 0u : (configured_work_item_count_ + thread_budget_ - 1u) / thread_budget_;
+            last_parallel_chunk_size_ = configured_work_item_count_ == 0u ? 0u :
+                                                                           configured_work_item_count_ / thread_budget_ +
+                                                                               (configured_work_item_count_ % thread_budget_ != 0u ? 1u : 0u);
             total_processed_work_item_count_ += configured_work_item_count_;
         }
 

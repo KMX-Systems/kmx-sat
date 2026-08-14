@@ -89,13 +89,14 @@ namespace kmx::sat::runtime
             }
         }
 
-        void set_max_pending(std::size_t max_pending) noexcept
+        void set_max_pending(const std::size_t max_pending) noexcept
         {
             max_pending_ = max_pending;
             if (max_pending_ < 1u)
                 max_pending_ = 1u;
             if (max_pending_ > 4096u)
                 max_pending_ = 4096u;
+            pending_refs_.reserve(max_pending_);
         }
 
         /// @brief Clears all exchange state, for example between unrelated portfolio runs.

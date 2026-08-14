@@ -5,6 +5,7 @@
 #ifndef PCH
     #include <cstdint>
     #include <expected>
+    #include <functional>
     #include <string>
     #include <string_view>
     #include <unordered_map>
@@ -83,6 +84,23 @@ namespace kmx::sat::telemetry
         std::expected<void, validation_error> validate() const noexcept { return {}; }
 
     private:
-        std::unordered_map<std::string, std::int64_t> values_ {};
+        struct string_hash final
+        {
+            using is_transparent = void;
+
+            std::size_t operator()(const std::string_view value) const noexcept { return std::hash<std::string_view> {}(value); }
+
+            std::size_t operator()(const std::string& value) const noexcept { return std::hash<std::string_view> {}(value); }
+        };
+
+        struct string_equal final
+        {
+            using is_transparent = void;
+
+            bool operator()(const std::string_view left, const std::string_view right) const noexcept { return left == right; }
+            bool operator()(const std::string& left, const std::string& right) const noexcept { return left == right; }
+        };
+
+        std::unordered_map<std::string, std::int64_t, string_hash, string_equal> values_ {};
     };
 }

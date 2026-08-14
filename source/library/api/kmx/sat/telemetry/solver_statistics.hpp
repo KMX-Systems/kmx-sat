@@ -6,7 +6,6 @@
     #include <cstdint>
     #include <string>
     #include <string_view>
-    #include <unordered_map>
 #endif
 
 namespace kmx::sat::telemetry
@@ -74,21 +73,63 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         void add(const std::string_view counter_name, const std::uint64_t amount) noexcept
         {
-            snapshot_.conflicts += counter_name == "conflicts" ? amount : 0u;
-            snapshot_.decisions += counter_name == "decisions" ? amount : 0u;
-            snapshot_.propagations += counter_name == "propagations" ? amount : 0u;
-            snapshot_.restarts += counter_name == "restarts" ? amount : 0u;
-            snapshot_.learned_clauses += counter_name == "learned_clauses" ? amount : 0u;
-            snapshot_.learned_clause_glue_total += counter_name == "learned_clause_glue_total" ? amount : 0u;
-            snapshot_.learned_clause_glue_samples += counter_name == "learned_clause_glue_samples" ? amount : 0u;
-            snapshot_.reduction_passes += counter_name == "reduction_passes" ? amount : 0u;
-            snapshot_.reduced_clauses += counter_name == "reduced_clauses" ? amount : 0u;
-            snapshot_.deleted_clauses += counter_name == "deleted_clauses" ? amount : 0u;
-            snapshot_.terminate_callback_calls += counter_name == "terminate_callback_calls" ? amount : 0u;
-            snapshot_.learn_callback_calls += counter_name == "learn_callback_calls" ? amount : 0u;
-            snapshot_.external_propagator_calls += counter_name == "external_propagator_calls" ? amount : 0u;
-            snapshot_.option_updates += counter_name == "option_updates" ? amount : 0u;
-            snapshot_.configuration_updates += counter_name == "configuration_updates" ? amount : 0u;
+            switch (counter_name.size())
+            {
+                case 8u:
+                    if (counter_name == "restarts")
+                        snapshot_.restarts += amount;
+                    break;
+                case 9u:
+                    if (counter_name == "conflicts")
+                        snapshot_.conflicts += amount;
+                    else if (counter_name == "decisions")
+                        snapshot_.decisions += amount;
+                    break;
+                case 12u:
+                    if (counter_name == "propagations")
+                        snapshot_.propagations += amount;
+                    break;
+                case 14u:
+                    if (counter_name == "option_updates")
+                        snapshot_.option_updates += amount;
+                    break;
+                case 15u:
+                    if (counter_name == "learned_clauses")
+                        snapshot_.learned_clauses += amount;
+                    else if (counter_name == "reduced_clauses")
+                        snapshot_.reduced_clauses += amount;
+                    else if (counter_name == "deleted_clauses")
+                        snapshot_.deleted_clauses += amount;
+                    break;
+                case 16u:
+                    if (counter_name == "reduction_passes")
+                        snapshot_.reduction_passes += amount;
+                    break;
+                case 20u:
+                    if (counter_name == "learn_callback_calls")
+                        snapshot_.learn_callback_calls += amount;
+                    break;
+                case 21u:
+                    if (counter_name == "configuration_updates")
+                        snapshot_.configuration_updates += amount;
+                    break;
+                case 24u:
+                    if (counter_name == "terminate_callback_calls")
+                        snapshot_.terminate_callback_calls += amount;
+                    break;
+                case 25u:
+                    if (counter_name == "learned_clause_glue_total")
+                        snapshot_.learned_clause_glue_total += amount;
+                    else if (counter_name == "external_propagator_calls")
+                        snapshot_.external_propagator_calls += amount;
+                    break;
+                case 27u:
+                    if (counter_name == "learned_clause_glue_samples")
+                        snapshot_.learned_clause_glue_samples += amount;
+                    break;
+                default:
+                    break;
+            }
         }
 
         /// @brief Captures an immutable snapshot of the currently tracked counters.
