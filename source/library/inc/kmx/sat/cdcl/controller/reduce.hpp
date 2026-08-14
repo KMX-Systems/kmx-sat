@@ -73,35 +73,11 @@ namespace kmx::sat::cdcl::controller
             ++select_call_count_;
             last_candidates_.clear();
 
-            database.iterate_redundant(
-                [&](const clause::ref_t candidate) noexcept
-                {
-                    if (!candidate.valid() || database.is_reason_clause(candidate))
-                        return;
+            database.iterate_redundant([&](const clause::ref_t candidate) noexcept { evaluate_candidate(database, candidate); });
 
-                    const auto tier = database.tier_of(candidate);
-                    const auto quality = database.quality_of(candidate);
-                    if (tier >= clause::database::default_tier && !retained_by_activity(quality))
-                        last_candidates_.push_back(candidate.offset());
-                });
-
-            std::sort(last_candidates_.begin(), last_candidates_.end(),
-                      [&database](const auto left_offset, const auto right_offset) noexcept
-                      {
-                          const auto left = database.quality_of(clause::ref_t {static_cast<clause::ref_t::offset_t>(left_offset)});
-                          const auto right = database.quality_of(clause::ref_t {static_cast<clause::ref_t::offset_t>(right_offset)});
-                          if (left.tier != right.tier)
-                              return left.tier > right.tier;
-                          if (left.glue != right.glue)
-                              return left.glue > right.glue;
-                          if (left.used_count != right.used_count)
-                              return left.used_count < right.used_count;
-                          if (left.activity != right.activity)
-                              return left.activity < right.activity;
-                          if (left.size != right.size)
-                              return left.size > right.size;
-                          return left_offset < right_offset;
-                      });
+            std::sort(last_candidates_.begin(), last_candidates_.end(), [&database](const auto left, const auto right) noexcept {
+                return compare_candidates(database, left, right);
+            });
 
             last_selected_candidate_count_ = last_candidates_.size();
             trim_to_reduction_quota();
@@ -130,19 +106,9 @@ namespace kmx::sat::cdcl::controller
                     last_candidates_.push_back(candidate.offset());
             }
 
-            std::sort(last_candidates_.begin(), last_candidates_.end(),
-                      [&database](const auto left_offset, const auto right_offset) noexcept
-                      {
-                          const auto left = database.quality_of(clause::ref_t {static_cast<clause::ref_t::offset_t>(left_offset)});
-                          const auto right = database.quality_of(clause::ref_t {static_cast<clause::ref_t::offset_t>(right_offset)});
-                          if (left.glue != right.glue)
-                              return left.glue > right.glue;
-                          if (left.used_count != right.used_count)
-                              return left.used_count < right.used_count;
-                          if (left.activity != right.activity)
-                              return left.activity < right.activity;
-                          return left_offset < right_offset;
-                      });
+            std::sort(last_candidates_.begin(), last_candidates_.end(), [&database](const auto left, const auto right) noexcept {
+                return compare_subset_candidates(database, left, right);
+            });
 
             trim_to_reduction_quota();
             last_selected_candidate_count_ = last_candidates_.size();
@@ -266,6 +232,49 @@ namespace kmx::sat::cdcl::controller
         std::uint64_t reduction_pass_count() const noexcept { return reduction_pass_count_; }
 
     private:
+        static bool compare_subset_candidates(const clause::database& database, const std::uint64_t left_offset,
+                                              const std::uint64_t right_offset) noexcept
+        {
+            const auto left = database.quality_of(clause::ref_t {static_cast<clause::ref_t::offset_t>(left_offset)});
+            const auto right = database.quality_of(clause::ref_t {static_cast<clause::ref_t::offset_t>(right_offset)});
+            if (left.glue != right.glue)
+                return left.glue > right.glue;
+            if (left.used_count != right.used_count)
+                return left.used_count < right.used_count;
+            if (left.activity != right.activity)
+                return left.activity < right.activity;
+            return left_offset < right_offset;
+        }
+
+        static bool compare_candidates(const clause::database& database, const std::uint64_t left_offset,
+                                       const std::uint64_t right_offset) noexcept
+        {
+            const auto left = database.quality_of(clause::ref_t {static_cast<clause::ref_t::offset_t>(left_offset)});
+            const auto right = database.quality_of(clause::ref_t {static_cast<clause::ref_t::offset_t>(right_offset)});
+            if (left.tier != right.tier)
+                return left.tier > right.tier;
+            if (left.glue != right.glue)
+                return left.glue > right.glue;
+            if (left.used_count != right.used_count)
+                return left.used_count < right.used_count;
+            if (left.activity != right.activity)
+                return left.activity < right.activity;
+            if (left.size != right.size)
+                return left.size > right.size;
+            return left_offset < right_offset;
+        }
+
+        void evaluate_candidate(const clause::database& database, const clause::ref_t candidate) noexcept
+        {
+            if (!candidate.valid() || database.is_reason_clause(candidate))
+                return;
+
+            const auto tier = database.tier_of(candidate);
+            const auto quality = database.quality_of(candidate);
+            if (tier >= clause::database::default_tier && !retained_by_activity(quality))
+                last_candidates_.push_back(candidate.offset());
+        }
+
         bool retained_by_activity(const clause::database::quality& quality) const noexcept
         {
             return quality.glue <= 2u && quality.activity >= activity_retention_threshold_ && activity_retention_threshold_ > 0.0;
