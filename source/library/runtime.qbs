@@ -25,6 +25,13 @@ StaticLibrary {
     cpp.enableRtti: false
     cpp.includePaths: ["api", "inc"]
 
+    Properties {
+        condition: qbs.buildVariant === "release"
+        cpp.commonCompilerFlags: ["-Ofast", "-march=native", "-flto=auto"]
+        cpp.linkerFlags: ["-flto=auto"]
+        cpp.defines: ["NDEBUG"]
+    }
+
     Export {
         Depends { name: "cpp" }
         Depends { name: "kmx-sat-types" }

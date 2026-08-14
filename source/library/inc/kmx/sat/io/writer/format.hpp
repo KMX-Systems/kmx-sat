@@ -34,20 +34,21 @@ namespace kmx::sat::io::writer
 
         /// @brief Constructs a format writer with no open output target.
         /// @throws None (noexcept).
-        format() noexcept = default;
+        format() noexcept { buffer_.reserve(1024u); }
 
         /// @brief Serializes a clause's literals in the target output encoding.
         /// @param clause Read-only span of literals to serialize.
         /// @throws None (noexcept).
         void write_clause(const std::span<const literal> clause) noexcept
         {
+            std::array<char, 32u> number {};
             for (const auto lit: clause)
             {
                 const auto variable_index = static_cast<std::int64_t>(lit.variable_of().index());
                 const auto signed_value = lit.is_negated() ? -variable_index : variable_index;
-                char number[32] {};
-                const auto result = std::to_chars(number, number + sizeof(number), signed_value);
-                buffer_.append(number, static_cast<std::size_t>(result.ptr - number));
+                number.fill('\0');
+                const auto result = std::to_chars(number.data(), number.data() + number.size(), signed_value);
+                buffer_.append(number.data(), static_cast<std::size_t>(result.ptr - number.data()));
                 buffer_.push_back(' ');
             }
             buffer_.append("0\n");
@@ -80,6 +81,16 @@ namespace kmx::sat::io::writer
         {
             buffer_.append(line.begin(), line.end());
             if (buffer_.empty() || buffer_.back() != '\n')
+                buffer_.push_back('\n');
+        }
+
+        /// @brief Writes one single-character diagnostic/progress report line.
+        /// @param line Character to write.
+        /// @throws None (noexcept).
+        void write_report_line(const char line) noexcept
+        {
+            buffer_.push_back(line);
+            if (line != '\n')
                 buffer_.push_back('\n');
         }
 

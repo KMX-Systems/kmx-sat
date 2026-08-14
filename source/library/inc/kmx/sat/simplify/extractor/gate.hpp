@@ -184,8 +184,8 @@ namespace kmx::sat::simplify::extractor
             return (static_cast<std::uint64_t>(antecedent) << 32u) | output;
         }
 
-        bool has_binary_implication_clause(const std::unordered_set<std::uint64_t>& binary_implications,
-                                           const std::uint32_t antecedent, const std::uint32_t output) const noexcept
+        bool has_binary_implication_clause(const std::unordered_set<std::uint64_t>& binary_implications, const std::uint32_t antecedent,
+                                           const std::uint32_t output) const noexcept
         {
             return binary_implications.contains(implication_key(antecedent, output));
         }

@@ -59,34 +59,34 @@ namespace kmx::sat::cdcl
             }
 
             // Keep first-occurrence order while removing duplicates by variable identity.
-            std::vector<literal> unique_literals;
-            unique_literals.reserve(learned_literals_.size());
+            unique_scratch_.clear();
+            unique_scratch_.reserve(learned_literals_.size());
             for (const auto lit: learned_literals_)
             {
                 const auto duplicate_it =
-                    std::find_if(unique_literals.begin(), unique_literals.end(), [lit](const literal existing) noexcept
+                    std::find_if(unique_scratch_.begin(), unique_scratch_.end(), [lit](const literal existing) noexcept
                                  { return existing.variable_of().index() == lit.variable_of().index(); });
-                if (duplicate_it == unique_literals.end())
-                    unique_literals.push_back(lit);
+                if (duplicate_it == unique_scratch_.end())
+                    unique_scratch_.push_back(lit);
             }
-            learned_literals_ = std::move(unique_literals);
+            learned_literals_.assign(unique_scratch_.begin(), unique_scratch_.end());
 
             // Conservative minimization: keep asserting literal and drop level-0 tail literals.
             if (learned_literals_.size() > 1u)
             {
-                std::vector<literal> minimized_literals {};
-                minimized_literals.reserve(learned_literals_.size());
-                minimized_literals.push_back(learned_literals_.front());
+                minimized_scratch_.clear();
+                minimized_scratch_.reserve(learned_literals_.size());
+                minimized_scratch_.push_back(learned_literals_.front());
 
                 for (std::size_t index = 1u; index < learned_literals_.size(); ++index)
                 {
                     const auto lit = learned_literals_[index];
                     if (level_of_variable(lit.variable_of()) == 0u)
                         continue;
-                    minimized_literals.push_back(lit);
+                    minimized_scratch_.push_back(lit);
                 }
 
-                learned_literals_ = std::move(minimized_literals);
+                learned_literals_.assign(minimized_scratch_.begin(), minimized_scratch_.end());
             }
 
             // Canonicalize asserting literal position: keep the highest-level literal at index 0.
@@ -152,16 +152,14 @@ namespace kmx::sat::cdcl
             bump_candidates_.clear();
             backjump_level_ = 0u;
 
-            std::vector<literal> conflict_literals {};
-            if (pending_conflict_literals_.empty())
-                conflict_literals.clear();
-            else
+            conflict_scratch_.clear();
+            if (!pending_conflict_literals_.empty())
             {
-                conflict_literals = std::move(pending_conflict_literals_);
+                conflict_scratch_.assign(pending_conflict_literals_.begin(), pending_conflict_literals_.end());
                 pending_conflict_literals_.clear();
             }
 
-            if (conflict_literals.empty() || level_of == nullptr || reason_of == nullptr)
+            if (conflict_scratch_.empty() || level_of == nullptr || reason_of == nullptr)
                 return;
 
             for (const auto index: touched_variable_indices_)
@@ -187,11 +185,11 @@ namespace kmx::sat::cdcl
                 return index < seen_flags_.size() && seen_flags_[index] != 0u;
             };
 
-            std::vector<literal> tail_literals {};
+            tail_scratch_.clear();
             std::uint32_t unresolved_at_current_level {};
             bool have_pivot = false;
             literal pivot {};
-            std::span<const literal> literals_to_resolve = conflict_literals;
+            std::span<const literal> literals_to_resolve = conflict_scratch_;
             auto trail_cursor = static_cast<std::ptrdiff_t>(trail_in_order.size()) - 1;
 
             for (;;)
@@ -211,7 +209,7 @@ namespace kmx::sat::cdcl
                     if (candidate_level >= current_level)
                         ++unresolved_at_current_level;
                     else
-                        tail_literals.push_back(candidate);
+                        tail_scratch_.push_back(candidate);
                 }
 
                 if (unresolved_at_current_level == 0u)
@@ -249,10 +247,10 @@ namespace kmx::sat::cdcl
 
             if (have_pivot)
                 learned_literals_.push_back(pivot.negated());
-            else if (!tail_literals.empty())
+            else if (!tail_scratch_.empty())
             {
-                learned_literals_.push_back(tail_literals.front());
-                tail_literals.erase(tail_literals.begin());
+                learned_literals_.push_back(tail_scratch_.front());
+                tail_scratch_.erase(tail_scratch_.begin());
             }
             else
             {
@@ -260,7 +258,7 @@ namespace kmx::sat::cdcl
             }
 
             std::uint32_t highest_tail_level {};
-            for (const auto lit: tail_literals)
+            for (const auto lit: tail_scratch_)
             {
                 const auto level = level_of(context, lit.variable_of());
                 if (level > highest_tail_level)
@@ -268,7 +266,7 @@ namespace kmx::sat::cdcl
             }
             backjump_level_ = highest_tail_level;
 
-            std::sort(tail_literals.begin(), tail_literals.end(),
+            std::sort(tail_scratch_.begin(), tail_scratch_.end(),
                       [level_of, context](const literal lhs, const literal rhs) noexcept
                       {
                           const auto lhs_level = level_of(context, lhs.variable_of());
@@ -278,19 +276,19 @@ namespace kmx::sat::cdcl
                           return lhs.raw() < rhs.raw();
                       });
 
-            learned_literals_.insert(learned_literals_.end(), tail_literals.begin(), tail_literals.end());
+            learned_literals_.insert(learned_literals_.end(), tail_scratch_.begin(), tail_scratch_.end());
 
-            std::vector<literal> canonical_literals {};
-            canonical_literals.reserve(learned_literals_.size());
+            canonical_scratch_.clear();
+            canonical_scratch_.reserve(learned_literals_.size());
             for (const auto lit: learned_literals_)
             {
                 const auto duplicate_it =
-                    std::find_if(canonical_literals.begin(), canonical_literals.end(), [lit](const literal existing) noexcept
+                    std::find_if(canonical_scratch_.begin(), canonical_scratch_.end(), [lit](const literal existing) noexcept
                                  { return existing.variable_of().index() == lit.variable_of().index(); });
-                if (duplicate_it == canonical_literals.end())
-                    canonical_literals.push_back(lit);
+                if (duplicate_it == canonical_scratch_.end())
+                    canonical_scratch_.push_back(lit);
             }
-            learned_literals_ = std::move(canonical_literals);
+            learned_literals_.assign(canonical_scratch_.begin(), canonical_scratch_.end());
         }
 
         /// @brief Returns the first Unique Implication Point literal found by the last `analyze` call.
@@ -415,6 +413,11 @@ namespace kmx::sat::cdcl
         std::vector<std::pair<variable, std::uint32_t>> decision_levels_ {};
         std::vector<std::uint8_t> seen_flags_ {};
         std::vector<std::size_t> touched_variable_indices_ {};
+        std::vector<literal> unique_scratch_ {};
+        std::vector<literal> minimized_scratch_ {};
+        std::vector<literal> conflict_scratch_ {};
+        std::vector<literal> tail_scratch_ {};
+        std::vector<literal> canonical_scratch_ {};
         std::uint32_t backjump_level_ {};
         std::uint32_t resolution_chain_step_count_ {};
     };

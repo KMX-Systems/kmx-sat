@@ -9,6 +9,16 @@
 
 namespace kmx::sat::io::writer
 {
+    TEST_CASE("writer format serializes single-character report lines", "[sat]")
+    {
+        format formatter;
+
+        formatter.write_report_line('c');
+        formatter.write_report_line('\n');
+
+        REQUIRE(formatter.buffer_view() == "c\n\n");
+    }
+
     TEST_CASE("writer format serializes compact and verbose statistics", "[sat]")
     {
         format formatter;

@@ -41,13 +41,7 @@ namespace kmx::sat::cdcl::store
         {
             enabled_ = enabled;
             if (!enabled_)
-            {
-                cold_refs_.clear();
-                payloads_.clear();
-                cold_footprint_ = 0u;
-                promotion_count_ = 0u;
-                access_count_ = 0u;
-            }
+                reset();
         }
 
         /// @brief Clears all cold payloads and lifecycle counters while preserving the enabled setting.

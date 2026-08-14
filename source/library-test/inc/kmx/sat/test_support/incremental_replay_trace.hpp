@@ -67,14 +67,23 @@ namespace kmx::sat::test_support
                     }
                     output << ']';
                 }
-                if (operation.kind == replay_operation_kind::solve)
+                switch (operation.kind)
+                {
+                case replay_operation_kind::solve:
                     output << ",\"conflict_limit\":" << operation.conflict_limit << ",\"decision_limit\":" << operation.decision_limit;
-                if (operation.kind == replay_operation_kind::set_option)
+                    break;
+                case replay_operation_kind::set_option:
                     output << ",\"option\":\"" << escaped(operation.option_name) << "\",\"value\":" << operation.option_value;
-                if (operation.kind == replay_operation_kind::value_of)
+                    break;
+                case replay_operation_kind::value_of:
                     output << ",\"variable\":" << operation.variable_operand.index();
-                if (operation.kind == replay_operation_kind::failed)
+                    break;
+                case replay_operation_kind::failed:
                     output << ",\"literal\":" << dimacs_value(operation.literal_operand);
+                    break;
+                default:
+                    break;
+                }
                 output << "}\n";
             }
             return output.str();
@@ -183,7 +192,7 @@ namespace kmx::sat::test_support
                 {"value_of", replay_operation_kind::value_of},
             }};
             const auto it = std::lower_bound(kinds.begin(), kinds.end(), value,
-                [](const auto& pair, const std::string_view v) { return pair.first < v; });
+                                             [](const auto& pair, const std::string_view v) { return pair.first < v; });
             if (it != kinds.end() && it->first == value)
                 return it->second;
             return {};

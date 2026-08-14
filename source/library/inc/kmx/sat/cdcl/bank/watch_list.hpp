@@ -42,7 +42,7 @@ namespace kmx::sat::cdcl::bank
         void watch_literal(const literal lit, const watch entry) noexcept
         {
             auto& list = ensure_list(lit);
-            for (auto& existing : list)
+            for (auto& existing: list)
             {
                 if (existing.clause_ref() == entry.clause_ref())
                 {

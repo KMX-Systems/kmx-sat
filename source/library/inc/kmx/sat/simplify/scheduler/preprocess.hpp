@@ -67,19 +67,19 @@ namespace kmx::sat::simplify::scheduler
             std::optional<bool> was_effective {};
         };
 
-        static constexpr std::array<pass_id, 13> baseline_passes {pass_id::transitive_reducer,
-                                                                  pass_id::decomposition,
-                                                                  pass_id::probing,
-                                                                  pass_id::forward_subsumer,
-                                                                  pass_id::blocked,
-                                                                  pass_id::covered,
-                                                                  pass_id::bounded,
-                                                                  pass_id::fast,
-                                                                  pass_id::instantiation,
-                                                                  pass_id::factorizer,
-                                                                  pass_id::gate,
-                                                                  pass_id::congruence,
-                                                                  pass_id::vivifier};
+        static constexpr std::array<pass_id, 13u> baseline_passes {pass_id::transitive_reducer,
+                                                                   pass_id::decomposition,
+                                                                   pass_id::probing,
+                                                                   pass_id::forward_subsumer,
+                                                                   pass_id::blocked,
+                                                                   pass_id::covered,
+                                                                   pass_id::bounded,
+                                                                   pass_id::fast,
+                                                                   pass_id::instantiation,
+                                                                   pass_id::factorizer,
+                                                                   pass_id::gate,
+                                                                   pass_id::congruence,
+                                                                   pass_id::vivifier};
 
         static constexpr std::array<std::string_view, 14> pass_names {
             "transitive_reducer", "decomposition", "probing", "forward_subsumer", "blocked",  "covered", "bounded", "fast",

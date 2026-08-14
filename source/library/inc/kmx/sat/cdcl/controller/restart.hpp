@@ -205,6 +205,9 @@ namespace kmx::sat::cdcl::controller
         std::uint64_t restart_count() const noexcept { return restart_count_; }
 
     private:
+        static constexpr double fast_glue_alpha_ {0.5};
+        static constexpr double slow_glue_alpha_ {0.95};
+        static constexpr std::uint64_t glue_restart_warmup_ {4u};
         std::uint64_t conflict_count_ {};
         std::uint64_t decision_count_ {};
         std::uint64_t restart_count_ {};
@@ -217,8 +220,5 @@ namespace kmx::sat::cdcl::controller
         double slow_glue_ema_ {};
         double glue_restart_threshold_ {};
         std::uint64_t glue_observation_count_ {};
-        static constexpr double fast_glue_alpha_ {0.5};
-        static constexpr double slow_glue_alpha_ {0.95};
-        static constexpr std::uint64_t glue_restart_warmup_ {4u};
     };
 }

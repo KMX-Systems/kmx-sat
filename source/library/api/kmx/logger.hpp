@@ -4,8 +4,8 @@
 #pragma once
 #ifndef PCH
     #include <array>
-    #include <cstring>
     #include <cstdio>
+    #include <cstring>
     #include <format>
     #include <print>
     #include <source_location>

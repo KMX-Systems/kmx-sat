@@ -113,9 +113,8 @@ namespace kmx::sat::cdcl::clause
                 {
                     if (reason_literal.variable_of().index() == variable_index || level_of(context, reason_literal.variable_of()) == 0u ||
                         exact_literals.contains(reason_literal.raw()))
-                    {
                         continue;
-                    }
+
                     if (!self(self, reason_literal.variable_of()))
                     {
                         visiting_variables.erase(variable_index);

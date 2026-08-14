@@ -11,6 +11,14 @@ CppApplication {
     files: [
         "cli/kmx-sat-main.cpp",
     ]
+    Properties {
+        condition: qbs.buildVariant === "release"
+        cpp.debugInformation: false
+        cpp.optimization: "fast"
+        cpp.defines: ["NDEBUG"]
+        cpp.commonCompilerFlags: ["-Ofast", "-march=native", "-flto=auto"]
+        cpp.linkerFlags: ["-flto=auto"]
+    }
     Group {
         fileTagsFilter: product.type
         qbs.install: true

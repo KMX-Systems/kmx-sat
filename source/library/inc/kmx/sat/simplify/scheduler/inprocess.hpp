@@ -494,10 +494,22 @@ namespace kmx::sat::simplify::scheduler
 
         const pass_effectiveness& pass_effectiveness_of(const std::string_view pass_name) const noexcept
         {
-            if (pass_name == "forward_subsumer")
-                return forward_subsumer_effectiveness_;
-            if (pass_name == "vivifier")
-                return vivifier_effectiveness_;
+            if (!pass_name.empty())
+            {
+                switch (pass_name.front())
+                {
+                    case 'f':
+                        if (pass_name == "forward_subsumer")
+                            return forward_subsumer_effectiveness_;
+                        break;
+                    case 'v':
+                        if (pass_name == "vivifier")
+                            return vivifier_effectiveness_;
+                        break;
+                    default:
+                        break;
+                }
+            }
             return congruence_effectiveness_;
         }
 
@@ -562,10 +574,22 @@ namespace kmx::sat::simplify::scheduler
 
         pass_effectiveness& pass_effectiveness_entry(const std::string_view pass_name) noexcept
         {
-            if (pass_name == "forward_subsumer")
-                return forward_subsumer_effectiveness_;
-            if (pass_name == "vivifier")
-                return vivifier_effectiveness_;
+            if (!pass_name.empty())
+            {
+                switch (pass_name.front())
+                {
+                    case 'f':
+                        if (pass_name == "forward_subsumer")
+                            return forward_subsumer_effectiveness_;
+                        break;
+                    case 'v':
+                        if (pass_name == "vivifier")
+                            return vivifier_effectiveness_;
+                        break;
+                    default:
+                        break;
+                }
+            }
             return congruence_effectiveness_;
         }
 
@@ -631,11 +655,11 @@ namespace kmx::sat::simplify::scheduler
         std::uint64_t cooldown_high_yield_streak_ {};
         std::uint64_t telemetry_budget_bonus_ {};
         std::uint64_t telemetry_samples_ {};
-        double conflict_density_ema_ {0.0};
-        double structural_gain_ema_ {0.0};
-        double restart_pressure_ema_ {0.0};
-        double reduction_pressure_ema_ {0.0};
-        double learned_clause_pressure_ema_ {0.0};
+        double conflict_density_ema_ {};
+        double structural_gain_ema_ {};
+        double restart_pressure_ema_ {};
+        double reduction_pressure_ema_ {};
+        double learned_clause_pressure_ema_ {};
         mutable std::size_t reported_summary_count_ {};
     };
 }

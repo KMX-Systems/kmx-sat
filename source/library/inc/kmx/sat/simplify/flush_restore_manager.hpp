@@ -140,8 +140,7 @@ namespace kmx::sat::simplify
             for (const auto ref: to_flush)
                 to_flush_offsets.insert(ref.offset());
 
-            database.flush_satisfied(
-                [&](const cdcl::clause::ref_t ref) noexcept { return to_flush_offsets.contains(ref.offset()); });
+            database.flush_satisfied([&](const cdcl::clause::ref_t ref) noexcept { return to_flush_offsets.contains(ref.offset()); });
             last_flush_removed_count_ += to_flush.size();
         }
 

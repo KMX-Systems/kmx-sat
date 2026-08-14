@@ -61,28 +61,30 @@ namespace kmx::sat::simplify
                     continue;
 
                 const auto left_size = storage.literal_count(refs[left_index]);
-                const auto left_clause = storage.literals_of(refs[left_index]);
+                const auto left_clause = storage.view_literals(refs[left_index]);
                 for (std::size_t right_index {left_index + 1u}; right_index < refs.size(); ++right_index)
                 {
-                    if (database_->is_garbage(refs[right_index]))
+                    const auto right_ref = refs[right_index];
+                    if (database_->is_garbage(right_ref))
                         continue;
 
-                    const auto right_size = storage.literal_count(refs[right_index]);
-                    const auto right_clause = storage.literals_of(refs[right_index]);
+                    const auto right_size = storage.literal_count(right_ref);
+                    const auto right_clause = storage.view_literals(right_ref);
                     if (left_size <= right_size && clause_subsumes(left_clause, right_clause))
                     {
                         if (proof_manager_ != nullptr)
-                            proof_manager_->on_delete_clause(refs[right_index]);
-                        database_->mark_garbage(refs[right_index]);
-                        last_subsumed_ref_ = refs[right_index];
+                            proof_manager_->on_delete_clause(right_ref);
+                        database_->mark_garbage(right_ref);
+                        last_subsumed_ref_ = right_ref;
                         ++subsumed_count_;
                     }
                     else if (right_size <= left_size && clause_subsumes(right_clause, left_clause))
                     {
+                        const auto left_ref = refs[left_index];
                         if (proof_manager_ != nullptr)
-                            proof_manager_->on_delete_clause(refs[left_index]);
-                        database_->mark_garbage(refs[left_index]);
-                        last_subsumed_ref_ = refs[left_index];
+                            proof_manager_->on_delete_clause(left_ref);
+                        database_->mark_garbage(left_ref);
+                        last_subsumed_ref_ = left_ref;
                         ++subsumed_count_;
                         break;
                     }
@@ -103,7 +105,7 @@ namespace kmx::sat::simplify
 
             auto& storage = database_->storage_of();
             const auto candidate_size = storage.literal_count(ref);
-            const auto candidate_clause = storage.literals_of(ref);
+            const auto candidate_clause = storage.view_literals(ref);
             bool subsumed {};
             const auto scan = [&](const cdcl::clause::ref_t other_ref) noexcept
             {
@@ -111,7 +113,7 @@ namespace kmx::sat::simplify
                     return;
                 if (storage.literal_count(other_ref) > candidate_size)
                     return;
-                const auto other_clause = storage.literals_of(other_ref);
+                const auto other_clause = storage.view_literals(other_ref);
                 if (clause_subsumes(other_clause, candidate_clause))
                     subsumed = true;
             };
@@ -150,7 +152,7 @@ namespace kmx::sat::simplify
         cdcl::clause::ref_t last_subsumed_ref() const noexcept { return last_subsumed_ref_; }
 
     private:
-        static bool clause_subsumes(const std::vector<literal>& left, const std::vector<literal>& right) noexcept
+        static bool clause_subsumes(const std::span<const literal> left, const std::span<const literal> right) noexcept
         {
             if (left.empty() || left.size() > right.size())
                 return false;

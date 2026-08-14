@@ -9,4 +9,11 @@ CppApplication {
     files: ["c_api_smoke.c"]
     cpp.cLanguageVersion: "c11"
     cpp.includePaths: ["../library/api"]
+    Properties {
+        condition: qbs.buildVariant === "release"
+        cpp.debugInformation: false
+        cpp.defines: ["NDEBUG"]
+        cpp.commonCompilerFlags: ["-Ofast", "-march=native", "-flto=auto"]
+        cpp.linkerFlags: ["-flto=auto"]
+    }
 }

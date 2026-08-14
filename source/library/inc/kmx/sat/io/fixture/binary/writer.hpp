@@ -121,13 +121,13 @@ namespace kmx::sat::io::fixture::binary
 
             for (const auto& clause: clauses_)
             {
-                format_.write_report_line("c");
+                format_.write_report_line('c');
                 format_.write_clause(clause);
             }
 
             if (schema_.payload_kind_of() == schema::payload_kind::solve_request_fixture)
             {
-                format_.write_report_line("a");
+                format_.write_report_line('a');
                 format_.write_clause(assumptions_);
             }
 
@@ -160,9 +160,9 @@ namespace kmx::sat::io::fixture::binary
     private:
         static void append_number(std::string& output, const std::uint64_t value) noexcept
         {
-            char number[32] {};
-            const auto result = std::to_chars(number, number + sizeof(number), value);
-            output.append(number, static_cast<std::size_t>(result.ptr - number));
+            std::array<char, 32> number {};
+            const auto result = std::to_chars(number.data(), number.data() + number.size(), value);
+            output.append(number.data(), static_cast<std::size_t>(result.ptr - number.data()));
         }
 
         void update_max_variable_index(const literal_span literals) noexcept

@@ -45,11 +45,12 @@ namespace kmx::sat::cdcl::store
             const auto index = index_of(var);
             if (is_sparse(index))
             {
-                sparse_values_[var.index()] = !lit.is_negated();
-                sparse_reasons_[var.index()] = reason;
-                sparse_levels_[var.index()] = current_level_;
-                sparse_trail_positions_[var.index()] = current_trail_position_;
-                sparse_analyzed_[var.index()] = false;
+                const auto var_index = var.index();
+                sparse_values_[var_index] = !lit.is_negated();
+                sparse_reasons_[var_index] = reason;
+                sparse_levels_[var_index] = current_level_;
+                sparse_trail_positions_[var_index] = current_trail_position_;
+                sparse_analyzed_[var_index] = false;
                 return;
             }
             ensure_capacity(index);
@@ -65,11 +66,12 @@ namespace kmx::sat::cdcl::store
             const auto index = index_of(var);
             if (is_sparse(index))
             {
-                sparse_values_.erase(var.index());
-                sparse_reasons_.erase(var.index());
-                sparse_levels_.erase(var.index());
-                sparse_trail_positions_.erase(var.index());
-                sparse_analyzed_.erase(var.index());
+                const auto var_index = var.index();
+                sparse_values_.erase(var_index);
+                sparse_reasons_.erase(var_index);
+                sparse_levels_.erase(var_index);
+                sparse_trail_positions_.erase(var_index);
+                sparse_analyzed_.erase(var_index);
                 return;
             }
             if (index >= values_.size())
@@ -218,7 +220,7 @@ namespace kmx::sat::cdcl::store
         {
             if (index >= values_.size())
             {
-                const auto new_size = index + 1;
+                const auto new_size = index + 1u;
                 values_.resize(new_size);
                 reasons_.resize(new_size);
                 levels_.resize(new_size);

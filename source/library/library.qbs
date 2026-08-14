@@ -51,7 +51,9 @@ StaticLibrary {
 
     Properties {
         condition: qbs.buildVariant === "release"
-        cpp.cxxFlags: ["-Ofast"]
+        cpp.commonCompilerFlags: ["-Ofast", "-march=native", "-flto=auto"]
+        cpp.linkerFlags: ["-flto=auto"]
+        cpp.defines: ["NDEBUG"]
     }
     Properties {
         condition: qbs.buildVariant === "debug"

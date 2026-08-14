@@ -39,22 +39,19 @@ namespace kmx::sat::cdcl::clause
                 return {};
 
             const auto normalized_clause = normalize_clause_literals(literals);
-            if (normalized_clause.empty())
-                return {};
-
-            if (normalized_clause.size() == 1)
+            switch (normalized_clause.size())
             {
-                register_unit(normalized_clause.front());
-                return last_learned_ref_;
+                case 0u:
+                    return {};
+                case 1u:
+                    register_unit(normalized_clause.front());
+                    return last_learned_ref_;
+                case 2u:
+                    register_binary(normalized_clause[0], normalized_clause[1]);
+                    return last_learned_ref_;
+                default:
+                    return register_large(std::span<const literal> {normalized_clause});
             }
-
-            if (normalized_clause.size() == 2)
-            {
-                register_binary(normalized_clause[0], normalized_clause[1]);
-                return last_learned_ref_;
-            }
-
-            return register_large(std::span<const literal> {normalized_clause});
         }
 
         /// @brief Registers a learned unit clause using the specialized unit fast path.
@@ -62,7 +59,7 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         void register_unit(const literal lit) noexcept
         {
-            const literal unit_clause[] {lit};
+            const std::array<literal, 1u> unit_clause {lit};
             last_learned_ref_ = append_clause(std::span<const literal> {unit_clause});
         }
 
@@ -72,7 +69,7 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         void register_binary(const literal first, const literal second) noexcept
         {
-            const literal binary_clause[] {first, second};
+            const std::array<literal, 2u> binary_clause {first, second};
             last_learned_ref_ = append_clause(std::span<const literal> {binary_clause});
         }
 

@@ -48,9 +48,9 @@ namespace kmx::sat::telemetry
         double fast_vs_slow_margin() const noexcept { return glue_fast_ - glue_slow_; }
 
     private:
-        double glue_fast_ {0.0};
-        double glue_slow_ {0.0};
-        double decision_rate_ {0.0};
-        double trail_ {0.0};
+        double glue_fast_ {};
+        double glue_slow_ {};
+        double decision_rate_ {};
+        double trail_ {};
     };
 }

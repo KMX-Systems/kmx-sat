@@ -63,13 +63,13 @@ namespace kmx::sat::io::fixture::binary
                 return false;
 
             raw_fixture_.clear();
-            char buffer[4096] {};
+            std::array<char, 4096u> buffer {};
             for (;;)
             {
-                const auto read_count = source_->read(buffer, sizeof(buffer));
+                const auto read_count = source_->read(buffer.data(), buffer.size());
                 if (read_count == 0)
                     break;
-                raw_fixture_.append(buffer, read_count);
+                raw_fixture_.append(buffer.data(), read_count);
             }
 
             if (raw_fixture_.empty())
@@ -112,41 +112,43 @@ namespace kmx::sat::io::fixture::binary
             {
                 const auto line_end = raw_fixture_.find('\n', line_start);
                 const auto line_length = line_end == std::string::npos ? raw_fixture_.size() - line_start : line_end - line_start;
-                std::string_view line {raw_fixture_.data() + line_start, line_length};
-                line_start = line_end == std::string::npos ? raw_fixture_.size() : line_end + 1u;
-
-                if (line.empty())
-                    continue;
-
-                if (line == "c")
+                if (line_length == 1u)
                 {
-                    const auto clause_end = raw_fixture_.find('\n', line_start);
-                    if (clause_end == std::string::npos)
-                        return false;
-                    std::string_view clause_line {raw_fixture_.data() + line_start, clause_end - line_start};
-                    auto clause = parse_clause_line(clause_line);
-                    if (!clause.has_value() || clause->empty())
-                        return false;
-                    clauses_.push_back(std::move(*clause));
-                    ++parsed_clause_count;
-                    line_start = clause_end + 1u;
-                    continue;
-                }
-
-                if (line == "a")
-                {
-                    const auto assumptions_end = raw_fixture_.find('\n', line_start);
-                    if (assumptions_end == std::string::npos)
-                        return false;
-                    std::string_view assumptions_line {raw_fixture_.data() + line_start, assumptions_end - line_start};
-                    auto parsed_assumptions = parse_clause_line(assumptions_line);
-                    if (!parsed_assumptions.has_value())
-                        return false;
-                    assumptions_ = std::move(*parsed_assumptions);
-                    parsed_assumption_count = assumptions_.size();
-                    request_.assumptions = assumptions_;
-                    line_start = assumptions_end + 1u;
-                    continue;
+                    std::string_view line {raw_fixture_.data() + line_start, line_length};
+                    line_start = line_end == std::string::npos ? raw_fixture_.size() : line_end + 1u;
+                    switch (line.front())
+                    {
+                        case 'c':
+                        {
+                            const auto clause_end = raw_fixture_.find('\n', line_start);
+                            if (clause_end == std::string::npos)
+                                return false;
+                            std::string_view clause_line {raw_fixture_.data() + line_start, clause_end - line_start};
+                            auto clause = parse_clause_line(clause_line);
+                            if (!clause.has_value() || clause->empty())
+                                return false;
+                            clauses_.push_back(std::move(*clause));
+                            ++parsed_clause_count;
+                            line_start = clause_end + 1u;
+                            continue;
+                        }
+                        case 'a':
+                        {
+                            const auto assumptions_end = raw_fixture_.find('\n', line_start);
+                            if (assumptions_end == std::string::npos)
+                                return false;
+                            std::string_view assumptions_line {raw_fixture_.data() + line_start, assumptions_end - line_start};
+                            auto parsed_assumptions = parse_clause_line(assumptions_line);
+                            if (!parsed_assumptions.has_value())
+                                return false;
+                            assumptions_ = std::move(*parsed_assumptions);
+                            parsed_assumption_count = assumptions_.size();
+                            request_.assumptions = assumptions_;
+                            line_start = assumptions_end + 1u;
+                            continue;
+                        }
+                        default:;
+                    }
                 }
             }
 

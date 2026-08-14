@@ -102,13 +102,12 @@ namespace kmx::sat::cdcl
 
             bool satisfied = false;
             for (const auto lit: *clause)
-            {
                 if (literal_satisfied(lit, model))
                 {
                     satisfied = true;
                     break;
                 }
-            }
+
             return satisfied;
         }
 
@@ -126,7 +125,7 @@ namespace kmx::sat::cdcl
             if (!ref.valid())
                 return true;
 
-            const auto literals = clauses_->storage_of().literals_of(ref);
+            const auto literals = clauses_->storage_of().view_literals(ref);
             for (const auto lit: literals)
                 if (literal_satisfied(lit, model))
                     return true;

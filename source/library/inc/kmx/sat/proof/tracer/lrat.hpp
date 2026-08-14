@@ -81,8 +81,7 @@ namespace kmx::sat::proof::tracer
             record.clause_id_value = event.clause_id.value();
             record.literals = event.literals;
             record.antecedent_id_values.reserve(event.antecedent_ids.size());
-            std::transform(event.antecedent_ids.begin(), event.antecedent_ids.end(),
-                           std::back_inserter(record.antecedent_id_values),
+            std::transform(event.antecedent_ids.begin(), event.antecedent_ids.end(), std::back_inserter(record.antecedent_id_values),
                            [](const auto antecedent) { return antecedent.value(); });
             emitted_events_.push_back(record);
         }

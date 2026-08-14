@@ -39,7 +39,7 @@ CppApplication {
         cpp.debugInformation: false
         cpp.optimization: "fast"
         cpp.defines: ["NDEBUG"]
-        cpp.commonCompilerFlags: ["-O3", "-march=native", "-flto=auto"]
+        cpp.commonCompilerFlags: ["-Ofast", "-march=native", "-flto=auto"]
         cpp.linkerFlags: ["-flto=auto"]
     }
 

@@ -50,11 +50,10 @@ namespace kmx::sat::telemetry
                 {
                     const auto wall_now = std::chrono::steady_clock::now();
                     const auto process_now = std::clock();
-                    const auto wall_elapsed_ms =
-                        std::chrono::duration_cast<std::chrono::milliseconds>(wall_now - it->wall_start);
+                    const auto wall_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(wall_now - it->wall_start);
                     const auto process_elapsed_ticks = process_now >= it->process_start ? process_now - it->process_start : 0;
-                    const auto process_elapsed_ms = std::chrono::milliseconds {
-                        static_cast<std::int64_t>(process_elapsed_ticks * 1000 / CLOCKS_PER_SEC)};
+                    const auto process_elapsed_ms =
+                        std::chrono::milliseconds {static_cast<std::int64_t>(process_elapsed_ticks * 1000 / CLOCKS_PER_SEC)};
                     const auto wall_ticks = std::max<std::int64_t>(1, wall_elapsed_ms.count());
                     const auto process_ticks = std::max<std::int64_t>(1, process_elapsed_ms.count());
 

@@ -54,21 +54,17 @@ namespace kmx::sat::cdcl::engine
 
             const auto current_level = decision_frames_->current_level();
             const auto target_level = level < current_level ? level : current_level;
-            const auto trail_head = trail_state_->current_head();
-            const auto trail_base = decision_frames_->trail_base_of_level(target_level + 1u);
-            const auto preserved_head = trail_base < trail_head ? trail_base : trail_head;
-            trail_state_->pop_to(preserved_head < trail_head ? preserved_head : trail_head);
+            {
+                const auto trail_head = trail_state_->current_head();
+                const auto trail_base = decision_frames_->trail_base_of_level(target_level + 1u);
+                const auto preserved_head = trail_base < trail_head ? trail_base : trail_head;
+                trail_state_->pop_to(preserved_head < trail_head ? preserved_head : trail_head);
+            }
 
-            if (target_level == 0u)
-                decision_frames_->pop_to_level(0u);
-            else
-                decision_frames_->pop_to_level(target_level);
-
+            const auto new_level = target_level == 0u ? 0u : target_level;
+            decision_frames_->pop_to_level(new_level);
             assignment_->unassign_above_level(target_level);
-            if (target_level == 0u)
-                assignment_->set_current_level(0u);
-            else
-                assignment_->set_current_level(target_level);
+            assignment_->set_current_level(new_level);
             assignment_->set_current_trail_position(trail_state_->current_head());
             last_backtracked_level_ = target_level;
         }
@@ -80,9 +76,8 @@ namespace kmx::sat::cdcl::engine
             if (trail_state_ == nullptr || assignment_ == nullptr || decision_frames_ == nullptr)
                 return;
             const auto current_level = decision_frames_->current_level();
-            if (current_level == 0u)
-                return;
-            backtrack_to_level(current_level - 1u);
+            if (current_level != 0u)
+                backtrack_to_level(current_level - 1u);
         }
 
         /// @brief Reuses trail/frame metadata for a suffix of the trail that remains valid across the jump.

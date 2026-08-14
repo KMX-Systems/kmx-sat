@@ -46,16 +46,13 @@ namespace kmx::sat::cdcl
             nodes_storage_.push_back(node_value);
             nodes_.emplace(variable_index, node_index);
             if (tail_ == npos)
-            {
                 head_ = node_index;
-                tail_ = node_index;
-            }
             else
             {
                 nodes_storage_[tail_].next = node_index;
                 nodes_storage_[node_index].previous = tail_;
-                tail_ = node_index;
             }
+            tail_ = node_index;
             ++size_;
         }
 
@@ -70,8 +67,11 @@ namespace kmx::sat::cdcl
 
             const auto node_index = it->second;
             unlink(node_index);
-            nodes_storage_[node_index].previous = npos;
-            nodes_storage_[node_index].next = head_;
+            {
+                auto& node_value = nodes_storage_[node_index];
+                node_value.previous = npos;
+                node_value.next = head_;
+            }
             nodes_storage_[head_].previous = node_index;
             head_ = node_index;
         }
@@ -158,8 +158,9 @@ namespace kmx::sat::cdcl
 
         void unlink(const std::size_t node_index) noexcept
         {
-            const auto previous = nodes_storage_[node_index].previous;
-            const auto next = nodes_storage_[node_index].next;
+            const auto& node_value = nodes_storage_[node_index];
+            const auto previous = node_value.previous;
+            const auto next = node_value.next;
             if (previous == npos)
                 head_ = next;
             else

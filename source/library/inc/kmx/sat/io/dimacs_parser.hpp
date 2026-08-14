@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <array>
     #include <cctype>
     #include <cstdint>
     #include <cstdlib>
@@ -47,13 +48,13 @@ namespace kmx::sat::io
             reset_state();
 
             std::string text {};
-            char buffer[4096] {};
+            std::array<char, 4096u> buffer {};
             for (;;)
             {
-                const auto read_count = source.read(buffer, sizeof(buffer));
+                const auto read_count = source.read(buffer.data(), buffer.size());
                 if (read_count == 0)
                     break;
-                text.append(buffer, read_count);
+                text.append(buffer.data(), read_count);
             }
 
             if (text.empty())
@@ -63,6 +64,7 @@ namespace kmx::sat::io
             }
 
             std::vector<literal> clause_buffer {};
+            clause_buffer.reserve(1024u);
             std::size_t line_start = 0;
             while (line_start <= text.size())
             {
@@ -78,28 +80,32 @@ namespace kmx::sat::io
 
                 if (line_view.empty())
                     continue;
-                if (line_view.front() == 'c')
-                    continue;
-
-                if (line_view.front() == 'p')
+                switch (line_view.front())
                 {
-                    if (header_parsed_)
+                    case 'c':
+                        continue;
+                    case 'p':
                     {
-                        error_context_ = "duplicate header";
-                        return false;
-                    }
+                        if (header_parsed_)
+                        {
+                            error_context_ = "duplicate header";
+                            return false;
+                        }
 
-                    std::stringstream line_stream {std::string {line_view}};
-                    std::string p_token {};
-                    std::string format_token {};
-                    line_stream >> p_token >> format_token >> declared_variable_count_ >> declared_clause_count_;
-                    if (!line_stream || p_token != "p" || format_token != "cnf")
-                    {
-                        error_context_ = "invalid header";
-                        return false;
+                        std::stringstream line_stream {std::string {line_view}};
+                        std::string p_token {};
+                        std::string format_token {};
+                        line_stream >> p_token >> format_token >> declared_variable_count_ >> declared_clause_count_;
+                        if (!line_stream || p_token != "p" || format_token != "cnf")
+                        {
+                            error_context_ = "invalid header";
+                            return false;
+                        }
+                        header_parsed_ = true;
+                        continue;
                     }
-                    header_parsed_ = true;
-                    continue;
+                    default:
+                        break;
                 }
 
                 if (!header_parsed_)

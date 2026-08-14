@@ -50,11 +50,11 @@ namespace kmx::sat::cdcl
     public:
         struct inprocess_telemetry_snapshot final
         {
-            double conflict_density_ema {0.0};
-            double structural_gain_ema {0.0};
-            double restart_pressure_ema {0.0};
-            double reduction_pressure_ema {0.0};
-            double learned_clause_pressure_ema {0.0};
+            double conflict_density_ema {};
+            double structural_gain_ema {};
+            double restart_pressure_ema {};
+            double reduction_pressure_ema {};
+            double learned_clause_pressure_ema {};
         };
 
         /// @brief Enumerates the internal (pre-external-mapping) outcomes of one solve episode.
@@ -640,10 +640,10 @@ namespace kmx::sat::cdcl
             return false;
         }
 
-        std::vector<clause::ref_t> build_ordered_reason_chain_refs(const std::span<const literal> chain_literals,
-                                                                   const reason_vector& reasons) const noexcept
+        std::span<const clause::ref_t> build_ordered_reason_chain_refs(const std::span<const literal> chain_literals,
+                                                                       const reason_vector& reasons) const noexcept
         {
-            std::vector<clause::ref_t> ordered_reason_refs {};
+            ordered_reason_refs_scratch_.clear();
 
             for (const auto lit: chain_literals)
             {
@@ -652,43 +652,47 @@ namespace kmx::sat::cdcl
                     continue;
 
                 const auto reason_ref = reasons[variable_index];
-                if (!reason_ref.valid() || contains_clause_ref(ordered_reason_refs, reason_ref))
+                if (!reason_ref.valid() || contains_clause_ref(ordered_reason_refs_scratch_, reason_ref))
                     continue;
 
-                ordered_reason_refs.push_back(reason_ref);
+                ordered_reason_refs_scratch_.push_back(reason_ref);
             }
 
-            return ordered_reason_refs;
+            return ordered_reason_refs_scratch_;
         }
 
-        std::vector<proof::clause::id> build_conflict_antecedents(const clause::ref_t conflict_ref,
-                                                                  const std::span<const clause::ref_t> ordered_reason_refs) const noexcept
+        std::span<const proof::clause::id> build_conflict_antecedents(
+            const clause::ref_t conflict_ref, const std::span<const clause::ref_t> ordered_reason_refs) const noexcept
         {
-            std::vector<proof::clause::id> antecedents {};
+            antecedents_scratch_.clear();
 
             const auto conflict_id = proof_manager_.stable_id_for_clause(conflict_ref);
             if (conflict_id.valid())
-                antecedents.push_back(conflict_id);
+                antecedents_scratch_.push_back(conflict_id);
 
             for (const auto reason_ref: ordered_reason_refs)
             {
                 const auto reason_id = proof_manager_.stable_id_for_clause(reason_ref);
-                if (!reason_id.valid() || contains_clause_id(antecedents, reason_id))
+                if (!reason_id.valid() || contains_clause_id(antecedents_scratch_, reason_id))
                     continue;
-                antecedents.push_back(reason_id);
+                antecedents_scratch_.push_back(reason_id);
             }
 
-            return antecedents;
+            return antecedents_scratch_;
         }
 
         std::uint32_t find_max_variable(const std::span<const literal> assumptions) const noexcept
         {
             std::uint32_t max_variable = 0;
 
-            for (const auto ref: active_clause_refs())
-                for (const auto lit: clause_database_.storage_of().literals_of(ref))
+            const auto process_clause = [&](const clause::ref_t ref) noexcept
+            {
+                for (const auto lit: clause_database_.storage_of().view_literals(ref))
                     if (lit.variable_of().index() > max_variable)
                         max_variable = lit.variable_of().index();
+            };
+            clause_database_.iterate_irredundant(process_clause);
+            clause_database_.iterate_redundant(process_clause);
 
             for (const auto lit: assumptions)
                 if (lit.variable_of().index() > max_variable)
@@ -1242,5 +1246,7 @@ namespace kmx::sat::cdcl
         std::uint64_t learned_clause_glue_total_ {};
         std::uint64_t learned_clause_glue_sample_count_ {};
         status status_ {status::unknown};
+        mutable std::vector<clause::ref_t> ordered_reason_refs_scratch_ {};
+        mutable std::vector<proof::clause::id> antecedents_scratch_ {};
     };
 }

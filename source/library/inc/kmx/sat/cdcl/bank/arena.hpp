@@ -99,6 +99,14 @@ namespace kmx::sat::cdcl::bank
             }
             return result;
         }
+        [[nodiscard]] std::span<const literal> view_literals(const clause::ref_t ref) const noexcept
+        {
+            const auto count = literal_count(ref);
+            if (count == 0u)
+                return {};
+            const auto payload_offset = static_cast<std::size_t>(ref.offset()) + sizeof(std::uint32_t);
+            return {reinterpret_cast<const literal*>(active_.data() + payload_offset), count};
+        }
 
         /// @brief Truncates a clause's stored literal count in place, without moving or reallocating its bytes.
         /// @param ref Reference to the clause to shrink.

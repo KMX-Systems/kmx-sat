@@ -134,6 +134,11 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         [[nodiscard]] std::vector<literal> literals_of(const ref_t ref) const noexcept { return arena_.read_literals(resolve_ref(ref)); }
 
+        [[nodiscard]] std::span<const literal> view_literals(const ref_t ref) const noexcept
+        {
+            return arena_.view_literals(resolve_ref(ref));
+        }
+
         /// @brief Returns the number of literals currently stored for a clause.
         /// @param ref Reference to the clause to query.
         /// @return Literal count, or zero for an invalid reference.

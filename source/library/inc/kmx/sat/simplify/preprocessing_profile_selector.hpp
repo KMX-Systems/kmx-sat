@@ -75,9 +75,9 @@ namespace kmx::sat::simplify
             std::size_t binary_clause_count {};
             std::size_t long_clause_count {};
             std::size_t total_literal_count {};
-            double average_clause_length {0.0};
-            double binary_clause_ratio {0.0};
-            double long_clause_ratio {0.0};
+            double average_clause_length {};
+            double binary_clause_ratio {};
+            double long_clause_ratio {};
         };
 
         struct pass_plan final
@@ -120,7 +120,7 @@ namespace kmx::sat::simplify
                 if (clause_database_->is_garbage(ref))
                     return;
 
-                const auto literals = clause_database_->storage_of().literals_of(ref);
+                const auto literals = clause_database_->storage_of().view_literals(ref);
                 current_fingerprint_.clause_count += 1u;
                 current_fingerprint_.total_literal_count += literals.size();
                 if (literals.size() == 2u)
@@ -183,23 +183,22 @@ namespace kmx::sat::simplify
         void record_pass_effectiveness(const pass_id id, const std::optional<bool> was_effective) noexcept
         {
             ++effectiveness_count_;
-            if (!was_effective.has_value())
-                return;
-
-            if (id == pass_id::factorizer)
-            {
-                ++factorizer_effectiveness_.observed_runs;
-                if (*was_effective)
-                    ++factorizer_effectiveness_.effective_runs;
-                return;
-            }
-
-            if (id == pass_id::probing)
-            {
-                ++probing_effectiveness_.observed_runs;
-                if (*was_effective)
-                    ++probing_effectiveness_.effective_runs;
-            }
+            if (was_effective.has_value())
+                switch (id)
+                {
+                    case pass_id::factorizer:
+                        ++factorizer_effectiveness_.observed_runs;
+                        if (*was_effective)
+                            ++factorizer_effectiveness_.effective_runs;
+                        break;
+                    case pass_id::probing:
+                        ++probing_effectiveness_.observed_runs;
+                        if (*was_effective)
+                            ++probing_effectiveness_.effective_runs;
+                        break;
+                    default:
+                        break;
+                }
         }
 
         /// @brief Compatibility adapter for callers that configure passes by their external names.
@@ -328,11 +327,11 @@ namespace kmx::sat::simplify
         pass_effectiveness probing_effectiveness_ {};
         bool soft_memory_pressure_ {};
         bool has_inprocess_telemetry_ {};
-        double inprocess_conflict_density_ema_ {0.0};
-        double inprocess_structural_gain_ema_ {0.0};
-        double inprocess_restart_pressure_ema_ {0.0};
-        double inprocess_reduction_pressure_ema_ {0.0};
-        double inprocess_learned_clause_pressure_ema_ {0.0};
+        double inprocess_conflict_density_ema_ {};
+        double inprocess_structural_gain_ema_ {};
+        double inprocess_restart_pressure_ema_ {};
+        double inprocess_reduction_pressure_ema_ {};
+        double inprocess_learned_clause_pressure_ema_ {};
         double factorizer_binary_dense_threshold_ {default_factorizer_binary_dense_threshold};
         double probing_long_clause_threshold_ {default_probing_long_clause_threshold};
         std::size_t fingerprint_count_ {};
