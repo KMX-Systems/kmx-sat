@@ -74,10 +74,12 @@ namespace kmx::sat::cdcl::clause
                 redundant_refs_.push_back(ref);
             else
                 irredundant_refs_.push_back(ref);
-            tiers_[ref.offset()] = redundant ? default_tier : 0u;
-            glue_[ref.offset()] = static_cast<std::uint32_t>(literals.size());
-            used_counts_[ref.offset()] = 0u;
-            activities_[ref.offset()] = 0.0;
+            auto& entry = metadata_for(ref.offset());
+            entry.tracked = true;
+            entry.tier = redundant ? default_tier : tier_t {};
+            entry.glue = static_cast<std::uint32_t>(literals.size());
+            entry.used_count = 0u;
+            entry.activity = {};
             return ref;
         }
 
@@ -85,44 +87,41 @@ namespace kmx::sat::cdcl::clause
         [[nodiscard]] quality quality_of(const ref_t ref) const noexcept
         {
             const auto resolved = storage_.resolve_ref(ref);
-            const auto offset = resolved.offset();
-            const auto glue_it = glue_.find(offset);
-            const auto used_it = used_counts_.find(offset);
-            const auto activity_it = activities_.find(offset);
-            return quality {tier_of(resolved), glue_it != glue_.end() ? glue_it->second : 0u,
-                            used_it != used_counts_.end() ? used_it->second : 0u, storage_.literal_count(resolved),
-                            activity_it != activities_.end() ? activity_it->second : 0.0};
+            const auto* entry = metadata_of(resolved.offset());
+            return quality {tier_of(resolved), entry != nullptr ? entry->glue : 0u, entry != nullptr ? entry->used_count : 0u,
+                            storage_.literal_count(resolved), entry != nullptr ? entry->activity : 0.0};
         }
 
         /// @brief Records a clause's current LBD/glue value.
         void set_glue(const ref_t ref, const std::uint32_t glue) noexcept
         {
             if (ref.valid())
-                glue_[storage_.resolve_ref(ref).offset()] = glue;
+                mark_tracked(metadata_for(storage_.resolve_ref(ref).offset())).glue = glue;
         }
 
         /// @brief Records one use of a clause as an implication reason.
         void increment_used_count(const ref_t ref) noexcept
         {
             if (ref.valid())
-                ++used_counts_[storage_.resolve_ref(ref).offset()];
+                ++mark_tracked(metadata_for(storage_.resolve_ref(ref).offset())).used_count;
         }
 
         /// @brief Adds conflict-derived activity to a clause's retention score.
         void increment_activity(const ref_t ref, const double amount = 1.0) noexcept
         {
             if (ref.valid())
-                activities_[storage_.resolve_ref(ref).offset()] += amount;
+                mark_tracked(metadata_for(storage_.resolve_ref(ref).offset())).activity += amount;
         }
 
         /// @brief Ages activity and usage metadata so old conflict history cannot dominate indefinitely.
         void decay_quality(const double factor = 0.5) noexcept
         {
             const auto bounded_factor = factor < 0.0 ? 0.0 : (factor > 1.0 ? 1.0 : factor);
-            for (auto& entry: activities_)
-                entry.second *= bounded_factor;
-            for (auto& entry: used_counts_)
-                entry.second = static_cast<std::uint32_t>(static_cast<double>(entry.second) * bounded_factor);
+            for (auto& entry: metadata_)
+            {
+                entry.activity *= bounded_factor;
+                entry.used_count = static_cast<std::uint32_t>(static_cast<double>(entry.used_count) * bounded_factor);
+            }
         }
 
         /// @brief Marks a clause as garbage, making it eligible for physical reclamation by the garbage collector.
@@ -130,8 +129,14 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         void mark_garbage(const ref_t ref) noexcept
         {
-            if (ref.valid())
-                garbage_.insert(ref.offset());
+            if (!ref.valid())
+                return;
+            auto& entry = metadata_for(ref.offset());
+            if (!entry.garbage)
+            {
+                entry.garbage = true;
+                ++garbage_count_;
+            }
         }
 
         /// @brief Marks a clause as currently serving as an implication reason on the trail.
@@ -140,11 +145,15 @@ namespace kmx::sat::cdcl::clause
         void mark_reason_clause(const ref_t ref) noexcept
         {
             if (ref.valid())
-                reasons_.insert(ref.offset());
+                metadata_for(ref.offset()).reason = true;
         }
 
         /// @brief Clears all transient implication-reason marks for a fresh solve episode.
-        void clear_reason_clauses() noexcept { reasons_.clear(); }
+        void clear_reason_clauses() noexcept
+        {
+            for (auto& entry: metadata_)
+                entry.reason = false;
+        }
 
         /// @brief Rewrites database bookkeeping after a live clause moves to a new physical reference.
         void rewrite_ref_after_gc(const ref_t old_ref, const ref_t new_ref) noexcept
@@ -153,12 +162,17 @@ namespace kmx::sat::cdcl::clause
                 return;
             rewrite_ref_in_vector(irredundant_refs_, old_ref, new_ref);
             rewrite_ref_in_vector(redundant_refs_, old_ref, new_ref);
-            migrate_set_entry(garbage_, old_ref, new_ref);
-            migrate_set_entry(reasons_, old_ref, new_ref);
-            migrate_map_entry(tiers_, old_ref, new_ref);
-            migrate_map_entry(glue_, old_ref, new_ref);
-            migrate_map_entry(used_counts_, old_ref, new_ref);
-            migrate_map_entry(activities_, old_ref, new_ref);
+            const auto* old_entry = metadata_of(old_ref.offset());
+            if (old_entry == nullptr)
+                return;
+            const auto migrated = *old_entry;
+            reset_metadata(old_ref.offset());
+            auto& new_entry = metadata_for(new_ref.offset());
+            if (migrated.garbage && !new_entry.garbage)
+                ++garbage_count_;
+            else if (!migrated.garbage && new_entry.garbage)
+                --garbage_count_;
+            new_entry = migrated;
         }
 
         /// @brief Checks whether a clause is currently marked garbage.
@@ -167,7 +181,8 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         [[nodiscard]] bool is_garbage(const ref_t ref) const noexcept
         {
-            return ref.valid() && garbage_.find(ref.offset()) != garbage_.end();
+            const auto* entry = ref.valid() ? metadata_of(ref.offset()) : nullptr;
+            return entry != nullptr && entry->garbage;
         }
 
         /// @brief Checks whether a clause is currently serving as an implication reason.
@@ -176,7 +191,8 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         [[nodiscard]] bool is_reason_clause(const ref_t ref) const noexcept
         {
-            return ref.valid() && reasons_.find(ref.offset()) != reasons_.end();
+            const auto* entry = ref.valid() ? metadata_of(ref.offset()) : nullptr;
+            return entry != nullptr && entry->reason;
         }
 
         /// @brief Returns a clause's current tier, or `default_tier` if it is not tracked.
@@ -185,9 +201,8 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         [[nodiscard]] tier_t tier_of(const ref_t ref) const noexcept
         {
-            if (const auto it = tiers_.find(ref.offset()); it != tiers_.end())
-                return it->second;
-            return default_tier;
+            const auto* entry = metadata_of(ref.offset());
+            return entry != nullptr && entry->tracked ? entry->tier : default_tier;
         }
 
         /// @brief Moves a clause to a higher-quality tier, typically after repeated useful activity.
@@ -197,9 +212,9 @@ namespace kmx::sat::cdcl::clause
         {
             if (!ref.valid())
                 return;
-            auto& tier = tiers_[ref.offset()];
-            if (tier > 0u)
-                --tier;
+            auto& entry = mark_tracked(metadata_for(ref.offset()));
+            if (entry.tier > 0u)
+                --entry.tier;
         }
 
         /// @brief Moves a clause to a lower-quality tier, typically after prolonged inactivity.
@@ -209,9 +224,9 @@ namespace kmx::sat::cdcl::clause
         {
             if (!ref.valid())
                 return;
-            auto& tier = tiers_[ref.offset()];
-            if (tier < lowest_tier)
-                ++tier;
+            auto& entry = mark_tracked(metadata_for(ref.offset()));
+            if (entry.tier < lowest_tier)
+                ++entry.tier;
         }
 
         /// @brief Visits every irredundant (original) clause currently in the database.
@@ -247,7 +262,7 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         [[nodiscard]] stats stats_snapshot() const noexcept
         {
-            return stats {irredundant_refs_.size(), redundant_refs_.size(), garbage_.size()};
+            return stats {irredundant_refs_.size(), redundant_refs_.size(), garbage_count_};
         }
 
         /// @brief Returns the underlying physical clause storage.
@@ -267,30 +282,58 @@ namespace kmx::sat::cdcl::clause
         [[nodiscard]] std::span<const ref_t> redundant_refs() const noexcept { return redundant_refs_; }
 
     private:
+        /// Per-clause bookkeeping, kept in a flat table indexed by 4-byte-aligned arena offset.
+        struct clause_metadata final
+        {
+            double activity {};
+            std::uint32_t glue {};
+            std::uint32_t used_count {};
+            tier_t tier {};
+            bool tracked {};
+            bool garbage {};
+            bool reason {};
+        };
+
+        static std::size_t metadata_slot_of(const ref_t::offset_t offset) noexcept
+        {
+            return static_cast<std::size_t>(offset) / sizeof(std::uint32_t);
+        }
+
+        const clause_metadata* metadata_of(const ref_t::offset_t offset) const noexcept
+        {
+            const auto slot = metadata_slot_of(offset);
+            return slot < metadata_.size() ? &metadata_[slot] : nullptr;
+        }
+
+        clause_metadata& metadata_for(const ref_t::offset_t offset) noexcept
+        {
+            const auto slot = metadata_slot_of(offset);
+            if (slot >= metadata_.size())
+                metadata_.resize(slot + 1u);
+            return metadata_[slot];
+        }
+
+        static clause_metadata& mark_tracked(clause_metadata& entry) noexcept
+        {
+            entry.tracked = true;
+            return entry;
+        }
+
+        void reset_metadata(const ref_t::offset_t offset) noexcept
+        {
+            const auto slot = metadata_slot_of(offset);
+            if (slot >= metadata_.size())
+                return;
+            if (metadata_[slot].garbage)
+                --garbage_count_;
+            metadata_[slot] = clause_metadata {};
+        }
+
         static void rewrite_ref_in_vector(std::vector<ref_t>& refs, const ref_t old_ref, const ref_t new_ref) noexcept
         {
             for (auto& ref: refs)
                 if (ref == old_ref)
                     ref = new_ref;
-        }
-
-        static void migrate_set_entry(std::unordered_set<ref_t::offset_t>& entries, const ref_t old_ref, const ref_t new_ref) noexcept
-        {
-            if (entries.erase(old_ref.offset()) != 0u)
-                entries.insert(new_ref.offset());
-        }
-
-        template <typename value_t>
-        static void migrate_map_entry(std::unordered_map<ref_t::offset_t, value_t>& entries, const ref_t old_ref,
-                                      const ref_t new_ref) noexcept
-        {
-            const auto it = entries.find(old_ref.offset());
-            if (it != entries.end())
-            {
-                const auto value = it->second;
-                entries.erase(it);
-                entries.insert_or_assign(new_ref.offset(), value);
-            }
         }
 
         template <typename visitor_t>
@@ -311,12 +354,7 @@ namespace kmx::sat::cdcl::clause
                 if (is_satisfied(ref))
                 {
                     storage_.destroy_clause(ref);
-                    garbage_.erase(ref.offset());
-                    reasons_.erase(ref.offset());
-                    tiers_.erase(ref.offset());
-                    glue_.erase(ref.offset());
-                    used_counts_.erase(ref.offset());
-                    activities_.erase(ref.offset());
+                    reset_metadata(ref.offset());
                     continue;
                 }
                 refs[write_index++] = ref;
@@ -327,11 +365,7 @@ namespace kmx::sat::cdcl::clause
         storage storage_ {};
         std::vector<ref_t> irredundant_refs_ {};
         std::vector<ref_t> redundant_refs_ {};
-        std::unordered_set<ref_t::offset_t> garbage_ {};
-        std::unordered_set<ref_t::offset_t> reasons_ {};
-        std::unordered_map<ref_t::offset_t, tier_t> tiers_ {};
-        std::unordered_map<ref_t::offset_t, std::uint32_t> glue_ {};
-        std::unordered_map<ref_t::offset_t, std::uint32_t> used_counts_ {};
-        std::unordered_map<ref_t::offset_t, double> activities_ {};
+        std::vector<clause_metadata> metadata_ {};
+        std::size_t garbage_count_ {};
     };
 }

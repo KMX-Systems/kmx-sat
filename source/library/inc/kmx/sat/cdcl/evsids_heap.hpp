@@ -38,18 +38,18 @@ namespace kmx::sat::cdcl
         void increase_score(const variable var) noexcept
         {
             const auto index = static_cast<std::size_t>(var.index());
-            const auto position_it = positions_.find(index);
-            if (position_it != positions_.end())
+            const auto position = position_of(index);
+            if (position != npos)
             {
-                scores_[position_it->second].second += bump_increment_;
-                sift_up(position_it->second);
+                scores_[position].second += bump_increment_;
+                sift_up(position);
             }
             else
             {
                 scores_.emplace_back(var, bump_increment_);
-                const auto position = scores_.size() - 1u;
-                positions_[index] = position;
-                sift_up(position);
+                const auto new_position = scores_.size() - 1u;
+                set_position(index, new_position);
+                sift_up(new_position);
             }
         }
 
@@ -71,7 +71,7 @@ namespace kmx::sat::cdcl
                 return {};
 
             const variable best = scores_.front().first;
-            positions_.erase(static_cast<std::size_t>(best.index()));
+            erase_position(static_cast<std::size_t>(best.index()));
             if (scores_.size() == 1u)
             {
                 scores_.pop_back();
@@ -80,7 +80,7 @@ namespace kmx::sat::cdcl
 
             scores_.front() = scores_.back();
             scores_.pop_back();
-            positions_[static_cast<std::size_t>(scores_.front().first.index())] = 0u;
+            set_position(static_cast<std::size_t>(scores_.front().first.index()), 0u);
             sift_down(0u);
             return best;
         }
@@ -89,10 +89,7 @@ namespace kmx::sat::cdcl
         /// @param var Variable to query.
         /// @return True if present (unassigned and not eliminated).
         /// @throws None (noexcept).
-        bool contains(const variable var) const noexcept
-        {
-            return positions_.find(static_cast<std::size_t>(var.index())) != positions_.end();
-        }
+        bool contains(const variable var) const noexcept { return position_of(static_cast<std::size_t>(var.index())) != npos; }
 
         /// @brief Restores heap ordering invariants after bulk score or membership changes.
         /// @throws None (noexcept).
@@ -103,6 +100,41 @@ namespace kmx::sat::cdcl
         }
 
     private:
+        static constexpr std::size_t npos {static_cast<std::size_t>(-1)};
+        /// Variable indices below this bound use the flat table; anything above falls back to the overflow map.
+        static constexpr std::size_t direct_index_limit {std::size_t {1} << 24};
+
+        std::size_t position_of(const std::size_t index) const noexcept
+        {
+            if (index < direct_index_limit)
+                return index < positions_.size() ? positions_[index] : npos;
+            const auto it = overflow_positions_.find(index);
+            return it == overflow_positions_.end() ? npos : it->second;
+        }
+
+        void set_position(const std::size_t index, const std::size_t position) noexcept
+        {
+            if (index < direct_index_limit)
+            {
+                if (index >= positions_.size())
+                    positions_.resize(index + 1u, npos);
+                positions_[index] = position;
+                return;
+            }
+            overflow_positions_[index] = position;
+        }
+
+        void erase_position(const std::size_t index) noexcept
+        {
+            if (index < direct_index_limit)
+            {
+                if (index < positions_.size())
+                    positions_[index] = npos;
+                return;
+            }
+            overflow_positions_.erase(index);
+        }
+
         struct heap_compare final
         {
             bool operator()(const std::pair<variable, double>& left, const std::pair<variable, double>& right) const noexcept
@@ -121,8 +153,8 @@ namespace kmx::sat::cdcl
         void swap_entries(const std::size_t left, const std::size_t right) noexcept
         {
             std::swap(scores_[left], scores_[right]);
-            positions_[static_cast<std::size_t>(scores_[left].first.index())] = left;
-            positions_[static_cast<std::size_t>(scores_[right].first.index())] = right;
+            set_position(static_cast<std::size_t>(scores_[left].first.index()), left);
+            set_position(static_cast<std::size_t>(scores_[right].first.index()), right);
         }
 
         void sift_up(std::size_t position) noexcept
@@ -157,13 +189,15 @@ namespace kmx::sat::cdcl
 
         void rebuild_positions() noexcept
         {
-            positions_.clear();
+            std::fill(positions_.begin(), positions_.end(), npos);
+            overflow_positions_.clear();
             for (std::size_t index {}; index < scores_.size(); ++index)
-                positions_[static_cast<std::size_t>(scores_[index].first.index())] = index;
+                set_position(static_cast<std::size_t>(scores_[index].first.index()), index);
         }
 
         std::vector<std::pair<variable, double>> scores_ {};
-        std::unordered_map<std::size_t, std::size_t> positions_ {};
+        std::vector<std::size_t> positions_ {};
+        std::unordered_map<std::size_t, std::size_t> overflow_positions_ {};
         double bump_increment_ {1.0};
     };
 }

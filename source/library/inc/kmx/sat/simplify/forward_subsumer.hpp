@@ -56,54 +56,59 @@ namespace kmx::sat::simplify
             auto& storage = database_->storage_of();
             clauses_.clear();
             const auto append_clause = [&](const cdcl::clause::ref_t ref) noexcept
-            { clauses_.push_back(indexed_clause {ref, storage.view_literals(ref), true}); };
+            {
+                const auto literals = storage.view_literals(ref);
+                clauses_.push_back(indexed_clause {ref, literals, signature_of(literals), true});
+            };
             database_->iterate_irredundant(append_clause);
             database_->iterate_redundant(append_clause);
 
             build_occurrence_index();
 
-            candidate_marks_.assign(clauses_.size(), no_candidate_mark);
             for (std::uint32_t left_index {}; left_index < clauses_.size(); ++left_index)
             {
                 auto& left = clauses_[left_index];
                 if (!left.active || left.literals.empty())
                     continue;
 
+                // Any clause subsuming `left` must contain every literal of `left`, so it necessarily occurs in the
+                // rarest of `left`'s occurrence lists; scanning that single list is exact and avoids redundant work.
                 std::span<const std::uint32_t> rarest_candidates {};
                 bool has_rarest {};
-                bool left_subsumed {};
                 for (const auto lit: left.literals)
                 {
                     const auto candidates = occurrences_of(lit);
                     if (candidates.empty())
-                        continue;
+                    {
+                        has_rarest = false;
+                        break;
+                    }
                     if (!has_rarest || candidates.size() < rarest_candidates.size())
                     {
                         rarest_candidates = candidates;
                         has_rarest = true;
                     }
-
-                    for (const auto candidate_index: candidates)
-                    {
-                        if (candidate_index == left_index || !clauses_[candidate_index].active ||
-                            candidate_marks_[candidate_index] == left_index)
-                            continue;
-                        candidate_marks_[candidate_index] = left_index;
-
-                        const auto& candidate = clauses_[candidate_index];
-                        const bool precedes_equal_clause = candidate_index < left_index && candidate.literals.size() == left.literals.size();
-                        if ((candidate.literals.size() < left.literals.size() || precedes_equal_clause) &&
-                            clause_subsumes(candidate.literals, left.literals))
-                        {
-                            mark_subsumed(left);
-                            left_subsumed = true;
-                            break;
-                        }
-                    }
-                    if (left_subsumed)
-                        break;
                 }
-                if (left_subsumed || !has_rarest)
+                if (!has_rarest)
+                    continue;
+
+                bool left_subsumed {};
+                for (const auto candidate_index: rarest_candidates)
+                {
+                    if (candidate_index == left_index || !clauses_[candidate_index].active)
+                        continue;
+
+                    const auto& candidate = clauses_[candidate_index];
+                    const bool precedes_equal_clause = candidate_index < left_index && candidate.literals.size() == left.literals.size();
+                    if ((candidate.literals.size() < left.literals.size() || precedes_equal_clause) &&
+                        (candidate.signature & ~left.signature) == 0u && clause_subsumes(candidate.literals, left.literals))
+                    {
+                        mark_subsumed(left);
+                        left_subsumed = true;
+                        break;
+                    }
+                }
+                if (left_subsumed)
                     continue;
 
                 for (const auto candidate_index: rarest_candidates)
@@ -112,7 +117,8 @@ namespace kmx::sat::simplify
                         continue;
 
                     auto& candidate = clauses_[candidate_index];
-                    if (left.literals.size() <= candidate.literals.size() && clause_subsumes(left.literals, candidate.literals))
+                    if (left.literals.size() <= candidate.literals.size() && (left.signature & ~candidate.signature) == 0u &&
+                        clause_subsumes(left.literals, candidate.literals))
                         mark_subsumed(candidate);
                 }
             }
@@ -173,14 +179,22 @@ namespace kmx::sat::simplify
         cdcl::clause::ref_t last_subsumed_ref() const noexcept { return last_subsumed_ref_; }
 
     private:
-        static constexpr std::uint32_t no_candidate_mark {~std::uint32_t {}};
-
         struct indexed_clause final
         {
             cdcl::clause::ref_t ref {};
             std::span<const literal> literals {};
+            std::uint64_t signature {};
             bool active {};
         };
+
+        /// Bloom-style literal-set fingerprint: `left` can only subsume `right` when `left.sig & ~right.sig == 0`.
+        static std::uint64_t signature_of(const std::span<const literal> literals) noexcept
+        {
+            std::uint64_t signature {};
+            for (const auto lit: literals)
+                signature |= std::uint64_t {1u} << (lit.raw() & 63u);
+            return signature;
+        }
 
         /// Compressed literal-to-clause occurrence index; avoids per-literal container allocation.
         void build_occurrence_index() noexcept
@@ -268,7 +282,6 @@ namespace kmx::sat::simplify
         std::size_t strengthened_count_ {};
         cdcl::clause::ref_t last_subsumed_ref_ {};
         std::vector<indexed_clause> clauses_ {};
-        std::vector<std::uint32_t> candidate_marks_ {};
         std::vector<std::uint32_t> occurrence_start_ {};
         std::vector<std::uint32_t> occurrence_entries_ {};
         std::vector<std::uint32_t> occurrence_fill_ {};

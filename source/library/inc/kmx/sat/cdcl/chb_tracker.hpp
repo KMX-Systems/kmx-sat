@@ -30,6 +30,8 @@ namespace kmx::sat::cdcl
     class chb_tracker final
     {
     public:
+        static constexpr double zero_d {0.0};
+
         /// @brief Constructs a CHB tracker with zero scores for every variable.
         /// @throws None (noexcept).
         chb_tracker() noexcept = default;
@@ -50,10 +52,8 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         double score_of(const variable var) const noexcept
         {
-            const auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept { return entry.first == var; });
-            if (it == scores_.end())
-                return 0.0;
-            return it->second;
+            const auto slot = slot_of(var);
+            return slot == npos ? zero_d : scores_[slot].second;
         }
 
         /// @brief Returns the highest-scoring tracked variable accepted by an optional predicate.
@@ -63,7 +63,7 @@ namespace kmx::sat::cdcl
             const std::pair<variable, double>* best {};
             for (const auto& entry: scores_)
             {
-                if (entry.second <= 0.0 || !selectable(entry.first))
+                if (entry.second <= zero_d || !selectable(entry.first))
                     continue;
                 if (best == nullptr || entry.second > best->second ||
                     (entry.second == best->second && entry.first.index() < best->first.index()))
@@ -84,10 +84,10 @@ namespace kmx::sat::cdcl
         }
 
         /// @brief Sets the exponential reward learning rate in the inclusive range [0, 1].
-        void set_learning_rate(const double rate) noexcept { learning_rate_ = std::clamp(rate, 0.0, 1.0); }
+        void set_learning_rate(const double rate) noexcept { learning_rate_ = std::clamp(rate, zero_d, 1.0); }
 
         /// @brief Sets the multiplicative decay factor in the inclusive range [0, 1].
-        void set_decay_factor(const double factor) noexcept { decay_factor_ = std::clamp(factor, 0.0, 1.0); }
+        void set_decay_factor(const double factor) noexcept { decay_factor_ = std::clamp(factor, zero_d, 1.0); }
 
         /// @brief Returns how many explicit decay steps have been applied.
         std::uint32_t decay_count() const noexcept { return decay_count_; }
@@ -97,18 +97,32 @@ namespace kmx::sat::cdcl
         std::size_t tracked_variable_count() const noexcept { return scores_.size(); }
 
     private:
+        static constexpr std::size_t npos {static_cast<std::size_t>(-1)};
+
+        std::size_t slot_of(const variable var) const noexcept
+        {
+            const auto index = static_cast<std::size_t>(var.index());
+            return index < slots_.size() ? slots_[index] : npos;
+        }
+
         void update_score(const variable var, const double reward) noexcept
         {
-            auto it = std::find_if(scores_.begin(), scores_.end(), [&](const auto& entry) noexcept { return entry.first == var; });
-            if (it == scores_.end())
+            const auto index = static_cast<std::size_t>(var.index());
+            const auto slot = slot_of(var);
+            if (slot != npos)
             {
-                scores_.emplace_back(var, learning_rate_ * reward);
+                auto& score = scores_[slot].second;
+                score += learning_rate_ * (reward - score);
                 return;
             }
-            it->second += learning_rate_ * (reward - it->second);
+            if (index >= slots_.size())
+                slots_.resize(index + 1u, npos);
+            slots_[index] = scores_.size();
+            scores_.emplace_back(var, learning_rate_ * reward);
         }
 
         std::vector<std::pair<variable, double>> scores_ {};
+        std::vector<std::size_t> slots_ {};
         double learning_rate_ {0.1};
         double decay_factor_ {0.95};
         std::uint32_t decay_count_ {};

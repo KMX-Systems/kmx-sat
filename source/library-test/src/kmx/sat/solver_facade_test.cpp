@@ -9,6 +9,8 @@
 #include <kmx/sat/c_api_adapter.hpp>
 #include <kmx/sat/ipasir.h>
 #include <kmx/sat/literal.hpp>
+#include <kmx/sat/proof/tracer/drat.hpp>
+#include <kmx/sat/proof/tracer/view.hpp>
 #include <kmx/sat/solver.hpp>
 #include <kmx/sat/solver_state_machine.hpp>
 #include <kmx/sat/test_support/statistics_report_assertions.hpp>
@@ -295,6 +297,8 @@ namespace kmx::sat
             REQUIRE(option_solver.decision_maintenance_intervals()[2] == 4u);
             REQUIRE_FALSE(option_solver.cold_storage_enabled());
 
+            proof::tracer::view option_proof_sink {proof::tracer::drat {}};
+            option_solver.attach_proof_sink(option_proof_sink);
             std::vector<literal> clause {literal {variable {9u}, false}};
             option_solver.add_clause(std::span<const literal> {clause});
             const auto result = option_solver.solve(solve_request {});

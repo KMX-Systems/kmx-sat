@@ -55,8 +55,7 @@ namespace kmx::sat::cdcl::clause
         {
             const auto resolved = resolve_ref(ref);
             id_allocator_.retire_on_delete(resolved);
-            redundant_.erase(resolved.offset());
-            alive_.erase(resolved.offset());
+            clear_flags(resolved.offset(), alive_flag | redundant_flag);
         }
 
         /// @brief Relocates a clause to a new arena position, for example during garbage collection.
@@ -75,13 +74,9 @@ namespace kmx::sat::cdcl::clause
             arena_.write_literals(relocated, literals);
 
             if (is_redundant(resolved))
-            {
-                redundant_.erase(resolved.offset());
-                redundant_.insert(relocated.offset());
-            }
-
-            alive_.erase(resolved.offset());
-            alive_.insert(relocated.offset());
+                set_flags(relocated.offset(), redundant_flag);
+            clear_flags(resolved.offset(), alive_flag | redundant_flag);
+            set_flags(relocated.offset(), alive_flag);
             relocated_refs_[resolved.offset()] = relocated.offset();
             id_allocator_.preserve_on_relocation(resolved, relocated);
             return relocated;
@@ -167,8 +162,7 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         [[nodiscard]] bool is_redundant(const ref_t ref) const noexcept
         {
-            const auto resolved = resolve_ref(ref);
-            return redundant_.find(resolved.offset()) != redundant_.end();
+            return has_flags(resolve_ref(ref).offset(), redundant_flag);
         }
 
         /// @brief Returns whether a clause is currently known to be alive in storage.
@@ -177,25 +171,52 @@ namespace kmx::sat::cdcl::clause
         [[nodiscard]] bool is_alive(const ref_t ref) const noexcept
         {
             const auto resolved = resolve_ref(ref);
-            return resolved.valid() && alive_.find(resolved.offset()) != alive_.end();
+            return resolved.valid() && has_flags(resolved.offset(), alive_flag);
         }
 
     private:
+        /// Arena offsets are 4-byte aligned, so `offset / 4` is a dense slot index into the flag table.
+        static constexpr std::uint8_t alive_flag {1u};
+        static constexpr std::uint8_t redundant_flag {2u};
+
+        static std::size_t flag_slot_of(const ref_t::offset_t offset) noexcept
+        {
+            return static_cast<std::size_t>(offset) / sizeof(std::uint32_t);
+        }
+
+        bool has_flags(const ref_t::offset_t offset, const std::uint8_t flags) const noexcept
+        {
+            const auto slot = flag_slot_of(offset);
+            return slot < flags_.size() && (flags_[slot] & flags) != 0u;
+        }
+
+        void set_flags(const ref_t::offset_t offset, const std::uint8_t flags) noexcept
+        {
+            const auto slot = flag_slot_of(offset);
+            if (slot >= flags_.size())
+                flags_.resize(slot + 1u, 0u);
+            flags_[slot] |= flags;
+        }
+
+        void clear_flags(const ref_t::offset_t offset, const std::uint8_t flags) noexcept
+        {
+            const auto slot = flag_slot_of(offset);
+            if (slot < flags_.size())
+                flags_[slot] &= static_cast<std::uint8_t>(~flags);
+        }
+
         ref_t create_clause(const std::span<const literal> literals, const bool redundant) noexcept
         {
             const auto ref = arena_.allocate_clause(literals.size());
             arena_.write_literals(ref, literals);
-            if (redundant)
-                redundant_.insert(ref.offset());
-            alive_.insert(ref.offset());
+            set_flags(ref.offset(), static_cast<std::uint8_t>(alive_flag | (redundant ? redundant_flag : 0u)));
             assign_proof_id(ref);
             return ref;
         }
 
         bank::arena arena_ {};
         proof::clause::id_allocator id_allocator_ {};
-        std::unordered_set<ref_t::offset_t> redundant_ {};
-        std::unordered_set<ref_t::offset_t> alive_ {};
+        std::vector<std::uint8_t> flags_ {};
         mutable std::unordered_map<ref_t::offset_t, ref_t::offset_t> relocated_refs_ {};
     };
 }

@@ -70,7 +70,11 @@ namespace kmx::sat::cdcl
 
         /// @brief Constructs a solver core with an empty clause database and a fresh search coordinator.
         /// @throws None (noexcept).
-        solver_core() noexcept { rebind_internal_views(); }
+        solver_core() noexcept
+        {
+            proof_manager_.set_event_buffering(false);
+            rebind_internal_views();
+        }
 
         /// @brief Resets the core to an empty, freshly bound state without invalidating internal helper pointers.
         /// @throws None (noexcept).
@@ -80,6 +84,7 @@ namespace kmx::sat::cdcl
             search_coordinator_ = {};
             propagator_ = {};
             proof_manager_ = {};
+            proof_manager_.set_event_buffering(false);
             incremental_context_ = {};
             memory_governor_ = {};
             watch_list_ = {};

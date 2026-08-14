@@ -38,13 +38,13 @@ namespace kmx::sat::cdcl
         void activate(const variable var) noexcept
         {
             const auto variable_index = static_cast<std::size_t>(var.index());
-            if (nodes_.find(variable_index) != nodes_.end())
+            if (node_index_of(variable_index) != npos)
                 return;
 
             node node_value {var, npos, npos};
             const auto node_index = nodes_storage_.size();
             nodes_storage_.push_back(node_value);
-            nodes_.emplace(variable_index, node_index);
+            set_node_index(variable_index, node_index);
             if (tail_ == npos)
                 head_ = node_index;
             else
@@ -61,11 +61,10 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void bump(const variable var) noexcept
         {
-            const auto it = nodes_.find(static_cast<std::size_t>(var.index()));
-            if (it == nodes_.end() || it->second == head_)
+            const auto node_index = node_index_of(static_cast<std::size_t>(var.index()));
+            if (node_index == npos || node_index == head_)
                 return;
 
-            const auto node_index = it->second;
             unlink(node_index);
             {
                 auto& node_value = nodes_storage_[node_index];
@@ -91,11 +90,12 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void remove(const variable var) noexcept
         {
-            const auto it = nodes_.find(static_cast<std::size_t>(var.index()));
-            if (it != nodes_.end())
+            const auto variable_index = static_cast<std::size_t>(var.index());
+            const auto node_index = node_index_of(variable_index);
+            if (node_index != npos)
             {
-                unlink(it->second);
-                nodes_.erase(it);
+                unlink(node_index);
+                erase_node_index(variable_index);
                 --size_;
             }
         }
@@ -156,6 +156,40 @@ namespace kmx::sat::cdcl
             std::size_t next {npos};
         };
 
+        /// Variable indices below this bound use the flat table; anything above falls back to the overflow map.
+        static constexpr std::size_t direct_index_limit {std::size_t {1} << 24};
+
+        std::size_t node_index_of(const std::size_t variable_index) const noexcept
+        {
+            if (variable_index < direct_index_limit)
+                return variable_index < node_indices_.size() ? node_indices_[variable_index] : npos;
+            const auto it = overflow_node_indices_.find(variable_index);
+            return it == overflow_node_indices_.end() ? npos : it->second;
+        }
+
+        void set_node_index(const std::size_t variable_index, const std::size_t node_index) noexcept
+        {
+            if (variable_index < direct_index_limit)
+            {
+                if (variable_index >= node_indices_.size())
+                    node_indices_.resize(variable_index + 1u, npos);
+                node_indices_[variable_index] = node_index;
+                return;
+            }
+            overflow_node_indices_[variable_index] = node_index;
+        }
+
+        void erase_node_index(const std::size_t variable_index) noexcept
+        {
+            if (variable_index < direct_index_limit)
+            {
+                if (variable_index < node_indices_.size())
+                    node_indices_[variable_index] = npos;
+                return;
+            }
+            overflow_node_indices_.erase(variable_index);
+        }
+
         void unlink(const std::size_t node_index) noexcept
         {
             const auto& node_value = nodes_storage_[node_index];
@@ -184,7 +218,8 @@ namespace kmx::sat::cdcl
         }
 
         std::vector<node> nodes_storage_ {};
-        std::unordered_map<std::size_t, std::size_t> nodes_ {};
+        std::vector<std::size_t> node_indices_ {};
+        std::unordered_map<std::size_t, std::size_t> overflow_node_indices_ {};
         std::size_t head_ {npos};
         std::size_t tail_ {npos};
         std::size_t size_ {};

@@ -48,6 +48,7 @@ namespace kmx::sat
                 return;
 
             enabled_formats_.push_back(name);
+            event_buffering_enabled_ = true;
             if (name == "drat")
                 enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::drat {}});
             else if (name == "lrat")
@@ -85,7 +86,18 @@ namespace kmx::sat
         /// @brief Registers an external sink that receives buffered proof events from the event stream.
         /// @param sink Callback invoked for every buffered event during flush.
         /// @throws None (noexcept).
-        void set_event_sink(proof::event_stream::sink_t sink) noexcept { event_stream_.set_sink(std::move(sink)); }
+        void set_event_sink(proof::event_stream::sink_t sink) noexcept
+        {
+            event_buffering_enabled_ = true;
+            event_stream_.set_sink(std::move(sink));
+        }
+
+        /// @brief Enables or disables retaining dispatched events in the event stream.
+        /// @details Callers that never read the buffer (a solve with no proof output configured) can disable it to
+        /// avoid building and later freeing one buffered event per clause action. Attaching any tracer, checker or
+        /// sink re-enables buffering.
+        /// @throws None (noexcept).
+        void set_event_buffering(const bool enabled) noexcept { event_buffering_enabled_ = enabled; }
 
         /// @brief Enables an internal proof checker ("online" or "lrat") to run alongside the enabled tracers.
         /// @param checker_name Identifier of the internal checker to enable.
@@ -96,6 +108,9 @@ namespace kmx::sat
                 online_checker_enabled_ = true;
             else if (checker_name == "lrat")
                 lrat_checker_enabled_ = true;
+            else
+                return;
+            event_buffering_enabled_ = true;
         }
 
         /// @brief Registers an external tracer sink to receive proof events alongside internally enabled formats.
@@ -107,6 +122,7 @@ namespace kmx::sat
             if (!format_name.empty() && !has_enabled_format(format_name))
                 enabled_formats_.emplace_back(format_name);
             registered_tracers_.push_back(sink);
+            event_buffering_enabled_ = true;
         }
 
         /// @brief Reports that an original (non-redundant) problem clause was added.
@@ -255,11 +271,14 @@ namespace kmx::sat
         void dispatch_event(const proof::event_kind kind, const cdcl::clause::ref_t ref, const std::span<const literal> literals = {},
                             const std::span<const proof::clause::id> antecedents = {}) noexcept
         {
-            proof::proof_event event {};
+            // Reuse `last_event_`'s buffers so a solve with no proof consumer performs no per-event allocation.
+            auto& event = last_event_;
             event.kind = kind;
             event.clause_ref = ref;
             event.clause_id = resolve_clause_id(kind, ref);
             event.finalized = kind == proof::event_kind::conclusion;
+            event.literals.clear();
+            event.antecedent_ids.clear();
             const auto is_add_or_shrink = kind == proof::event_kind::add_original || kind == proof::event_kind::add_derived ||
                                           kind == proof::event_kind::shrink_clause;
             if (is_add_or_shrink)
@@ -276,9 +295,10 @@ namespace kmx::sat
                 for (const auto& antecedent: antecedents)
                     event.antecedent_ids.push_back(antecedent);
             }
-            last_event_ = event;
-            event_stream_.push_event(std::move(event));
-
+            // With buffering disabled nothing can ever read the buffer, so events are not retained; otherwise a
+            // proof-free solve pays for building and later freeing one buffered event per clause action.
+            if (event_buffering_enabled_)
+                event_stream_.push_event(event);
             if (online_checker_enabled_)
             {
                 switch (kind)
@@ -321,5 +341,6 @@ namespace kmx::sat
         proof::checker::lrat lrat_checker_ {};
         bool online_checker_enabled_ {};
         bool lrat_checker_enabled_ {};
+        bool event_buffering_enabled_ {true};
     };
 }
