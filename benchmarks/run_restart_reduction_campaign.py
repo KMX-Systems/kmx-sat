@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import re
+import signal
 import shlex
 import subprocess
 from pathlib import Path
@@ -14,6 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 METRIC_PATTERN = re.compile(r"\b(conflicts|decisions|propagations|restarts|learned_clauses|reduction_passes|reduced_clauses|deleted_clauses|proof_events)=(\d+)")
+SOLVER_STATUS_EXIT_CODES = {0, 10, 20}
 
 
 def main() -> int:
@@ -23,6 +26,7 @@ def main() -> int:
     parser.add_argument("--cases", type=int, default=32)
     parser.add_argument("--seed", type=int, default=20260814)
     parser.add_argument("--output", type=Path, default=Path("restart-reduction-campaign.json"))
+    parser.add_argument("--timeout", type=float, default=120.0)
     args = parser.parse_args()
     if args.cases < 1:
         parser.error("--cases must be positive")
@@ -48,16 +52,25 @@ def main() -> int:
         command = [str(solver), str(instance)]
         for name, value in options.items():
             command.extend([f"--{name.replace('_', '-')}", str(value)])
-        completed = subprocess.run(command, cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False)
-        output_text = completed.stdout
+        completed = subprocess.Popen(command, cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                     start_new_session=True)
+        try:
+            output_text, _ = completed.communicate(timeout=args.timeout)
+            timed_out = False
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            os.killpg(completed.pid, signal.SIGTERM)
+            output_text = completed.communicate()[0] or ""
         status = "SATISFIABLE" if "s SATISFIABLE" in output_text else "UNSATISFIABLE" if "s UNSATISFIABLE" in output_text else "UNKNOWN"
         metrics = {name: int(value) for name, value in METRIC_PATTERN.findall(output_text)}
         expected = next(entry["expected_status"] for entry in manifest["instances"] if entry["file"] == instance.name)
-        if status != expected:
-            failures.append(f"case {index}: {instance.name} expected {expected}, got {status}")
+        if timed_out or completed.returncode not in SOLVER_STATUS_EXIT_CODES or status != expected:
+            failures.append(f"case {index}: {instance.name} expected {expected}, got {status}, exit={completed.returncode}, timeout={timed_out}")
         for name, value in metrics.items():
             totals[name] = totals.get(name, 0) + value
-        records.append({"case": index, "instance": str(instance.relative_to(ROOT)), "options": options, "status": status, "expected_status": expected, "metrics": metrics, "exit_code": completed.returncode, "command": shlex.join(command)})
+        records.append({"case": index, "instance": str(instance.relative_to(ROOT)), "options": options, "status": status,
+                "expected_status": expected, "metrics": metrics, "exit_code": completed.returncode,
+                "timed_out": timed_out, "command": shlex.join(command)})
 
     report = {
         "schema": 1,

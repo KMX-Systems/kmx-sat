@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import re
+import os
+import signal
 import shutil
 import subprocess
 import statistics
@@ -16,34 +18,42 @@ DEFAULT_SOLVER = REPOSITORY_ROOT / "source/build/release/default/kmx-sat.d9e8dc1
 DEFAULT_CADICAL = REPOSITORY_ROOT / "tools/bin/cadical"
 DEFAULT_KISSAT = REPOSITORY_ROOT / "tools/bin/kissat"
 STATUS_PATTERN = re.compile(r"^s (SATISFIABLE|UNSATISFIABLE)$", re.MULTILINE)
+SOLVER_STATUS_EXIT_CODES = {0, 10, 20}
 
 
-def run_solver(executable: Path, instance: Path, timeout: float, cpu: int | None = None) -> tuple[str, float, bool]:
+def run_solver(executable: Path, instance: Path, timeout: float, cpu: int | None = None) -> tuple[str, float, bool, int]:
     command = [str(executable), str(instance)]
     if cpu is not None:
         command = ["taskset", "-c", str(cpu), *command]
     started = time.perf_counter_ns()
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
     try:
-        completed = subprocess.run(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            timeout=timeout,
-            check=False,
-        )
-        output = completed.stdout
+        output, _ = process.communicate(timeout=timeout)
         timed_out = False
+        exit_code = process.returncode
     except subprocess.TimeoutExpired as error:
         output = error.stdout or b""
         timed_out = True
+        exit_code = -1
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            output += process.communicate(timeout=1.0)[0] or b""
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            output += process.communicate()[0] or b""
     elapsed_ms = (time.perf_counter_ns() - started) / 1_000_000.0
     if isinstance(output, bytes):
         output = output.decode(errors="replace")
     match = STATUS_PATTERN.search(output)
-    return (match.group(1) if match else "UNKNOWN"), elapsed_ms, timed_out
+    return (match.group(1) if match else "UNKNOWN"), elapsed_ms, timed_out, exit_code
 
 
 def summarize(samples: list[float]) -> tuple[float, float, float]:
+    if not samples:
+        return 0.0, 0.0, 0.0
     ordered = sorted(samples)
     return min(ordered), statistics.median(ordered), ordered[min(len(ordered) - 1, int(len(ordered) * 0.9))]
 
@@ -110,19 +120,22 @@ def main() -> int:
         for repeat in range(args.repeat_count):
             ordered_solvers = solvers[repeat % len(solvers):] + solvers[:repeat % len(solvers)]
             for name, executable in ordered_solvers:
-                status, elapsed_ms, timed_out = run_solver(executable, instance, args.timeout, args.cpu)
-                samples[name].append(elapsed_ms)
+                status, elapsed_ms, timed_out, solver_exit_code = run_solver(executable, instance, args.timeout, args.cpu)
+                if not timed_out and status != "UNKNOWN":
+                    samples[name].append(elapsed_ms)
                 statuses.setdefault(name, status)
                 if status != statuses[name]:
                     statuses[name] = "UNKNOWN"
                 if timed_out:
                     timed_out_solvers.add(name)
+                if solver_exit_code not in SOLVER_STATUS_EXIT_CODES:
+                    statuses[name] = "UNKNOWN"
 
         summaries = {name: summarize(values) for name, values in samples.items()}
         results = {name: summaries[name][1] for name, _ in solvers}
 
-        unique_statuses = {s for s in statuses.values() if s != "UNKNOWN"}
-        status_mismatch = len(unique_statuses) > 1
+        unique_statuses = set(statuses.values())
+        status_mismatch = len(unique_statuses) > 1 or "UNKNOWN" in unique_statuses
         if status_mismatch:
             any_mismatch = True
         instance_name_str = f"{instance.name}{'*' if status_mismatch else ''}"

@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import platform
+import signal
 import shlex
 import shutil
 import subprocess
@@ -35,25 +36,33 @@ def run_command(template: str, instance: Path, seed: int, timeout: float, measur
     if measure_memory:
         measured_command = f"/usr/bin/time -f '\\nkmx-memory-kb=%M' sh -c {shlex.quote(command)}"
     started = time.perf_counter_ns()
+    process = subprocess.Popen(
+        measured_command,
+        shell=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
     try:
-        completed = subprocess.run(
-            measured_command,
-            shell=True,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            timeout=timeout,
-            check=False,
-        )
+        output, _ = process.communicate(timeout=timeout)
         timed_out = False
-        exit_code = completed.returncode
-        output = completed.stdout
+        exit_code = process.returncode
     except subprocess.TimeoutExpired as error:
         timed_out = True
         exit_code = None
         output = error.stdout or ""
         if isinstance(output, bytes):
             output = output.decode(errors="replace")
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            output += process.communicate(timeout=1.0)[0] or ""
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            output += process.communicate()[0] or ""
     elapsed_ns = time.perf_counter_ns() - started
     status = "UNKNOWN"
     if "s SATISFIABLE" in output:
@@ -121,15 +130,19 @@ def repeat_signature(result: dict[str, object]) -> tuple[object, object]:
 
 
 def representative_run(runs: list[dict[str, object]]) -> dict[str, object]:
-    elapsed_values = [float(run["elapsed_ms"]) for run in runs]
+    completed_runs = [run for run in runs if not run["timed_out"] and run["status"] != "UNKNOWN"]
+    timing_runs = completed_runs or runs
+    elapsed_values = [float(run["elapsed_ms"]) for run in timing_runs]
     median_ms = statistics.median(elapsed_values)
-    representative = min(runs, key=lambda run: abs(float(run["elapsed_ms"]) - median_ms)).copy()
+    representative = min(timing_runs, key=lambda run: abs(float(run["elapsed_ms"]) - median_ms)).copy()
     ordered = sorted(elapsed_values)
     representative["elapsed_ms_min"] = min(ordered)
     representative["elapsed_ms_median"] = median_ms
     representative["elapsed_ms_p90"] = ordered[min(len(ordered) - 1, int(len(ordered) * 0.9))]
     representative["elapsed_ms"] = median_ms
     representative["elapsed_ns"] = int(median_ms * 1_000_000.0)
+    representative["completed_run_count"] = len(completed_runs)
+    representative["timed_out_run_count"] = sum(1 for run in runs if run["timed_out"])
     return representative
 
 
