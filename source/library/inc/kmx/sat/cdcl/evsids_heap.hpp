@@ -161,7 +161,7 @@ namespace kmx::sat::cdcl
         {
             while (position != 0u)
             {
-                const auto parent = (position - 1u) / 2u;
+                const auto parent = (position - 1u) / 4u;
                 if (!precedes(position, parent))
                     break;
                 swap_entries(position, parent);
@@ -173,13 +173,19 @@ namespace kmx::sat::cdcl
         {
             for (;;)
             {
-                const auto left = position * 2u + 1u;
-                if (left >= scores_.size())
+                const auto first_child = position * 4u + 1u;
+                if (first_child >= scores_.size())
                     return;
-                auto best = left;
-                const auto right = left + 1u;
-                if (right < scores_.size() && precedes(right, left))
-                    best = right;
+                auto best = first_child;
+                const auto second_child = first_child + 1u;
+                if (second_child < scores_.size() && precedes(second_child, best))
+                    best = second_child;
+                const auto third_child = first_child + 2u;
+                if (third_child < scores_.size() && precedes(third_child, best))
+                    best = third_child;
+                const auto fourth_child = first_child + 3u;
+                if (fourth_child < scores_.size() && precedes(fourth_child, best))
+                    best = fourth_child;
                 if (!precedes(best, position))
                     return;
                 swap_entries(position, best);

@@ -59,4 +59,25 @@ namespace kmx::sat::cdcl
         REQUIRE(best.has_value());
         REQUIRE(best->index() == smaller_index.index());
     }
+
+    TEST_CASE("evsids heap preserves ordering across four-ary levels", "[sat]")
+    {
+        evsids_heap heap;
+
+        for (std::size_t index {}; index < 17u; ++index)
+        {
+            const variable candidate {static_cast<variable::index_t>(index + 1u)};
+            for (std::size_t bump {}; bump <= index; ++bump)
+                heap.increase_score(candidate);
+        }
+
+        for (std::size_t index {17u}; index > 0u; --index)
+        {
+            const auto best = heap.extract_best();
+            REQUIRE(best.has_value());
+            REQUIRE(best->index() == index);
+        }
+
+        REQUIRE(!heap.extract_best().has_value());
+    }
 }
