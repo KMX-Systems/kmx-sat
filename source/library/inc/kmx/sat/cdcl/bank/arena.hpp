@@ -27,7 +27,7 @@ namespace kmx::sat::cdcl::bank
         std::uint32_t glue {};
         std::uint32_t tier {};
         std::uint8_t flags {};
-        std::uint8_t padding[3] {};
+        std::uint8_t padding[3u];
     };
 
     static_assert(sizeof(clause_header) == 16u);

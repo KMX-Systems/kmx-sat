@@ -50,15 +50,15 @@ namespace kmx::sat
         learn_callback_t learn_callback_ {};
         external_propagator_hook_t external_propagator_hook_ {};
         proof::tracer::view* proof_sink_ {};
-        std::uint64_t configured_conflict_limit_ {};
-        std::uint64_t configured_decision_limit_ {};
+        counter_t configured_conflict_limit_ {};
+        counter_t configured_decision_limit_ {};
         std::uint64_t configured_enabled_pass_mask_ {};
         std::uint32_t configured_decision_conflict_maintenance_interval_ {};
         std::uint32_t configured_decision_chb_decay_interval_ {};
         std::uint32_t configured_decision_restart_decay_interval_ {};
-        std::uint64_t configured_restart_interval_ {};
-        std::uint64_t configured_decision_restart_interval_ {};
-        std::uint64_t configured_reduction_interval_ {};
+        counter_t configured_restart_interval_ {};
+        counter_t configured_decision_restart_interval_ {};
+        counter_t configured_reduction_interval_ {};
         std::uint32_t configured_reduction_fraction_percent_ {50u};
         double configured_activity_retention_threshold_ {2.0};
         bool configured_chb_enabled_ {};
@@ -430,13 +430,13 @@ namespace kmx::sat
         {
             recognized_option = true;
             impl_->has_configured_conflict_limit_ = value >= 0;
-            impl_->configured_conflict_limit_ = value >= 0 ? static_cast<std::uint64_t>(value) : 0u;
+            impl_->configured_conflict_limit_ = value >= 0 ? static_cast<counter_t>(value) : 0u;
         }
         else if (name == "decision_limit")
         {
             recognized_option = true;
             impl_->has_configured_decision_limit_ = value >= 0;
-            impl_->configured_decision_limit_ = value >= 0 ? static_cast<std::uint64_t>(value) : 0u;
+            impl_->configured_decision_limit_ = value >= 0 ? static_cast<counter_t>(value) : 0u;
         }
         else if (name == "enabled_pass_mask")
         {
@@ -477,19 +477,19 @@ namespace kmx::sat
         {
             recognized_option = true;
             impl_->has_configured_restart_interval_ = value >= 0;
-            impl_->configured_restart_interval_ = value >= 0 ? static_cast<std::uint64_t>(value) : 0u;
+            impl_->configured_restart_interval_ = value >= 0 ? static_cast<counter_t>(value) : 0u;
         }
         else if (name == "decision_restart_interval")
         {
             recognized_option = true;
             impl_->has_configured_decision_restart_interval_ = value >= 0;
-            impl_->configured_decision_restart_interval_ = value >= 0 ? static_cast<std::uint64_t>(value) : 0u;
+            impl_->configured_decision_restart_interval_ = value >= 0 ? static_cast<counter_t>(value) : 0u;
         }
         else if (name == "reduction_interval")
         {
             recognized_option = true;
             impl_->has_configured_reduction_interval_ = value >= 0;
-            impl_->configured_reduction_interval_ = value >= 0 ? static_cast<std::uint64_t>(value) : 0u;
+            impl_->configured_reduction_interval_ = value >= 0 ? static_cast<counter_t>(value) : 0u;
         }
         else if (name == "chb_enabled")
         {
@@ -799,14 +799,14 @@ namespace kmx::sat
         return impl_->core_.cold_footprint_bytes();
     }
 
-    std::optional<std::uint64_t> solver::configured_conflict_limit() const noexcept
+    std::optional<counter_t> solver::configured_conflict_limit() const noexcept
     {
         if (!impl_->has_configured_conflict_limit_)
             return {};
         return impl_->configured_conflict_limit_;
     }
 
-    std::optional<std::uint64_t> solver::configured_decision_limit() const noexcept
+    std::optional<counter_t> solver::configured_decision_limit() const noexcept
     {
         if (!impl_->has_configured_decision_limit_)
             return {};

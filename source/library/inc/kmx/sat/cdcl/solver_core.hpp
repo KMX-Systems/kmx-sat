@@ -160,7 +160,7 @@ namespace kmx::sat::cdcl
             decision_level_vector decision_levels(static_cast<std::size_t>(max_variable + 1u), 0u);
             reason_vector reasons(static_cast<std::size_t>(max_variable + 1u), clause::ref_t {});
             trail_vector trail {};
-            std::uint64_t conflicts = 0;
+            counter_t conflicts = 0;
 
             for (std::uint32_t index = 1u; index <= max_variable; ++index)
                 search_coordinator_.activate_variable(variable {index});
@@ -355,16 +355,16 @@ namespace kmx::sat::cdcl
 
         /// @brief Returns how many inprocess epochs have been executed.
         /// @return Number of inprocess epochs.
-        std::uint64_t inprocess_epoch_count() const noexcept { return inprocess_scheduler_.epoch_count(); }
+        counter_t inprocess_epoch_count() const noexcept { return inprocess_scheduler_.epoch_count(); }
 
         /// @brief Returns conflicts handled during the latest solve episode.
-        std::uint64_t conflict_event_count() const noexcept { return search_coordinator_.conflict_event_count(); }
+        counter_t conflict_event_count() const noexcept { return search_coordinator_.conflict_event_count(); }
 
         /// @brief Returns decisions produced during the latest solve episode.
-        std::uint64_t decision_event_count() const noexcept { return search_coordinator_.decision_event_count(); }
+        counter_t decision_event_count() const noexcept { return search_coordinator_.decision_event_count(); }
 
         /// @brief Returns restarts performed during the latest solve episode.
-        std::uint64_t restart_count() const noexcept { return search_coordinator_.restart_count(); }
+        counter_t restart_count() const noexcept { return search_coordinator_.restart_count(); }
 
         /// @brief Returns learned clauses registered during the latest solve episode.
         std::size_t episode_learned_clause_count() const noexcept { return search_coordinator_.learned_clause_count(); }
@@ -390,15 +390,15 @@ namespace kmx::sat::cdcl
         /// @brief Returns how many finalized learned clauses emitted proof shrink events in the current episode.
         std::size_t learned_clause_shrink_event_count() const noexcept { return learned_clause_shrink_event_count_; }
 
-        std::uint64_t learned_clause_glue_total() const noexcept { return learned_clause_glue_total_; }
+        counter_t learned_clause_glue_total() const noexcept { return learned_clause_glue_total_; }
 
-        std::uint64_t learned_clause_glue_sample_count() const noexcept { return learned_clause_glue_sample_count_; }
+        counter_t learned_clause_glue_sample_count() const noexcept { return learned_clause_glue_sample_count_; }
 
-        std::uint64_t reduction_pass_count() const noexcept { return search_coordinator_.reduction_pass_count(); }
+        counter_t reduction_pass_count() const noexcept { return search_coordinator_.reduction_pass_count(); }
 
-        std::uint64_t reduced_clause_count() const noexcept { return search_coordinator_.reduced_clause_count(); }
+        counter_t reduced_clause_count() const noexcept { return search_coordinator_.reduced_clause_count(); }
 
-        std::uint64_t deleted_clause_count() const noexcept { return search_coordinator_.deleted_clause_count(); }
+        counter_t deleted_clause_count() const noexcept { return search_coordinator_.deleted_clause_count(); }
 
         /// @brief Returns how many assumption propagation calls were observed by the core-owned propagator.
         std::size_t propagator_assumption_call_count() const noexcept { return propagator_.assumption_propagation_call_count(); }
@@ -427,11 +427,11 @@ namespace kmx::sat::cdcl
                                                                    restart_decay_interval);
         }
 
-        void set_restart_interval(const std::uint64_t interval) noexcept { search_coordinator_.set_restart_interval(interval); }
+        void set_restart_interval(const counter_t interval) noexcept { search_coordinator_.set_restart_interval(interval); }
 
-        void set_reduction_interval(const std::uint64_t interval) noexcept { search_coordinator_.set_reduction_interval(interval); }
+        void set_reduction_interval(const counter_t interval) noexcept { search_coordinator_.set_reduction_interval(interval); }
 
-        void set_decision_restart_interval(const std::uint64_t interval) noexcept
+        void set_decision_restart_interval(const counter_t interval) noexcept
         {
             search_coordinator_.set_decision_restart_interval(interval);
         }
@@ -795,12 +795,12 @@ namespace kmx::sat::cdcl
             return variable_value == true_value;
         }
 
-        static bool conflict_limit_reached(const solve_request& request, const std::uint64_t conflicts) noexcept
+        static bool conflict_limit_reached(const solve_request& request, const counter_t conflicts) noexcept
         {
             return request.conflict_limit != 0 && conflicts >= request.conflict_limit;
         }
 
-        static bool decision_limit_reached(const solve_request& request, const std::uint64_t decisions) noexcept
+        static bool decision_limit_reached(const solve_request& request, const counter_t decisions) noexcept
         {
             return request.decision_limit != 0 && decisions >= request.decision_limit;
         }
@@ -899,7 +899,7 @@ namespace kmx::sat::cdcl
 
         conflict_resolution handle_clause_conflict(const clause::ref_t ref, const std::span<const literal> conflict_clause,
                                                     const decision_level_vector& decision_levels, const reason_vector& reasons,
-                                                    const solve_request& request, std::uint64_t& conflicts, const trail_vector& trail,
+                                                    const solve_request& request, counter_t& conflicts, const trail_vector& trail,
                                                     const std::uint32_t current_level) noexcept
         {
             record_last_conflict_clause(conflict_clause);
@@ -1000,7 +1000,7 @@ namespace kmx::sat::cdcl
             inprocess_scheduler_.set_restart_count(search_coordinator_.restart_count());
             inprocess_scheduler_.set_decisions_seen(search_coordinator_.decision_event_count());
             inprocess_scheduler_.set_reduction_passes_seen(search_coordinator_.reduction_pass_count());
-            inprocess_scheduler_.set_learned_clauses_seen(static_cast<std::uint64_t>(search_coordinator_.learned_clause_count()));
+            inprocess_scheduler_.set_learned_clauses_seen(static_cast<counter_t>(search_coordinator_.learned_clause_count()));
             inprocess_scheduler_.run_epoch();
             if (inprocess_scheduler_.epoch_count() > inprocess_epochs_before)
             {
@@ -1026,7 +1026,7 @@ namespace kmx::sat::cdcl
         /// @return Reference to the conflicting clause, or an invalid reference if propagation reached fixpoint.
         /// @throws None (noexcept).
         clause::ref_t propagate_units(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
-                                      const solve_request& request, std::uint64_t& conflicts, const std::uint32_t current_level,
+                                      const solve_request& request, counter_t& conflicts, const std::uint32_t current_level,
                                       trail_vector& trail, const std::span<const literal> seed_literals = {}) noexcept
         {
             (void) request;
@@ -1223,7 +1223,7 @@ namespace kmx::sat::cdcl
         }
 
         search_outcome solve_recursive(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
-                           const solve_request& request, std::uint64_t& conflicts, const std::uint32_t current_level,
+                           const solve_request& request, counter_t& conflicts, const std::uint32_t current_level,
                            trail_vector& trail, const std::span<const literal> seed_literals = {}) noexcept
         {
             const auto propagation_seeds = propagation_state_dirty_ ? std::span<const literal> {trail} : seed_literals;
@@ -1393,8 +1393,8 @@ namespace kmx::sat::cdcl
         std::size_t binary_watch_scan_count_ {};
         std::size_t binary_watch_conflict_count_ {};
         std::size_t learned_clause_shrink_event_count_ {};
-        std::uint64_t learned_clause_glue_total_ {};
-        std::uint64_t learned_clause_glue_sample_count_ {};
+        counter_t learned_clause_glue_total_ {};
+        counter_t learned_clause_glue_sample_count_ {};
         status status_ {status::unknown};
         mutable std::vector<clause::ref_t> ordered_reason_refs_scratch_ {};
         mutable std::vector<proof::clause::id> antecedents_scratch_ {};

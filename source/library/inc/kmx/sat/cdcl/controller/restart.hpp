@@ -5,6 +5,7 @@
 #ifndef PCH
     #include <cstdint>
 #endif
+#include <kmx/sat/counter.hpp>
 
 namespace kmx::sat::cdcl::controller
 {
@@ -99,7 +100,7 @@ namespace kmx::sat::cdcl::controller
 
         double fast_glue_ema() const noexcept { return fast_glue_ema_; }
         double slow_glue_ema() const noexcept { return slow_glue_ema_; }
-        std::uint64_t glue_observation_count() const noexcept { return glue_observation_count_; }
+        counter_t glue_observation_count() const noexcept { return glue_observation_count_; }
 
         /// @brief Advances restart bookkeeping by one decision.
         /// @throws None (noexcept).
@@ -135,7 +136,7 @@ namespace kmx::sat::cdcl::controller
         /// @brief Returns the remaining conflict budget before the next scheduled restart.
         /// @return Remaining conflict budget.
         /// @throws None (noexcept).
-        std::uint64_t current_restart_budget() const noexcept
+        counter_t current_restart_budget() const noexcept
         {
             if (restart_interval_ == 0)
                 return 0;
@@ -156,7 +157,7 @@ namespace kmx::sat::cdcl::controller
         /// @brief Sets the periodic conflict interval used for scheduled restart triggers.
         /// @param interval Number of conflicts between scheduled restart opportunities (zero disables schedule).
         /// @throws None (noexcept).
-        void set_restart_interval(const std::uint64_t interval) noexcept
+        void set_restart_interval(const counter_t interval) noexcept
         {
             restart_interval_ = interval;
             next_scheduled_restart_at_ = conflict_count_ + restart_interval_;
@@ -165,7 +166,7 @@ namespace kmx::sat::cdcl::controller
         /// @brief Sets a periodic decision interval used for scheduled restart triggers.
         /// @param interval Number of decisions between restart opportunities (zero disables decision schedule).
         /// @throws None (noexcept).
-        void set_decision_restart_interval(const std::uint64_t interval) noexcept
+        void set_decision_restart_interval(const counter_t interval) noexcept
         {
             decision_restart_interval_ = interval;
             next_scheduled_decision_restart_at_ = decision_count_ + decision_restart_interval_;
@@ -174,7 +175,7 @@ namespace kmx::sat::cdcl::controller
         /// @brief Returns the remaining decision budget before the next scheduled restart.
         /// @return Remaining decision budget.
         /// @throws None (noexcept).
-        std::uint64_t current_decision_restart_budget() const noexcept
+        counter_t current_decision_restart_budget() const noexcept
         {
             if (decision_restart_interval_ == 0)
                 return 0;
@@ -191,33 +192,33 @@ namespace kmx::sat::cdcl::controller
         /// @brief Returns how many conflicts have been observed by this controller.
         /// @return Total conflict count.
         /// @throws None (noexcept).
-        std::uint64_t conflict_count() const noexcept { return conflict_count_; }
+        counter_t conflict_count() const noexcept { return conflict_count_; }
 
         /// @brief Returns how many decisions have been observed by this controller.
         /// @return Total decision count.
         /// @throws None (noexcept).
-        std::uint64_t decision_count() const noexcept { return decision_count_; }
+        counter_t decision_count() const noexcept { return decision_count_; }
 
         /// @brief Returns how many restarts have been performed.
         /// @return Total restart count.
         /// @throws None (noexcept).
-        std::uint64_t restart_count() const noexcept { return restart_count_; }
+        counter_t restart_count() const noexcept { return restart_count_; }
 
     private:
         static constexpr double fast_glue_alpha_ {0.5};
         static constexpr double slow_glue_alpha_ {0.95};
-        static constexpr std::uint64_t glue_restart_warmup_ {4u};
-        std::uint64_t conflict_count_ {};
-        std::uint64_t decision_count_ {};
-        std::uint64_t restart_count_ {};
-        std::uint64_t restart_interval_ {};
-        std::uint64_t next_scheduled_restart_at_ {};
-        std::uint64_t decision_restart_interval_ {};
-        std::uint64_t next_scheduled_decision_restart_at_ {};
+        static constexpr counter_t glue_restart_warmup_ {4u};
+        counter_t conflict_count_ {};
+        counter_t decision_count_ {};
+        counter_t restart_count_ {};
+        counter_t restart_interval_ {};
+        counter_t next_scheduled_restart_at_ {};
+        counter_t decision_restart_interval_ {};
+        counter_t next_scheduled_decision_restart_at_ {};
         bool restart_pending_ {};
         double fast_glue_ema_ {};
         double slow_glue_ema_ {};
         double glue_restart_threshold_ {};
-        std::uint64_t glue_observation_count_ {};
+        counter_t glue_observation_count_ {};
     };
 }

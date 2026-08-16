@@ -6,6 +6,7 @@
     #include <cstdint>
     #include <vector>
 #endif
+#include <kmx/sat/counter.hpp>
 #include <kmx/sat/literal.hpp>
 
 namespace kmx::sat
@@ -26,10 +27,10 @@ namespace kmx::sat
         std::vector<literal> assumptions {};
         /// @brief Maximum number of conflicts allowed before the episode reports an unknown/terminated status; zero
         /// means unlimited.
-        std::uint64_t conflict_limit {};
+        counter_t conflict_limit {};
         /// @brief Maximum number of decisions allowed before the episode reports an unknown/terminated status; zero
         /// means unlimited.
-        std::uint64_t decision_limit {};
+        counter_t decision_limit {};
         /// @brief Bitmask selecting which preprocessing/inprocessing passes `preprocess_scheduler` and
         /// `inprocess_scheduler` are permitted to run during this episode.
         std::uint64_t enabled_pass_mask {};

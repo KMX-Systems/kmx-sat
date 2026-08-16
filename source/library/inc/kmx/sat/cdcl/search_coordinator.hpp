@@ -441,12 +441,12 @@ namespace kmx::sat::cdcl
         /// @brief Configures periodic restart scheduling by conflict interval.
         /// @param interval Conflicts between restart opportunities (zero disables schedule).
         /// @throws None (noexcept).
-        void set_restart_interval(const std::uint64_t interval) noexcept { restart_controller_.set_restart_interval(interval); }
+        void set_restart_interval(const counter_t interval) noexcept { restart_controller_.set_restart_interval(interval); }
 
         /// @brief Configures periodic restart scheduling by decision interval.
         /// @param interval Decisions between restart opportunities (zero disables schedule).
         /// @throws None (noexcept).
-        void set_decision_restart_interval(const std::uint64_t interval) noexcept
+        void set_decision_restart_interval(const counter_t interval) noexcept
         {
             restart_controller_.set_decision_restart_interval(interval);
         }
@@ -471,7 +471,7 @@ namespace kmx::sat::cdcl
             reduce_controller_.set_reduction_fraction_percent(percent);
         }
 
-        void set_reduction_interval(const std::uint64_t interval) noexcept { reduce_controller_.set_reduction_interval(interval); }
+        void set_reduction_interval(const counter_t interval) noexcept { reduce_controller_.set_reduction_interval(interval); }
 
         /// @brief Returns the configured reduction quota percentage.
         std::uint32_t reduction_fraction_percent() const noexcept { return reduce_controller_.reduction_fraction_percent(); }
@@ -488,36 +488,36 @@ namespace kmx::sat::cdcl
         /// @brief Returns how many restart operations were performed.
         /// @return Number of completed restart operations.
         /// @throws None (noexcept).
-        std::uint64_t restart_count() const noexcept { return restart_controller_.restart_count(); }
+        counter_t restart_count() const noexcept { return restart_controller_.restart_count(); }
 
         /// @brief Returns the remaining scheduled conflict budget before the next restart opportunity.
         /// @return Remaining restart budget in conflicts.
         /// @throws None (noexcept).
-        std::uint64_t current_restart_budget() const noexcept { return restart_controller_.current_restart_budget(); }
+        counter_t current_restart_budget() const noexcept { return restart_controller_.current_restart_budget(); }
 
         /// @brief Returns the remaining scheduled decision budget before the next restart opportunity.
         /// @return Remaining restart budget in decisions.
         /// @throws None (noexcept).
-        std::uint64_t current_decision_restart_budget() const noexcept { return restart_controller_.current_decision_restart_budget(); }
+        counter_t current_decision_restart_budget() const noexcept { return restart_controller_.current_decision_restart_budget(); }
 
         /// @brief Returns how many reduction passes were completed.
         /// @return Number of completed reduction passes.
         /// @throws None (noexcept).
-        std::uint64_t reduction_pass_count() const noexcept { return reduce_controller_.reduction_pass_count(); }
+        counter_t reduction_pass_count() const noexcept { return reduce_controller_.reduction_pass_count(); }
 
-        std::uint64_t reduced_clause_count() const noexcept { return reduce_controller_.reduced_candidates(); }
+        counter_t reduced_clause_count() const noexcept { return reduce_controller_.reduced_candidates(); }
 
-        std::uint64_t deleted_clause_count() const noexcept { return reduce_controller_.flushed_candidates(); }
+        counter_t deleted_clause_count() const noexcept { return reduce_controller_.flushed_candidates(); }
 
         /// @brief Returns how many conflicts were handled in the current episode.
         /// @return Episode conflict count.
         /// @throws None (noexcept).
-        std::uint64_t conflict_event_count() const noexcept { return conflict_count_; }
+        counter_t conflict_event_count() const noexcept { return conflict_count_; }
 
         /// @brief Returns how many decisions were produced in the current episode.
         /// @return Episode decision count.
         /// @throws None (noexcept).
-        std::uint64_t decision_event_count() const noexcept { return decision_count_; }
+        counter_t decision_event_count() const noexcept { return decision_count_; }
 
         /// @brief Notifies the coordinator that an inprocessing epoch has completed.
         /// @throws None (noexcept).
@@ -526,7 +526,7 @@ namespace kmx::sat::cdcl
         /// @brief Notifies the coordinator that an inprocessing epoch has completed and reports structural yield.
         /// @param structural_gain Clauses removed by the epoch (zero means no structural reduction).
         /// @throws None (noexcept).
-        void notify_inprocess_epoch_completed(const std::uint64_t structural_gain) noexcept
+        void notify_inprocess_epoch_completed(const counter_t structural_gain) noexcept
         {
             ++inprocess_epoch_notifications_;
             if (structural_gain == 0u)
@@ -558,15 +558,15 @@ namespace kmx::sat::cdcl
 
         /// @brief Returns how many inprocess epoch completion notifications were observed.
         /// @return Total number of notifications.
-        std::uint64_t inprocess_epoch_notification_count() const noexcept { return inprocess_epoch_notifications_; }
+        counter_t inprocess_epoch_notification_count() const noexcept { return inprocess_epoch_notifications_; }
 
         /// @brief Returns how many low-yield inprocess epochs were observed.
         /// @return Number of zero-gain notifications.
-        std::uint64_t low_yield_inprocess_epoch_count() const noexcept { return low_yield_inprocess_epoch_count_; }
+        counter_t low_yield_inprocess_epoch_count() const noexcept { return low_yield_inprocess_epoch_count_; }
 
         /// @brief Returns how many restart resync operations were deferred after repeated low-yield epochs.
         /// @return Number of deferred resyncs.
-        std::uint64_t deferred_inprocess_resync_count() const noexcept { return deferred_inprocess_resync_count_; }
+        counter_t deferred_inprocess_resync_count() const noexcept { return deferred_inprocess_resync_count_; }
 
     private:
         /// @brief Shared post-analysis conflict handling: learn, backjump, heuristic feedback, and limit checks.
@@ -606,7 +606,7 @@ namespace kmx::sat::cdcl
                 handle_termination(termination_cause::conflict_limit);
         }
 
-        static constexpr std::uint64_t max_deferred_inprocess_resync_streak {1u};
+        static constexpr counter_t max_deferred_inprocess_resync_streak {1u};
 
         propagator propagator_ {};
         conflict_analyzer conflict_analyzer_ {};
@@ -617,15 +617,15 @@ namespace kmx::sat::cdcl
         controller::reduce reduce_controller_ {};
         clause::database* clause_database_ {};
         std::vector<literal> assumptions_ {};
-        std::uint64_t conflict_limit_ {};
-        std::uint64_t decision_limit_ {};
-        std::uint64_t conflict_count_ {};
-        std::uint64_t decision_count_ {};
-        std::uint64_t inprocess_epoch_notifications_ {};
-        std::uint64_t low_yield_inprocess_epoch_count_ {};
-        std::uint64_t low_yield_inprocess_streak_ {};
-        std::uint64_t deferred_inprocess_resync_count_ {};
-        std::uint64_t deferred_inprocess_streak_ {};
+        counter_t conflict_limit_ {};
+        counter_t decision_limit_ {};
+        counter_t conflict_count_ {};
+        counter_t decision_count_ {};
+        counter_t inprocess_epoch_notifications_ {};
+        counter_t low_yield_inprocess_epoch_count_ {};
+        counter_t low_yield_inprocess_streak_ {};
+        counter_t deferred_inprocess_resync_count_ {};
+        counter_t deferred_inprocess_streak_ {};
         termination_cause termination_cause_ {termination_cause::none};
         outcome outcome_ {outcome::in_progress};
     };

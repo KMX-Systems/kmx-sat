@@ -11,6 +11,7 @@
     #include <string>
     #include <string_view>
 #endif
+#include <kmx/sat/counter.hpp>
 #include <kmx/sat/literal.hpp>
 #include <kmx/sat/proof/event_stream.hpp>
 #include <kmx/sat/solve_request.hpp>
@@ -241,12 +242,12 @@ namespace kmx::sat
         /// @brief Returns the configured default conflict limit override, if present.
         /// @return Optional configured conflict limit.
         /// @throws None (noexcept).
-        std::optional<std::uint64_t> configured_conflict_limit() const noexcept;
+        std::optional<counter_t> configured_conflict_limit() const noexcept;
 
         /// @brief Returns the configured default decision limit override, if present.
         /// @return Optional configured decision limit.
         /// @throws None (noexcept).
-        std::optional<std::uint64_t> configured_decision_limit() const noexcept;
+        std::optional<counter_t> configured_decision_limit() const noexcept;
 
         /// @brief Returns the configured default enabled-pass-mask override, if present.
         /// @return Optional configured enabled pass mask.

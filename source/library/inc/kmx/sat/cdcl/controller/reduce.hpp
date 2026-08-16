@@ -7,6 +7,7 @@
     #include <cstdint>
     #include <span>
 #endif
+#include <kmx/sat/counter.hpp>
 #include <kmx/sat/cdcl/clause/database.hpp>
 
 #include <array>
@@ -174,12 +175,12 @@ namespace kmx::sat::cdcl::controller
         /// @brief Returns the number of candidates selected by the most recent reduction pass.
         /// @return Selected candidate count.
         /// @throws None (noexcept).
-        std::uint64_t last_selected_candidate_count() const noexcept { return last_selected_candidate_count_; }
+        counter_t last_selected_candidate_count() const noexcept { return last_selected_candidate_count_; }
 
         /// @brief Returns how many redundant clauses were marked for reduction by the latest pass.
         /// @return Reduced candidate count.
         /// @throws None (noexcept).
-        std::uint64_t reduced_candidates() const noexcept { return reduced_candidates_; }
+        counter_t reduced_candidates() const noexcept { return reduced_candidates_; }
 
         /// @brief Returns whether the most recent selection step produced any reduction candidates.
         /// @return True if at least one candidate was selected.
@@ -211,7 +212,7 @@ namespace kmx::sat::cdcl::controller
         /// @brief Returns how many candidates were actually flushed by the latest pass.
         /// @return Flushed candidate count.
         /// @throws None (noexcept).
-        std::uint64_t flushed_candidates() const noexcept { return flushed_candidates_; }
+        counter_t flushed_candidates() const noexcept { return flushed_candidates_; }
 
         /// @brief Requests that the next coordinator loop executes a reduction pass.
         /// @throws None (noexcept).
@@ -224,12 +225,12 @@ namespace kmx::sat::cdcl::controller
                 reduce_pending_ = true;
         }
 
-        void set_reduction_interval(const std::uint64_t interval) noexcept { reduction_interval_ = interval; }
+        void set_reduction_interval(const counter_t interval) noexcept { reduction_interval_ = interval; }
 
         /// @brief Returns how many completed reduction passes have run.
         /// @return Number of completed reduction passes.
         /// @throws None (noexcept).
-        std::uint64_t reduction_pass_count() const noexcept { return reduction_pass_count_; }
+        counter_t reduction_pass_count() const noexcept { return reduction_pass_count_; }
 
     private:
         static bool compare_subset_candidates(const clause::database& database, const std::uint64_t left_offset,
@@ -291,18 +292,18 @@ namespace kmx::sat::cdcl::controller
         }
 
         bool reduce_pending_ {};
-        std::uint64_t select_call_count_ {};
-        std::uint64_t reduce_call_count_ {};
-        std::uint64_t flush_call_count_ {};
-        std::uint64_t update_tiers_call_count_ {};
-        std::uint64_t reduction_pass_count_ {};
-        std::uint64_t conflict_count_ {};
-        std::uint64_t last_selected_candidate_count_ {};
-        std::uint64_t reduced_candidates_ {};
-        std::uint64_t flushed_candidates_ {};
+        counter_t select_call_count_ {};
+        counter_t reduce_call_count_ {};
+        counter_t flush_call_count_ {};
+        counter_t update_tiers_call_count_ {};
+        counter_t reduction_pass_count_ {};
+        counter_t conflict_count_ {};
+        counter_t last_selected_candidate_count_ {};
+        counter_t reduced_candidates_ {};
+        counter_t flushed_candidates_ {};
         std::vector<std::uint64_t> last_candidates_ {};
         std::uint32_t reduction_fraction_percent_ {50u};
         double activity_retention_threshold_ {2.0};
-        std::uint64_t reduction_interval_ {};
+        counter_t reduction_interval_ {};
     };
 }

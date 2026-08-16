@@ -7,6 +7,7 @@
     #include <string>
     #include <string_view>
 #endif
+#include <kmx/sat/counter.hpp>
 
 namespace kmx::sat::telemetry
 {
@@ -30,32 +31,32 @@ namespace kmx::sat::telemetry
         struct snapshot final
         {
             /// @brief Total number of conflicts encountered so far.
-            std::uint64_t conflicts {};
+            counter_t conflicts {};
             /// @brief Total number of branching decisions made so far.
-            std::uint64_t decisions {};
+            counter_t decisions {};
             /// @brief Total number of unit propagations performed so far.
-            std::uint64_t propagations {};
+            counter_t propagations {};
             /// @brief Total number of restarts performed so far.
-            std::uint64_t restarts {};
+            counter_t restarts {};
             /// @brief Total number of clauses learned from conflict analysis so far.
-            std::uint64_t learned_clauses {};
+            counter_t learned_clauses {};
             /// @brief Sum of learned-clause LBD/glue values observed so far.
-            std::uint64_t learned_clause_glue_total {};
+            counter_t learned_clause_glue_total {};
             /// @brief Number of learned-clause LBD/glue samples included in the total.
-            std::uint64_t learned_clause_glue_samples {};
-            std::uint64_t reduction_passes {};
-            std::uint64_t reduced_clauses {};
-            std::uint64_t deleted_clauses {};
+            counter_t learned_clause_glue_samples {};
+            counter_t reduction_passes {};
+            counter_t reduced_clauses {};
+            counter_t deleted_clauses {};
             /// @brief Total number of terminate-callback polls executed so far.
-            std::uint64_t terminate_callback_calls {};
+            counter_t terminate_callback_calls {};
             /// @brief Total number of learned-clause callback invocations executed so far.
-            std::uint64_t learn_callback_calls {};
+            counter_t learn_callback_calls {};
             /// @brief Total number of external propagator callback invocations executed so far.
-            std::uint64_t external_propagator_calls {};
+            counter_t external_propagator_calls {};
             /// @brief Total number of recognized option updates applied through the facade.
-            std::uint64_t option_updates {};
+            counter_t option_updates {};
             /// @brief Total number of recognized configuration profile updates applied through the facade.
-            std::uint64_t configuration_updates {};
+            counter_t configuration_updates {};
         };
 
         /// @brief Constructs a statistics accumulator with every counter at zero.
@@ -71,7 +72,7 @@ namespace kmx::sat::telemetry
         /// @param counter_name Identifier of the counter to update.
         /// @param amount Amount to add.
         /// @throws None (noexcept).
-        void add(const std::string_view counter_name, const std::uint64_t amount) noexcept
+        void add(const std::string_view counter_name, const counter_t amount) noexcept
         {
             switch (counter_name.size())
             {
