@@ -77,4 +77,30 @@ namespace kmx::sat::cdcl
         // removed std::cout: "clause database test passed\n";
     }
 
+    TEST_CASE("database hot metadata survives clause relocation", "[sat]")
+    {
+        clause::database database;
+        const std::array<literal, 2> literals {literal {variable {41u}, false}, literal {variable {42u}, true}};
+        const auto old_ref = database.add_clause(literals, true);
+
+        database.set_glue(old_ref, 2u);
+        database.increment_used_count(old_ref);
+        database.increment_activity(old_ref, 3.5);
+        database.promote_clause(old_ref);
+        database.mark_reason_clause(old_ref);
+        database.mark_garbage(old_ref);
+
+        const auto new_ref = database.storage_of().relocate_clause(old_ref);
+        REQUIRE(new_ref.valid());
+        database.rewrite_ref_after_gc(old_ref, new_ref);
+
+        const auto quality = database.quality_of(new_ref);
+        REQUIRE(quality.glue == 2u);
+        REQUIRE(quality.used_count == 1u);
+        REQUIRE(quality.activity == 3.5);
+        REQUIRE(quality.tier == 0u);
+        REQUIRE(database.is_reason_clause(new_ref));
+        REQUIRE(database.is_garbage(new_ref));
+    }
+
 } // namespace

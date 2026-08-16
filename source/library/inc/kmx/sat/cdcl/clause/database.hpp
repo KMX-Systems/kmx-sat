@@ -73,10 +73,12 @@ namespace kmx::sat::cdcl::clause
                 redundant_refs_.push_back(ref);
             else
                 irredundant_refs_.push_back(ref);
+            auto header = storage_.header_of(ref);
+            header.glue = static_cast<std::uint32_t>(literals.size());
+            header.tier = redundant ? default_tier : tier_t {};
+            header.flags |= bank::tracked_flag;
+            storage_.set_header(ref, header);
             auto& entry = metadata_for(ref.offset());
-            entry.tracked = true;
-            entry.tier = redundant ? default_tier : tier_t {};
-            entry.glue = static_cast<std::uint32_t>(literals.size());
             entry.used_count = 0u;
             entry.activity = {};
             return ref;
@@ -86,30 +88,44 @@ namespace kmx::sat::cdcl::clause
         [[nodiscard]] quality quality_of(const ref_t ref) const noexcept
         {
             const auto resolved = storage_.resolve_ref(ref);
+            const auto header = storage_.header_of(resolved);
             const auto* entry = metadata_of(resolved.offset());
-            return quality {tier_of(resolved), entry != nullptr ? entry->glue : 0u, entry != nullptr ? entry->used_count : 0u,
-                            storage_.literal_count(resolved), entry != nullptr ? entry->activity : 0.0};
+            return quality {tier_of(resolved), header.glue, entry != nullptr ? entry->used_count : 0u, header.size,
+                            entry != nullptr ? entry->activity : 0.0};
         }
 
         /// @brief Records a clause's current LBD/glue value.
         void set_glue(const ref_t ref, const std::uint32_t glue) noexcept
         {
             if (ref.valid())
-                mark_tracked(metadata_for(storage_.resolve_ref(ref).offset())).glue = glue;
+            {
+                const auto resolved = storage_.resolve_ref(ref);
+                if (!storage_.is_alive(resolved))
+                {
+                    auto& entry = metadata_for(resolved.offset());
+                    entry.glue = glue;
+                    entry.tracked = true;
+                    return;
+                }
+                auto header = storage_.header_of(resolved);
+                header.glue = glue;
+                header.flags |= bank::tracked_flag;
+                storage_.set_header(resolved, header);
+            }
         }
 
         /// @brief Records one use of a clause as an implication reason.
         void increment_used_count(const ref_t ref) noexcept
         {
             if (ref.valid())
-                ++mark_tracked(metadata_for(storage_.resolve_ref(ref).offset())).used_count;
+                ++metadata_for(storage_.resolve_ref(ref).offset()).used_count;
         }
 
         /// @brief Adds conflict-derived activity to a clause's retention score.
         void increment_activity(const ref_t ref, const double amount = 1.0) noexcept
         {
             if (ref.valid())
-                mark_tracked(metadata_for(storage_.resolve_ref(ref).offset())).activity += amount;
+                metadata_for(storage_.resolve_ref(ref).offset()).activity += amount;
         }
 
         /// @brief Ages activity and usage metadata so old conflict history cannot dominate indefinitely.
@@ -130,10 +146,18 @@ namespace kmx::sat::cdcl::clause
         {
             if (!ref.valid())
                 return;
-            auto& entry = metadata_for(ref.offset());
-            if (!entry.garbage)
+            auto header = storage_.header_of(storage_.resolve_ref(ref));
+            if (!storage_.is_alive(storage_.resolve_ref(ref)))
             {
+                auto& entry = metadata_for(storage_.resolve_ref(ref).offset());
                 entry.garbage = true;
+                ++garbage_count_;
+                return;
+            }
+            if ((header.flags & bank::garbage_flag) == 0u)
+            {
+                header.flags |= bank::garbage_flag;
+                storage_.set_header(storage_.resolve_ref(ref), header);
                 ++garbage_count_;
             }
         }
@@ -144,14 +168,26 @@ namespace kmx::sat::cdcl::clause
         void mark_reason_clause(const ref_t ref) noexcept
         {
             if (ref.valid())
-                metadata_for(ref.offset()).reason = true;
+            {
+                const auto resolved = storage_.resolve_ref(ref);
+                if (!storage_.is_alive(resolved))
+                {
+                    metadata_for(resolved.offset()).reason = true;
+                    return;
+                }
+                auto header = storage_.header_of(resolved);
+                header.flags |= bank::reason_flag;
+                storage_.set_header(resolved, header);
+            }
         }
 
         /// @brief Clears all transient implication-reason marks for a fresh solve episode.
         void clear_reason_clauses() noexcept
         {
-            for (auto& entry: metadata_)
-                entry.reason = false;
+            for (const auto ref: irredundant_refs_)
+                clear_reason(ref);
+            for (const auto ref: redundant_refs_)
+                clear_reason(ref);
         }
 
         /// @brief Rewrites database bookkeeping after a live clause moves to a new physical reference.
@@ -167,11 +203,9 @@ namespace kmx::sat::cdcl::clause
             const auto migrated = *old_entry;
             reset_metadata(old_ref.offset());
             auto& new_entry = metadata_for(new_ref.offset());
-            if (migrated.garbage && !new_entry.garbage)
-                ++garbage_count_;
-            else if (!migrated.garbage && new_entry.garbage)
-                --garbage_count_;
             new_entry = migrated;
+            if ((storage_.header_of(new_ref).flags & bank::garbage_flag) != 0u)
+                ++garbage_count_;
         }
 
         /// @brief Checks whether a clause is currently marked garbage.
@@ -181,7 +215,9 @@ namespace kmx::sat::cdcl::clause
         [[nodiscard]] bool is_garbage(const ref_t ref) const noexcept
         {
             const auto* entry = ref.valid() ? metadata_of(ref.offset()) : nullptr;
-            return entry != nullptr && entry->garbage;
+            const auto resolved = storage_.resolve_ref(ref);
+            return entry != nullptr && (storage_.is_alive(resolved) ?
+                                            (storage_.header_of(resolved).flags & bank::garbage_flag) != 0u : entry->garbage);
         }
 
         /// @brief Checks whether a clause is currently serving as an implication reason.
@@ -191,7 +227,9 @@ namespace kmx::sat::cdcl::clause
         [[nodiscard]] bool is_reason_clause(const ref_t ref) const noexcept
         {
             const auto* entry = ref.valid() ? metadata_of(ref.offset()) : nullptr;
-            return entry != nullptr && entry->reason;
+            const auto resolved = storage_.resolve_ref(ref);
+            return entry != nullptr && (storage_.is_alive(resolved) ?
+                                            (storage_.header_of(resolved).flags & bank::reason_flag) != 0u : entry->reason);
         }
 
         /// @brief Returns a clause's current tier, or `default_tier` if it is not tracked.
@@ -200,8 +238,11 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         [[nodiscard]] tier_t tier_of(const ref_t ref) const noexcept
         {
+            const auto header = storage_.header_of(storage_.resolve_ref(ref));
             const auto* entry = metadata_of(ref.offset());
-            return entry != nullptr && entry->tracked ? entry->tier : default_tier;
+            if (!storage_.is_alive(storage_.resolve_ref(ref)))
+                return entry != nullptr && entry->tracked ? entry->tier : default_tier;
+            return (header.flags & bank::tracked_flag) != 0u ? header.tier : default_tier;
         }
 
         /// @brief Moves a clause to a higher-quality tier, typically after repeated useful activity.
@@ -211,9 +252,20 @@ namespace kmx::sat::cdcl::clause
         {
             if (!ref.valid())
                 return;
-            auto& entry = mark_tracked(metadata_for(ref.offset()));
-            if (entry.tier > 0u)
-                --entry.tier;
+            const auto resolved = storage_.resolve_ref(ref);
+            if (!storage_.is_alive(resolved))
+            {
+                auto& entry = metadata_for(resolved.offset());
+                entry.tracked = true;
+                if (entry.tier > 0u)
+                    --entry.tier;
+                return;
+            }
+            auto header = storage_.header_of(resolved);
+            header.flags |= bank::tracked_flag;
+            if (header.tier > 0u)
+                --header.tier;
+            storage_.set_header(resolved, header);
         }
 
         /// @brief Moves a clause to a lower-quality tier, typically after prolonged inactivity.
@@ -223,9 +275,20 @@ namespace kmx::sat::cdcl::clause
         {
             if (!ref.valid())
                 return;
-            auto& entry = mark_tracked(metadata_for(ref.offset()));
-            if (entry.tier < lowest_tier)
-                ++entry.tier;
+            const auto resolved = storage_.resolve_ref(ref);
+            if (!storage_.is_alive(resolved))
+            {
+                auto& entry = metadata_for(resolved.offset());
+                entry.tracked = true;
+                if (entry.tier < lowest_tier)
+                    ++entry.tier;
+                return;
+            }
+            auto header = storage_.header_of(resolved);
+            header.flags |= bank::tracked_flag;
+            if (header.tier < lowest_tier)
+                ++header.tier;
+            storage_.set_header(resolved, header);
         }
 
         /// @brief Visits every irredundant (original) clause currently in the database.
@@ -285,8 +348,8 @@ namespace kmx::sat::cdcl::clause
         struct clause_metadata final
         {
             double activity {};
-            std::uint32_t glue {};
             std::uint32_t used_count {};
+            std::uint32_t glue {};
             tier_t tier {};
             bool tracked {};
             bool garbage {};
@@ -312,10 +375,12 @@ namespace kmx::sat::cdcl::clause
             return metadata_[slot];
         }
 
-        static clause_metadata& mark_tracked(clause_metadata& entry) noexcept
+        void clear_reason(const ref_t ref) noexcept
         {
-            entry.tracked = true;
-            return entry;
+            const auto resolved = storage_.resolve_ref(ref);
+            auto header = storage_.header_of(resolved);
+            header.flags &= static_cast<std::uint8_t>(~bank::reason_flag);
+            storage_.set_header(resolved, header);
         }
 
         void reset_metadata(const ref_t::offset_t offset) noexcept
@@ -323,7 +388,7 @@ namespace kmx::sat::cdcl::clause
             const auto slot = metadata_slot_of(offset);
             if (slot >= metadata_.size())
                 return;
-            if (metadata_[slot].garbage)
+            if ((storage_.header_of(ref_t {offset}).flags & bank::garbage_flag) != 0u)
                 --garbage_count_;
             metadata_[slot] = clause_metadata {};
         }
@@ -352,8 +417,8 @@ namespace kmx::sat::cdcl::clause
                 const auto ref = refs[read_index];
                 if (is_satisfied(ref))
                 {
-                    storage_.destroy_clause(ref);
                     reset_metadata(ref.offset());
+                    storage_.destroy_clause(ref);
                     continue;
                 }
                 refs[write_index++] = ref;

@@ -54,7 +54,10 @@ namespace kmx::sat::cdcl::clause
         {
             const auto resolved = resolve_ref(ref);
             id_allocator_.retire_on_delete(resolved);
-            clear_flags(resolved.offset(), alive_flag | redundant_flag);
+            clear_flags(resolved.offset(), alive_flag);
+            auto header = arena_.header_of(resolved);
+            header.flags &= bank::redundant_flag;
+            arena_.set_header(resolved, header);
         }
 
         /// @brief Relocates a clause to a new arena position, for example during garbage collection.
@@ -71,9 +74,7 @@ namespace kmx::sat::cdcl::clause
             if (!relocated.valid())
                 return {};
 
-            if (is_redundant(resolved))
-                set_flags(relocated.offset(), redundant_flag);
-            clear_flags(resolved.offset(), alive_flag | redundant_flag);
+            clear_flags(resolved.offset(), alive_flag);
             set_flags(relocated.offset(), alive_flag);
             relocated_refs_[resolved.offset()] = relocated.offset();
             id_allocator_.preserve_on_relocation(resolved, relocated);
@@ -146,6 +147,10 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         [[nodiscard]] std::uint32_t literal_count(const ref_t ref) const noexcept { return arena_.literal_count(resolve_ref(ref)); }
 
+        [[nodiscard]] bank::clause_header header_of(const ref_t ref) const noexcept { return arena_.header_of(resolve_ref(ref)); }
+
+        void set_header(const ref_t ref, const bank::clause_header header) noexcept { arena_.set_header(resolve_ref(ref), header); }
+
         /// @brief Rewrites a clause's stored literal payload in place after compaction or substitution.
         /// @param ref Reference to the clause whose literal payload should be replaced.
         /// @param literals New literals to store; the replacement may preserve or reduce the current size.
@@ -165,7 +170,7 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         [[nodiscard]] bool is_redundant(const ref_t ref) const noexcept
         {
-            return has_flags(resolve_ref(ref).offset(), redundant_flag);
+            return (arena_.header_of(resolve_ref(ref)).flags & bank::redundant_flag) != 0u;
         }
 
         /// @brief Returns whether a clause is currently known to be alive in storage.
@@ -180,7 +185,6 @@ namespace kmx::sat::cdcl::clause
     private:
         /// Arena offsets are 4-byte aligned, so `offset / 4` is a dense slot index into the flag table.
         static constexpr std::uint8_t alive_flag {1u};
-        static constexpr std::uint8_t redundant_flag {2u};
 
         static std::size_t flag_slot_of(const ref_t::offset_t offset) noexcept
         {
@@ -211,8 +215,14 @@ namespace kmx::sat::cdcl::clause
         ref_t create_clause(const std::span<const literal> literals, const bool redundant) noexcept
         {
             const auto ref = arena_.allocate_clause(literals.size());
+            if (!ref.valid())
+                return ref;
             arena_.write_literals(ref, literals);
-            set_flags(ref.offset(), static_cast<std::uint8_t>(alive_flag | (redundant ? redundant_flag : 0u)));
+            auto header = arena_.header_of(ref);
+            if (redundant)
+                header.flags |= bank::redundant_flag;
+            arena_.set_header(ref, header);
+            set_flags(ref.offset(), alive_flag);
             assign_proof_id(ref);
             return ref;
         }

@@ -21,6 +21,24 @@
 
 namespace kmx::sat::cdcl::bank
 {
+    struct clause_header final
+    {
+        std::uint32_t size {};
+        std::uint32_t glue {};
+        std::uint32_t tier {};
+        std::uint8_t flags {};
+        std::uint8_t padding[3] {};
+    };
+
+    static_assert(sizeof(clause_header) == 16u);
+    static_assert(std::is_trivially_copyable_v<clause_header>);
+
+    inline constexpr std::uint8_t redundant_flag {1u << 0u};
+    inline constexpr std::uint8_t garbage_flag {1u << 1u};
+    inline constexpr std::uint8_t reason_flag {1u << 2u};
+    inline constexpr std::uint8_t shrunken_flag {1u << 3u};
+    inline constexpr std::uint8_t tracked_flag {1u << 4u};
+
     class byte_storage final
     {
     public:
@@ -195,16 +213,39 @@ namespace kmx::sat::cdcl::bank
         {
             if (literal_count > std::numeric_limits<std::uint32_t>::max())
                 return {};
-            if (literal_count > (std::numeric_limits<std::size_t>::max() - sizeof(std::uint32_t)) / sizeof(literal::raw_t))
+            if (literal_count > (std::numeric_limits<std::size_t>::max() - sizeof(clause_header)) / sizeof(literal::raw_t))
                 return {};
-            const auto bytes = sizeof(std::uint32_t) + literal_count * sizeof(literal::raw_t);
+            const auto bytes = sizeof(clause_header) + literal_count * sizeof(literal::raw_t);
             const auto offset = active_.size();
             if (bytes > std::numeric_limits<clause::ref_t::offset_t>::max() - offset || !active_.resize(offset + bytes))
                 return {};
-            const auto count_prefix = static_cast<std::uint32_t>(literal_count);
-            std::memcpy(active_.data() + offset, &count_prefix, sizeof(count_prefix));
+            clause_header header {};
+            header.size = static_cast<std::uint32_t>(literal_count);
+            std::memcpy(active_.data() + offset, &header, sizeof(header));
             return clause::ref_t {static_cast<clause::ref_t::offset_t>(offset)};
         }
+
+        [[nodiscard]] clause_header header_of(const clause::ref_t ref) const noexcept
+        {
+            clause_header header {};
+            if (!ref.valid())
+                return header;
+            const auto offset = static_cast<std::size_t>(ref.offset());
+            if (offset + sizeof(header) <= active_.size())
+                std::memcpy(&header, active_.data() + offset, sizeof(header));
+            return header;
+        }
+
+        void set_header(const clause::ref_t ref, const clause_header header) noexcept
+        {
+            if (!ref.valid())
+                return;
+            const auto offset = static_cast<std::size_t>(ref.offset());
+            if (offset + sizeof(header) <= active_.size())
+                std::memcpy(active_.data() + offset, &header, sizeof(header));
+        }
+
+        void update_header(const clause::ref_t ref, const clause_header header) noexcept { set_header(ref, header); }
 
         /// @brief Copies a clause payload directly inside the active arena.
         [[nodiscard]] clause::ref_t copy_clause(const clause::ref_t ref) noexcept
@@ -213,9 +254,9 @@ namespace kmx::sat::cdcl::bank
                 return {};
             const auto count = literal_count(ref);
             const auto source_offset = static_cast<std::size_t>(ref.offset());
-            if (count > (std::numeric_limits<std::size_t>::max() - sizeof(std::uint32_t)) / sizeof(literal::raw_t))
+            if (count > (std::numeric_limits<std::size_t>::max() - sizeof(clause_header)) / sizeof(literal::raw_t))
                 return {};
-            const auto byte_count = sizeof(std::uint32_t) + static_cast<std::size_t>(count) * sizeof(literal::raw_t);
+            const auto byte_count = sizeof(clause_header) + static_cast<std::size_t>(count) * sizeof(literal::raw_t);
             if (source_offset + byte_count > active_.size())
                 return {};
 
@@ -234,9 +275,9 @@ namespace kmx::sat::cdcl::bank
             if (!ref.valid())
                 return;
             const auto offset = static_cast<std::size_t>(ref.offset());
-            if (offset + sizeof(std::uint32_t) > active_.size())
+            if (offset + sizeof(clause_header) > active_.size())
                 return;
-            const auto payload_offset = offset + sizeof(std::uint32_t);
+            const auto payload_offset = offset + sizeof(clause_header);
             const auto payload_bytes = literals.size() * sizeof(literal::raw_t);
             if (payload_offset + payload_bytes > active_.size())
                 return;
@@ -252,11 +293,9 @@ namespace kmx::sat::cdcl::bank
             if (!ref.valid())
                 return 0u;
             const auto offset = static_cast<std::size_t>(ref.offset());
-            if (offset + sizeof(std::uint32_t) > active_.size())
+            if (offset + sizeof(clause_header) > active_.size())
                 return 0u;
-            std::uint32_t count {};
-            std::memcpy(&count, active_.data() + offset, sizeof(count));
-            return count;
+            return header_of(ref).size;
         }
 
         /// @brief Reads back a clause's stored literal payload.
@@ -269,7 +308,7 @@ namespace kmx::sat::cdcl::bank
             const auto count = literal_count(ref);
             if (count == 0u)
                 return result;
-            const auto payload_offset = static_cast<std::size_t>(ref.offset()) + sizeof(std::uint32_t);
+            const auto payload_offset = static_cast<std::size_t>(ref.offset()) + sizeof(clause_header);
             const auto payload_bytes = static_cast<std::size_t>(count) * sizeof(literal::raw_t);
             if (payload_offset + payload_bytes > active_.size())
                 return result;
@@ -282,7 +321,7 @@ namespace kmx::sat::cdcl::bank
             const auto count = literal_count(ref);
             if (count == 0u)
                 return {};
-            const auto payload_offset = static_cast<std::size_t>(ref.offset()) + sizeof(std::uint32_t);
+            const auto payload_offset = static_cast<std::size_t>(ref.offset()) + sizeof(clause_header);
             return {reinterpret_cast<const literal*>(active_.data() + payload_offset), count};
         }
 
@@ -291,7 +330,7 @@ namespace kmx::sat::cdcl::bank
             const auto count = literal_count(ref);
             if (count == 0u)
                 return {};
-            const auto payload_offset = static_cast<std::size_t>(ref.offset()) + sizeof(std::uint32_t);
+            const auto payload_offset = static_cast<std::size_t>(ref.offset()) + sizeof(clause_header);
             return {reinterpret_cast<literal*>(active_.data() + payload_offset), count};
         }
 
@@ -303,8 +342,10 @@ namespace kmx::sat::cdcl::bank
         {
             if (!ref.valid() || new_count > literal_count(ref))
                 return;
-            const auto offset = static_cast<std::size_t>(ref.offset());
-            std::memcpy(active_.data() + offset, &new_count, sizeof(new_count));
+            auto header = header_of(ref);
+            header.size = new_count;
+            header.flags |= shrunken_flag;
+            set_header(ref, header);
         }
 
         void materialize_clause(const clause::ref_t ref) noexcept
@@ -346,7 +387,7 @@ namespace kmx::sat::cdcl::bank
         [[nodiscard]] std::size_t clause_byte_count(const clause::ref_t ref) const noexcept
         {
             const auto count = literal_count(ref);
-            return count == 0u ? 0u : sizeof(std::uint32_t) + static_cast<std::size_t>(count) * sizeof(literal::raw_t);
+            return sizeof(clause_header) + static_cast<std::size_t>(count) * sizeof(literal::raw_t);
         }
 
         std::pmr::memory_resource* resource_ {std::pmr::get_default_resource()};
