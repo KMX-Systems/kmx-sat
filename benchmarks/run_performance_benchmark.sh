@@ -5,6 +5,12 @@ set -e
 REPEAT_COUNT=${1:-3}
 BENCHMARK_TIMEOUT=${BENCHMARK_TIMEOUT:-120}
 SOLVER_OPTIONS=${SOLVER_OPTIONS:-}
+WARMUP_COUNT=${WARMUP_COUNT:-2}
+BENCHMARK_CPU=${BENCHMARK_CPU:-}
+CPU_ARGS=()
+if [[ -n "${BENCHMARK_CPU}" ]]; then
+  CPU_ARGS+=(--cpu "${BENCHMARK_CPU}")
+fi
 
 cd "$(dirname "$0")/.."
 export PATH="$PWD/tools/bin:$PATH"
@@ -23,9 +29,11 @@ python3 benchmarks/run_benchmarks.py benchmarks/corpus/*.cnf \
   --compare-command "kissat=tools/bin/kissat {instance}" \
   --require-comparison-agreement \
   --repeat-count "${REPEAT_COUNT}" \
+    --warmup-count "${WARMUP_COUNT}" \
   --seed 20260814 \
   --configuration release-external-comparison-final \
-    --output benchmark-release-results-final/pinned-corpus.json >/dev/null 2>&1
+  --output benchmark-release-results-final/pinned-corpus.json \
+  "${CPU_ARGS[@]}" >/dev/null 2>&1
 
 echo "Validating results..." >&2
 python3 benchmarks/validate_results.py benchmark-release-results-final/pinned-corpus.json >/dev/null 2>&1

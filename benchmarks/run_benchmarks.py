@@ -27,8 +27,10 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def run_command(template: str, instance: Path, seed: int, timeout: float, measure_memory: bool) -> dict[str, object]:
+def run_command(template: str, instance: Path, seed: int, timeout: float, measure_memory: bool, cpu: int | None = None) -> dict[str, object]:
     command = template.format(instance=shlex.quote(str(instance)), seed=seed, timeout=timeout)
+    if cpu is not None:
+        command = f"taskset -c {cpu} sh -c {shlex.quote(command)}"
     measured_command = command
     if measure_memory:
         measured_command = f"/usr/bin/time -f '\\nkmx-memory-kb=%M' sh -c {shlex.quote(command)}"
@@ -118,6 +120,19 @@ def repeat_signature(result: dict[str, object]) -> tuple[object, object]:
     return result["status"], tuple(sorted(result["metrics"].items()))
 
 
+def representative_run(runs: list[dict[str, object]]) -> dict[str, object]:
+    elapsed_values = [float(run["elapsed_ms"]) for run in runs]
+    median_ms = statistics.median(elapsed_values)
+    representative = min(runs, key=lambda run: abs(float(run["elapsed_ms"]) - median_ms)).copy()
+    ordered = sorted(elapsed_values)
+    representative["elapsed_ms_min"] = min(ordered)
+    representative["elapsed_ms_median"] = median_ms
+    representative["elapsed_ms_p90"] = ordered[min(len(ordered) - 1, int(len(ordered) * 0.9))]
+    representative["elapsed_ms"] = median_ms
+    representative["elapsed_ns"] = int(median_ms * 1_000_000.0)
+    return representative
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("instances", nargs="+", type=Path)
@@ -126,14 +141,18 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--repeat-count", type=int, default=1)
+    parser.add_argument("--warmup-count", type=int, default=2)
+    parser.add_argument("--cpu", type=int, help="Pin benchmark processes to one logical CPU with taskset.")
     parser.add_argument("--configuration", default="default")
     parser.add_argument("--output", type=Path, default=Path("benchmark-results.json"))
     parser.add_argument("--manifest", type=Path, help="Optional pinned corpus manifest with expected_status fields.")
     parser.add_argument("--require-comparison-agreement", action="store_true", help="Fail when available comparison status differs from the primary solver.")
     parser.add_argument("--no-memory", action="store_true", help="Disable /usr/bin/time peak RSS measurement.")
     args = parser.parse_args()
-    if args.repeat_count < 1:
-        parser.error("--repeat-count must be at least 1")
+    if args.repeat_count < 1 or args.warmup_count < 0:
+        parser.error("--repeat-count must be at least 1 and --warmup-count must be non-negative")
+    if args.cpu is not None and shutil.which("taskset") is None:
+        parser.error("--cpu requires taskset")
     manifest = load_manifest(args.manifest) if args.manifest else {}
     measure_memory = not args.no_memory and Path("/usr/bin/time").is_file()
 
@@ -165,9 +184,12 @@ def main() -> int:
             "solver_command": command_availability(args.command),
             "hash_matches_manifest": hash_matches_manifest,
         }
-        solver_runs = [run_command(args.command, instance, args.seed + repeat, args.timeout, measure_memory) for repeat in range(args.repeat_count)]
+        for warmup in range(args.warmup_count):
+            run_command(args.command, instance, args.seed + warmup, args.timeout, measure_memory, args.cpu)
+        solver_runs = [run_command(args.command, instance, args.seed + args.warmup_count + repeat, args.timeout, measure_memory, args.cpu)
+                       for repeat in range(args.repeat_count)]
         record["solver_runs"] = solver_runs
-        record["solver"] = solver_runs[0]
+        record["solver"] = representative_run(solver_runs)
         if manifest_entry and record["solver"]["status"] != manifest_entry["expected_status"]:
             record["status_matches_manifest"] = False
         else:
@@ -176,8 +198,11 @@ def main() -> int:
         comparison_records = record["comparisons"]
         assert isinstance(comparison_records, dict)
         for label, template in comparisons:
-            comparison_runs = [run_command(template, instance, args.seed + repeat, args.timeout, measure_memory) for repeat in range(args.repeat_count)]
-            comparison_records[label] = comparison_runs[0]
+            for warmup in range(args.warmup_count):
+                run_command(template, instance, args.seed + warmup, args.timeout, measure_memory, args.cpu)
+            comparison_runs = [run_command(template, instance, args.seed + args.warmup_count + repeat, args.timeout, measure_memory, args.cpu)
+                               for repeat in range(args.repeat_count)]
+            comparison_records[label] = representative_run(comparison_runs)
             record.setdefault("comparison_commands", {})[label] = command_availability(template)
             record.setdefault("comparison_runs", {})[label] = comparison_runs
         comparison_agreement = True
@@ -200,6 +225,8 @@ def main() -> int:
         "instances": results,
         "manifest_enforced": bool(args.manifest),
         "memory_measurement_enabled": measure_memory,
+        "warmup_count": args.warmup_count,
+        "cpu_affinity": args.cpu,
         "kpi": {
             "solver_conflicts": sum(item["solver"]["metrics"].get("conflicts", 0) for item in results),
             "solver_decisions": sum(item["solver"]["metrics"].get("decisions", 0) for item in results),
