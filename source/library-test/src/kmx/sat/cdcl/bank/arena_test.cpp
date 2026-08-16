@@ -34,4 +34,21 @@ namespace kmx::sat::cdcl
         REQUIRE(restored[0] == first);
         REQUIRE(restored[1] == second);
     }
+
+    TEST_CASE("arena grows across mapped pages without changing offsets", "[sat]")
+    {
+        bank::arena arena;
+        const std::array<literal, 2> literals {literal {variable {11u}, false}, literal {variable {12u}, true}};
+
+        const auto first = arena.allocate_clause(2000u);
+        arena.write_literals(first, std::span<const literal> {literals});
+        const auto second = arena.allocate_clause(2000u);
+        arena.write_literals(second, std::span<const literal> {literals});
+
+        REQUIRE(first.valid());
+        REQUIRE(second.valid());
+        REQUIRE(second.offset() > first.offset());
+        REQUIRE(arena.literal_count(first) == 2000u);
+        REQUIRE(arena.literal_count(second) == 2000u);
+    }
 }
