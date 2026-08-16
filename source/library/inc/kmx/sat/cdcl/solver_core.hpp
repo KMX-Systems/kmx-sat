@@ -207,7 +207,7 @@ namespace kmx::sat::cdcl
                 }
             }
 
-            status_ = solve_recursive(assignment, decision_levels, reasons, request, conflicts, 0u, trail, request.assumptions);
+            status_ = solve_recursive(assignment, decision_levels, reasons, request, conflicts, 0u, trail, request.assumptions).result_status;
 
             if (status_ == status::satisfiable)
                 build_internal_model(assignment);
@@ -859,6 +859,15 @@ namespace kmx::sat::cdcl
             std::uint32_t backjump_level {};
         };
 
+        struct search_outcome final
+        {
+            status result_status {status::unknown};
+            bool has_backjump {};
+            std::uint32_t backjump_level {};
+            clause::ref_t learned_ref {};
+            literal asserting_literal {};
+        };
+
         conflict_resolution handle_clause_conflict(const clause::ref_t ref, const std::span<const literal> conflict_clause,
                                                     const decision_level_vector& decision_levels, const reason_vector& reasons,
                                                     const solve_request& request, std::uint64_t& conflicts, const trail_vector& trail,
@@ -1182,9 +1191,9 @@ namespace kmx::sat::cdcl
             return 0;
         }
 
-        status solve_recursive(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
-                               const solve_request& request, std::uint64_t& conflicts, const std::uint32_t current_level,
-                               trail_vector& trail, const std::span<const literal> seed_literals = {}) noexcept
+        search_outcome solve_recursive(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
+                           const solve_request& request, std::uint64_t& conflicts, const std::uint32_t current_level,
+                           trail_vector& trail, const std::span<const literal> seed_literals = {}) noexcept
         {
             const auto conflict_ref =
                 propagate_units(assignment, decision_levels, reasons, request, conflicts, current_level, trail, seed_literals);
@@ -1193,7 +1202,14 @@ namespace kmx::sat::cdcl
                 const auto conflict_clause = clause_database_.storage_of().literals_of(conflict_ref);
                 const auto outcome = handle_clause_conflict(conflict_ref, conflict_clause, decision_levels, reasons, request,
                                                             conflicts, trail, current_level);
-                return outcome.result_status;
+                if (outcome.result_status != status::unsatisfiable || !outcome.learned_ref.valid() ||
+                    outcome.asserting_literal.raw() == 0u)
+                    return search_outcome {outcome.result_status};
+                return search_outcome {.result_status = status::unsatisfiable,
+                                       .has_backjump = true,
+                                       .backjump_level = outcome.backjump_level,
+                                       .learned_ref = outcome.learned_ref,
+                                       .asserting_literal = outcome.asserting_literal};
             }
 
             bool has_unassigned_variable = false;
@@ -1206,19 +1222,19 @@ namespace kmx::sat::cdcl
                 }
             }
             if (!has_unassigned_variable)
-                return status::satisfiable;
+                return search_outcome {status::satisfiable};
 
             search_coordinator_.set_variable_selectability_filter(&solver_core::is_unassigned_candidate, &assignment);
 
             const auto branch_literal = search_coordinator_.take_branch_literal(0u);
             if (decision_limit_reached(request, search_coordinator_.decision_event_count()))
-                return status::unknown;
+                return search_outcome {status::unknown};
             if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
-                return status::unknown;
+                return search_outcome {status::unknown};
             if (!branch_literal.has_value())
             {
-                return search_coordinator_.current_outcome() == search_coordinator::outcome::satisfiable ? status::satisfiable :
-                                                                                                           status::unknown;
+                return search_outcome {search_coordinator_.current_outcome() == search_coordinator::outcome::satisfiable ?
+                                           status::satisfiable : status::unknown};
             }
 
             auto selected_branch_literal = branch_literal.value();
@@ -1227,7 +1243,7 @@ namespace kmx::sat::cdcl
             {
                 const auto fallback_variable = pick_unassigned_variable(assignment);
                 if (fallback_variable == 0u)
-                    return status::satisfiable;
+                    return search_outcome {status::satisfiable};
                 selected_branch_literal = literal {variable {fallback_variable}, selected_branch_literal.is_negated()};
             }
 
@@ -1242,18 +1258,49 @@ namespace kmx::sat::cdcl
                 trail.push_back(candidate_literal);
 
                 const std::array<literal, 1> branch_seed {candidate_literal};
-                const auto branch_status = solve_recursive(assignment, decision_levels, reasons, request, conflicts,
-                                                           current_level + 1u, trail, std::span<const literal> {branch_seed});
-                if (branch_status == status::satisfiable)
-                    return status::satisfiable;
+                const auto branch_outcome = solve_recursive(assignment, decision_levels, reasons, request, conflicts,
+                                                            current_level + 1u, trail, std::span<const literal> {branch_seed});
+                if (branch_outcome.result_status == status::satisfiable)
+                    return branch_outcome;
 
                 undo_trail_to(assignment, decision_levels, reasons, trail, trail_mark);
 
-                if (branch_status == status::unknown)
-                    return status::unknown;
+                if (branch_outcome.result_status == status::unknown)
+                    return branch_outcome;
+
+                if (branch_outcome.has_backjump)
+                {
+                    if (branch_outcome.backjump_level < current_level)
+                        return branch_outcome;
+                    if (!apply_backjump(assignment, decision_levels, reasons, trail, current_level, branch_outcome))
+                        return search_outcome {status::unsatisfiable};
+                    const std::array<literal, 1> asserting_seed {branch_outcome.asserting_literal};
+                    return solve_recursive(assignment, decision_levels, reasons, request, conflicts, current_level, trail,
+                                           std::span<const literal> {asserting_seed});
+                }
             }
 
-            return status::unsatisfiable;
+            return search_outcome {status::unsatisfiable};
+        }
+
+        static bool apply_backjump(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
+                                   trail_vector& trail, const std::uint32_t target_level, const search_outcome& outcome) noexcept
+        {
+            while (!trail.empty())
+            {
+                const auto variable_index = static_cast<std::size_t>(trail.back().variable_of().index());
+                if (variable_index >= decision_levels.size() || decision_levels[variable_index] <= target_level)
+                    break;
+                undo_trail_to(assignment, decision_levels, reasons, trail, trail.size() - 1u);
+            }
+
+            const auto asserting_index = static_cast<std::size_t>(outcome.asserting_literal.variable_of().index());
+            if (asserting_index >= assignment.size() || assignment[asserting_index] != unassigned_value)
+                return false;
+            if (!assign_literal(assignment, decision_levels, reasons, outcome.asserting_literal, target_level, outcome.learned_ref))
+                return false;
+            trail.push_back(outcome.asserting_literal);
+            return true;
         }
 
         static bool is_unassigned_candidate(const variable var, const void* context) noexcept
