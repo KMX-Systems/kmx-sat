@@ -99,6 +99,7 @@ namespace kmx::sat::cdcl
             failed_core_.clear();
             last_conflict_clause_.clear();
             propagation_queue_scratch_.clear();
+            propagation_state_dirty_ = false;
             propagation_assignment_count_ = 0u;
             watch_entry_scan_count_ = 0u;
             binary_watch_scan_count_ = 0u;
@@ -140,6 +141,7 @@ namespace kmx::sat::cdcl
             preprocess_scheduler_.run_initial_pipeline();
             preprocess_scheduler_.report_pass_summary();
             inprocess_scheduler_.clear_abort();
+            rebuild_propagation_state();
 
             search_coordinator_.apply_assumptions(request);
 
@@ -607,6 +609,15 @@ namespace kmx::sat::cdcl
             watch_list_.watch_literal(literals[1], watch_on_second);
         }
 
+        void rebuild_propagation_state() noexcept
+        {
+            watch_list_ = {};
+            unit_clause_refs_.clear();
+            const auto attach = [this](const clause::ref_t ref) noexcept { attach_clause_for_propagation(ref); };
+            clause_database_.iterate_irredundant(attach);
+            clause_database_.iterate_redundant(attach);
+        }
+
         std::vector<clause::ref_t> active_clause_refs() const noexcept
         {
             const auto stats = clause_database_.stats_snapshot();
@@ -995,6 +1006,8 @@ namespace kmx::sat::cdcl
             {
                 inprocess_scheduler_.report_epoch_summary();
                 search_coordinator_.notify_inprocess_epoch_completed(inprocess_scheduler_.last_structural_gain());
+                rebuild_propagation_state();
+                propagation_state_dirty_ = true;
             }
         }
 
@@ -1213,8 +1226,10 @@ namespace kmx::sat::cdcl
                            const solve_request& request, std::uint64_t& conflicts, const std::uint32_t current_level,
                            trail_vector& trail, const std::span<const literal> seed_literals = {}) noexcept
         {
+            const auto propagation_seeds = propagation_state_dirty_ ? std::span<const literal> {trail} : seed_literals;
+            propagation_state_dirty_ = false;
             const auto conflict_ref =
-                propagate_units(assignment, decision_levels, reasons, request, conflicts, current_level, trail, seed_literals);
+                propagate_units(assignment, decision_levels, reasons, request, conflicts, current_level, trail, propagation_seeds);
             if (conflict_ref.valid())
             {
                 const auto conflict_clause = clause_database_.storage_of().view_literals(conflict_ref);
@@ -1290,8 +1305,8 @@ namespace kmx::sat::cdcl
             return search_outcome {status::unsatisfiable};
         }
 
-        static bool apply_backjump(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
-                                   trail_vector& trail, const std::uint32_t target_level, const search_outcome& outcome) noexcept
+        bool apply_backjump(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
+                    trail_vector& trail, const std::uint32_t target_level, const search_outcome& outcome) noexcept
         {
             undo_trail_to_level(assignment, decision_levels, reasons, trail, target_level);
 
@@ -1300,6 +1315,9 @@ namespace kmx::sat::cdcl
                 return false;
             if (!assign_literal(assignment, decision_levels, reasons, outcome.asserting_literal, target_level, outcome.learned_ref))
                 return false;
+            clause_database_.mark_reason_clause(outcome.learned_ref);
+            clause_database_.increment_used_count(outcome.learned_ref);
+            search_coordinator_.notify_assignment_literal(outcome.asserting_literal);
             trail.push_back(outcome.asserting_literal);
             return true;
         }
@@ -1368,6 +1386,7 @@ namespace kmx::sat::cdcl
         std::vector<literal> internal_model_ {};
         std::vector<literal> failed_core_ {};
         std::vector<literal> last_conflict_clause_ {};
+        bool propagation_state_dirty_ {};
         std::vector<literal> propagation_queue_scratch_ {};
         std::size_t propagation_assignment_count_ {};
         std::size_t watch_entry_scan_count_ {};

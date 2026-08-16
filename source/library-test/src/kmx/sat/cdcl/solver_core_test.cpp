@@ -43,7 +43,7 @@ namespace kmx::sat::cdcl
                 {literal {variable {variable_index}, true}, literal {variable {variable_index + 1u}, false}});
         }
         REQUIRE(binary_chain_solver.solve({}) == solver_core::status::satisfiable);
-        REQUIRE(binary_chain_solver.binary_watch_scan_count() >= 10u);
+        REQUIRE(binary_chain_solver.propagation_assignment_count() >= 10u);
         REQUIRE(binary_chain_solver.binary_watch_conflict_count() == 0u);
 
         solver_core binary_conflict_solver;
@@ -107,6 +107,20 @@ namespace kmx::sat::cdcl
         REQUIRE(learning_solver.learned_clause_shrink_event_count() == 0u);
         REQUIRE(learning_solver.retained_learned_clause_count() >= 1u);
         REQUIRE(learning_solver.transient_state_was_reset());
+
+        solver_core rewritten_unit_solver;
+        rewritten_unit_solver.add_problem_clause({literal {variable {101u}, false}});
+        rewritten_unit_solver.add_problem_clause({literal {variable {101u}, true}, literal {variable {102u}, false}});
+        rewritten_unit_solver.add_problem_clause({literal {variable {102u}, true}});
+        REQUIRE(rewritten_unit_solver.solve({}) == solver_core::status::unsatisfiable);
+
+        solver_core backjump_reason_solver;
+        backjump_reason_solver.add_problem_clause({literal {variable {21u}, true}, literal {variable {22u}, false}});
+        backjump_reason_solver.add_problem_clause({literal {variable {21u}, true}, literal {variable {22u}, true}});
+        backjump_reason_solver.add_problem_clause({literal {variable {21u}, false}, literal {variable {23u}, false}});
+        backjump_reason_solver.add_problem_clause({literal {variable {21u}, false}, literal {variable {23u}, true}});
+        REQUIRE(backjump_reason_solver.solve({}) == solver_core::status::unsatisfiable);
+        REQUIRE(backjump_reason_solver.learned_clause_count() >= 1u);
 
         solver_core tautology_guard_solver;
         // Clause 1 is an original tautology (contains v11 and ~v11): it is permanently satisfied and can never
