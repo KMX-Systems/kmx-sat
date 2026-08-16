@@ -757,6 +757,24 @@ namespace kmx::sat::cdcl
             }
         }
 
+        /// Retracts all assignments above a decision level in one linear trail pass.
+        static void undo_trail_to_level(assignment_vector& assignment, decision_level_vector& decision_levels,
+                                        reason_vector& reasons, trail_vector& trail, const std::uint32_t target_level) noexcept
+        {
+            while (!trail.empty())
+            {
+                const auto index = static_cast<std::size_t>(trail.back().variable_of().index());
+                if (index >= decision_levels.size() || decision_levels[index] <= target_level)
+                    break;
+                trail.pop_back();
+                if (index < assignment.size())
+                    assignment[index] = unassigned_value;
+                decision_levels[index] = 0u;
+                if (index < reasons.size())
+                    reasons[index] = clause::ref_t {};
+            }
+        }
+
         static bool literal_is_satisfied(const literal lit, const std::int8_t variable_value) noexcept
         {
             if (variable_value == unassigned_value)
@@ -924,7 +942,7 @@ namespace kmx::sat::cdcl
                     learned_clause_glue_total_ += clause_minimizer_.last_glue();
                     ++learned_clause_glue_sample_count_;
 
-                    const auto finalized_learned_clause = clause_database_.storage_of().literals_of(learned_ref);
+                    const auto finalized_learned_clause = clause_database_.storage_of().view_literals(learned_ref);
                     attach_clause_for_propagation(learned_ref);
                     if (clause_minimizer_.was_shrunk(learned_ref))
                     {
@@ -1199,7 +1217,7 @@ namespace kmx::sat::cdcl
                 propagate_units(assignment, decision_levels, reasons, request, conflicts, current_level, trail, seed_literals);
             if (conflict_ref.valid())
             {
-                const auto conflict_clause = clause_database_.storage_of().literals_of(conflict_ref);
+                const auto conflict_clause = clause_database_.storage_of().view_literals(conflict_ref);
                 const auto outcome = handle_clause_conflict(conflict_ref, conflict_clause, decision_levels, reasons, request,
                                                             conflicts, trail, current_level);
                 if (outcome.result_status != status::unsatisfiable || !outcome.learned_ref.valid() ||
@@ -1212,16 +1230,8 @@ namespace kmx::sat::cdcl
                                        .asserting_literal = outcome.asserting_literal};
             }
 
-            bool has_unassigned_variable = false;
-            for (std::size_t index = 1u; index < assignment.size(); ++index)
-            {
-                if (assignment[index] == unassigned_value)
-                {
-                    has_unassigned_variable = true;
-                    break;
-                }
-            }
-            if (!has_unassigned_variable)
+            const auto first_unassigned_variable = pick_unassigned_variable(assignment);
+            if (first_unassigned_variable == 0u)
                 return search_outcome {status::satisfiable};
 
             search_coordinator_.set_variable_selectability_filter(&solver_core::is_unassigned_candidate, &assignment);
@@ -1241,10 +1251,7 @@ namespace kmx::sat::cdcl
             const auto selected_index = selected_branch_literal.variable_of().index();
             if (selected_index >= assignment.size() || assignment[selected_index] != unassigned_value)
             {
-                const auto fallback_variable = pick_unassigned_variable(assignment);
-                if (fallback_variable == 0u)
-                    return search_outcome {status::satisfiable};
-                selected_branch_literal = literal {variable {fallback_variable}, selected_branch_literal.is_negated()};
+                selected_branch_literal = literal {variable {first_unassigned_variable}, selected_branch_literal.is_negated()};
             }
 
             for (const auto candidate_literal: {selected_branch_literal, selected_branch_literal.negated()})
@@ -1286,13 +1293,7 @@ namespace kmx::sat::cdcl
         static bool apply_backjump(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
                                    trail_vector& trail, const std::uint32_t target_level, const search_outcome& outcome) noexcept
         {
-            while (!trail.empty())
-            {
-                const auto variable_index = static_cast<std::size_t>(trail.back().variable_of().index());
-                if (variable_index >= decision_levels.size() || decision_levels[variable_index] <= target_level)
-                    break;
-                undo_trail_to(assignment, decision_levels, reasons, trail, trail.size() - 1u);
-            }
+            undo_trail_to_level(assignment, decision_levels, reasons, trail, target_level);
 
             const auto asserting_index = static_cast<std::size_t>(outcome.asserting_literal.variable_of().index());
             if (asserting_index >= assignment.size() || assignment[asserting_index] != unassigned_value)
