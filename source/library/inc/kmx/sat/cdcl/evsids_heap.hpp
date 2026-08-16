@@ -100,9 +100,9 @@ namespace kmx::sat::cdcl
         }
 
     private:
-        static constexpr std::size_t npos {static_cast<std::size_t>(-1)};
+        static constexpr std::size_t npos {static_cast<std::size_t>(~0u)};
         /// Variable indices below this bound use the flat table; anything above falls back to the overflow map.
-        static constexpr std::size_t direct_index_limit {std::size_t {1} << 24};
+        static constexpr std::size_t direct_index_limit {std::size_t {1u} << 24};
 
         std::size_t position_of(const std::size_t index) const noexcept
         {

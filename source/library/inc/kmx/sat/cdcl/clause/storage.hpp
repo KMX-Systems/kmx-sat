@@ -67,10 +67,9 @@ namespace kmx::sat::cdcl::clause
             if (!is_alive(resolved))
                 return {};
 
-            const auto literal_count = arena_.literal_count(resolved);
-            const auto literals = arena_.read_literals(resolved);
-            const auto relocated = arena_.allocate_clause(literal_count);
-            arena_.write_literals(relocated, literals);
+            const auto relocated = arena_.copy_clause(resolved);
+            if (!relocated.valid())
+                return {};
 
             if (is_redundant(resolved))
                 set_flags(relocated.offset(), redundant_flag);

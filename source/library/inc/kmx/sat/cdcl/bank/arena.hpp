@@ -7,6 +7,7 @@
     #include <cstring>
     #include <memory_resource>
     #include <span>
+    #include <type_traits>
     #include <vector>
 #endif
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
@@ -24,6 +25,9 @@ namespace kmx::sat::cdcl::bank
     class arena final
     {
     public:
+        static_assert(sizeof(literal) == sizeof(literal::raw_t));
+        static_assert(std::is_trivially_copyable_v<literal>);
+
         arena() noexcept = default;
 
         explicit arena(std::pmr::memory_resource* resource) noexcept: resource_ {resource} {}
@@ -36,6 +40,23 @@ namespace kmx::sat::cdcl::bank
             const auto count_prefix = static_cast<std::uint32_t>(literal_count);
             std::memcpy(active_.data() + offset, &count_prefix, sizeof(count_prefix));
             return clause::ref_t {static_cast<clause::ref_t::offset_t>(offset)};
+        }
+
+        /// @brief Copies a clause payload directly inside the active arena.
+        [[nodiscard]] clause::ref_t copy_clause(const clause::ref_t ref) noexcept
+        {
+            if (!ref.valid())
+                return {};
+            const auto count = literal_count(ref);
+            const auto source_offset = static_cast<std::size_t>(ref.offset());
+            const auto byte_count = sizeof(std::uint32_t) + static_cast<std::size_t>(count) * sizeof(literal::raw_t);
+            if (source_offset + byte_count > active_.size())
+                return {};
+
+            const auto copied = allocate_clause(count);
+            const auto destination_offset = static_cast<std::size_t>(copied.offset());
+            std::memcpy(active_.data() + destination_offset, active_.data() + source_offset, byte_count);
+            return copied;
         }
 
         /// @brief Writes a clause's literal payload at its already-allocated offset.
@@ -53,11 +74,7 @@ namespace kmx::sat::cdcl::bank
             const auto payload_bytes = literals.size() * sizeof(literal::raw_t);
             if (payload_offset + payload_bytes > active_.size())
                 return;
-            for (std::size_t index {}; index < literals.size(); ++index)
-            {
-                const auto raw = literals[index].raw();
-                std::memcpy(active_.data() + payload_offset + index * sizeof(literal::raw_t), &raw, sizeof(raw));
-            }
+            std::memcpy(active_.data() + payload_offset, literals.data(), payload_bytes);
         }
 
         /// @brief Returns the stored literal count for a clause, as written by `allocate_clause`.
@@ -90,13 +107,8 @@ namespace kmx::sat::cdcl::bank
             const auto payload_bytes = static_cast<std::size_t>(count) * sizeof(literal::raw_t);
             if (payload_offset + payload_bytes > active_.size())
                 return result;
-            result.reserve(count);
-            for (std::uint32_t index {}; index < count; ++index)
-            {
-                literal::raw_t raw {};
-                std::memcpy(&raw, active_.data() + payload_offset + index * sizeof(literal::raw_t), sizeof(raw));
-                result.push_back(literal {raw});
-            }
+            result.resize(count);
+            std::memcpy(result.data(), active_.data() + payload_offset, payload_bytes);
             return result;
         }
         [[nodiscard]] std::span<const literal> view_literals(const clause::ref_t ref) const noexcept
