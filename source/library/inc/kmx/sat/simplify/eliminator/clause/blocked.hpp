@@ -22,6 +22,8 @@ namespace kmx::sat::simplify::eliminator::clause
     /// @note Per the proof-format compatibility matrix, DRAT/LRAT/FRAT can express BCE only through resolution
     /// expansion; this pass must query `proof::proof_manager` for the active format before running when a native
     /// gate-level representation is not available.
+    /// @warning Partially implemented. `emit_extension_record` is empty, so a removed blocked clause is never
+    /// recorded for model reconstruction; enabling this pass would produce models that falsify removed clauses.
     class blocked final
     {
     public:

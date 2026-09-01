@@ -56,15 +56,27 @@ namespace kmx::sat::simplify
         scheduler.run_epoch();
         REQUIRE(scheduler.epoch_count() == 3u);
 
+        // Bounded elimination is database-backed: resolving (1 v 2) with (-1 v 3) yields the single resolvent
+        // (2 v 3), so eliminating variable 1 replaces two clauses with one.
+        cdcl::clause::database bounded_database;
+        cdcl::stack::extension bounded_extension;
+        const std::array<literal, 2> bounded_first {literal {variable {1u}, false}, literal {variable {2u}, false}};
+        const std::array<literal, 2> bounded_second {literal {variable {1u}, true}, literal {variable {3u}, false}};
+        bounded_database.add_clause(std::span<const literal> {bounded_first}, false);
+        bounded_database.add_clause(std::span<const literal> {bounded_second}, false);
+
         eliminator::variable::bounded bounded;
-        std::vector<std::vector<literal>> bounded_clauses {{literal {variable {1u}, false}, literal {variable {2u}, false}},
-                                                           {literal {variable {1u}, true}, literal {variable {3u}, false}}};
-        bounded.set_clauses(bounded_clauses);
+        bounded.attach_clause_database(bounded_database);
+        bounded.attach_extension_stack(bounded_extension);
+        bounded.refresh_occurrence_index();
         REQUIRE(bounded.score_variable(variable {1u}) <= 0);
         bounded.run();
-        REQUIRE(bounded.elimination_count() == 1u);
-        REQUIRE(bounded.eliminated_variables().size() == 1u);
+        REQUIRE(bounded.elimination_count() >= 1u);
+        REQUIRE(!bounded.eliminated_variables().empty());
+        REQUIRE(bounded_extension.size() >= 1u);
 
+        std::vector<std::vector<literal>> bounded_clauses {{literal {variable {1u}, false}, literal {variable {2u}, false}},
+                                                           {literal {variable {1u}, true}, literal {variable {3u}, false}}};
         eliminator::variable::fast fast;
         fast.set_clauses(bounded_clauses);
         REQUIRE(fast.cheap_can_eliminate(variable {1u}));

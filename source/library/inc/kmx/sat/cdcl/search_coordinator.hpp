@@ -327,6 +327,11 @@ namespace kmx::sat::cdcl
         /// @brief Records an executed assignment literal in decision heuristics for saved-phase reuse.
         /// @param assigned_literal Literal assigned by assumptions/propagation/branching.
         /// @throws None (noexcept).
+        /// @brief Returns a variable to the decision candidate sources after backtracking unassigns it.
+        /// @param var Variable that has just become unassigned.
+        /// @throws None (noexcept).
+        void notify_unassigned_variable(const variable var) noexcept { decision_engine_.notify_unassigned_variable(var); }
+
         void notify_assignment_literal(const literal assigned_literal) noexcept
         {
             decision_engine_.notify_assignment_literal(assigned_literal);
@@ -364,6 +369,10 @@ namespace kmx::sat::cdcl
 
         /// @brief Returns whether a restart is currently requested or due.
         [[nodiscard]] bool should_restart() const noexcept { return restart_controller_.should_restart(); }
+
+        /// @brief Returns whether a conflict has been recorded since the last performed restart.
+        /// @throws None (noexcept).
+        [[nodiscard]] bool has_progress_since_restart() const noexcept { return restart_controller_.has_progress_since_restart(); }
 
         /// @brief Returns the next branching literal selected by the decision engine.
         /// @param fallback_variable Variable index staged into the current lightweight heuristic path.
@@ -412,7 +421,11 @@ namespace kmx::sat::cdcl
             const auto branch_literal = decision_engine_.pick_branch_literal();
             if (!branch_literal.has_value())
             {
-                handle_sat();
+                // Only an exhausted candidate source with no caller-supplied fallback means every variable is
+                // assigned. When the caller passed a fallback it has already found an unassigned variable, so
+                // an empty pick is heuristic exhaustion and must not be recorded as a satisfying assignment.
+                if (fallback_variable == 0u)
+                    handle_sat();
                 return {};
             }
 
@@ -553,7 +566,7 @@ namespace kmx::sat::cdcl
                 deferred_inprocess_streak_ = 0u;
             }
 
-            restart_controller_.reset_after_inprocess();
+            restart_controller_.resynchronize_after_inprocess();
         }
 
         /// @brief Returns how many inprocess epoch completion notifications were observed.

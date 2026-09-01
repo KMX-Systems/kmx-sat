@@ -1,5 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <span>
+
 #include <kmx/sat/cdcl/clause/database.hpp>
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
 #include <kmx/sat/literal.hpp>
@@ -87,9 +90,30 @@ namespace kmx::sat::simplify
         subsumer.attach_database(subsumption_database);
         subsumer.attach_proof_manager(subsumer_proof_manager);
         REQUIRE(subsumer.is_subsumed(subsumed_ref));
-        subsumer.strengthen_subsumed_clause(subsumed_ref);
-        REQUIRE(subsumer.strengthened_count() == 1u);
-        REQUIRE(subsumer_proof_manager.last_event().kind == proof::event_kind::shrink_clause);
+
+        // Self-subsuming resolution needs a justifying clause: (1 v 2) resolved with (-1 v 2 v 3) on 1 yields
+        // (2 v 3), which subsumes the second clause, so -1 can be dropped from it. Removing a literal without
+        // such a partner would strengthen the formula and lose models, so an unjustified request is refused.
+        cdcl::clause::database strengthen_database;
+        const std::array<literal, 2> justifier {literal {variable {1u}, false}, literal {variable {2u}, false}};
+        const std::array<literal, 3> strengthen_target {literal {variable {1u}, true}, literal {variable {2u}, false},
+                                                        literal {variable {3u}, false}};
+        strengthen_database.add_clause(std::span<const literal> {justifier}, false);
+        const auto strengthen_ref = strengthen_database.add_clause(std::span<const literal> {strengthen_target}, false);
+
+        forward_subsumer strengthener;
+        proof_manager strengthener_proof_manager;
+        strengthener_proof_manager.enable_format("drat");
+        strengthener.attach_database(strengthen_database);
+        strengthener.attach_proof_manager(strengthener_proof_manager);
+
+        REQUIRE_FALSE(strengthener.strengthen_by_resolution(strengthen_ref, literal {variable {3u}, false}));
+        REQUIRE(strengthener.strengthened_count() == 0u);
+
+        REQUIRE(strengthener.strengthen_by_resolution(strengthen_ref, literal {variable {1u}, true}));
+        REQUIRE(strengthener.strengthened_count() == 1u);
+        REQUIRE(strengthener_proof_manager.last_event().kind == proof::event_kind::shrink_clause);
+        REQUIRE(strengthen_database.storage_of().view_literals(strengthen_ref).size() == 2u);
         subsumer.run();
         REQUIRE(subsumer.run_count() == 1u);
         REQUIRE(subsumer.subsumed_count() == 1u);

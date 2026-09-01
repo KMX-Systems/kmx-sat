@@ -19,6 +19,8 @@ namespace kmx::sat::simplify::engine
     /// exhaustive result; `transfer_facts` feeds confirmed backbone literals to `extractor::backbone` and confirmed
     /// equivalences to `equivalence_substitutor` for solver-wide application.
     /// @reference SAT sweeping with an embedded micro-solver ("kitten"), as used by Kissat.
+    /// @warning Not implemented. Every method below only advances a counter or sets a flag; no micro-instance is
+    /// built and no backbone or equivalence is ever derived.
     class sweep final
     {
     public:

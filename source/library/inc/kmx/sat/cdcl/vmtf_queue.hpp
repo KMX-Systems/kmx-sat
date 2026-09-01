@@ -85,6 +85,26 @@ namespace kmx::sat::cdcl
             return nodes_storage_[head_].value;
         }
 
+        /// @brief Returns the frontmost variable satisfying `selectable`, without modifying the queue.
+        /// @details The decision engine previously called `remove` on every candidate it rejected, which drops the
+        /// variable permanently even though rejection only means "currently assigned". Walking the list leaves the
+        /// bump order intact, so a variable becomes a candidate again as soon as backtracking unassigns it.
+        /// @tparam predicate_t Callable of signature `bool(variable)`.
+        /// @param selectable Predicate identifying an acceptable candidate.
+        /// @return Frontmost acceptable variable, or `std::nullopt` when none qualifies.
+        /// @throws None (noexcept).
+        template <typename predicate_t>
+        std::optional<variable> front_candidate_if(predicate_t&& selectable) const noexcept
+        {
+            for (auto node_index = head_; node_index != npos; node_index = nodes_storage_[node_index].next)
+            {
+                const auto candidate = nodes_storage_[node_index].value;
+                if (selectable(candidate))
+                    return candidate;
+            }
+            return {};
+        }
+
         /// @brief Removes a variable from the queue, typically when eliminated by simplification.
         /// @param var Variable to remove.
         /// @throws None (noexcept).

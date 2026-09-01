@@ -21,6 +21,8 @@ namespace kmx::sat::runtime
     /// ordering or gate-extraction sequencing, which remain sequential) may be wrapped by this executor.
     /// @note Research-track: any pass promoted to run through this executor must first prove order-independent
     /// output and clear the comparative benchmarking harness; it never parallelizes `search_coordinator` itself.
+    /// @warning Not implemented. Nothing here runs in parallel: `run_parallel_pass` computes a chunk size and
+    /// increments counters, and no threading primitive appears anywhere in this directory.
     class parallel_preprocess_executor final
     {
     public:

@@ -21,6 +21,10 @@ namespace kmx::sat::simplify::eliminator::variable
     /// `run_fast_round` performs one such abbreviated sweep, deferring to the owned `bounded` instance for the actual
     /// elimination mechanics (resolvent construction, extension-stack recording) once a cheap check accepts a
     /// variable.
+    /// @warning Not implemented. `run_fast_round` scores only variable 1 and the embedded `bounded` instance is
+    /// never attached to a clause database, so this pass reports counters without eliminating anything. Use
+    /// `eliminator::variable::bounded` directly, which is database-backed and gated by a satisfiability-preservation
+    /// and model-reconstruction property test.
     class fast final
     {
     public:
@@ -29,11 +33,7 @@ namespace kmx::sat::simplify::eliminator::variable
         fast() noexcept = default;
 
         /// @brief Supplies the clause set to evaluate for elimination.
-        void set_clauses(const std::vector<std::vector<literal>>& clauses) noexcept
-        {
-            clauses_ = clauses;
-            bounded_.set_clauses(clauses);
-        }
+        void set_clauses(const std::vector<std::vector<literal>>& clauses) noexcept { clauses_ = clauses; }
 
         /// @brief Runs one abbreviated, cheaply-scored elimination round.
         /// @throws None (noexcept).

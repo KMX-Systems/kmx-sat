@@ -1,68 +1,98 @@
 {
-  "schema": 1,
   "instances": [
     {
+      "expected_status": "SATISFIABLE",
       "file": "branching_sat.cnf",
-      "sha256": "7583bbfd47c968ad480610fa5974d5086d6643a494221fd636cbd3a134962e3a",
-      "expected_status": "SATISFIABLE"
+      "sha256": "7583bbfd47c968ad480610fa5974d5086d6643a494221fd636cbd3a134962e3a"
     },
     {
+      "expected_status": "SATISFIABLE",
       "file": "deep_implication.cnf",
-      "sha256": "43ae8f7749a3fa77d6cc335cba6750721ebee928fccbf19e7228445666776931",
-      "expected_status": "SATISFIABLE"
+      "sha256": "43ae8f7749a3fa77d6cc335cba6750721ebee928fccbf19e7228445666776931"
     },
     {
+      "expected_status": "UNSATISFIABLE",
       "file": "learned_unsat.cnf",
-      "sha256": "bf7f6522b567210fb8538de68352e4fb167c4d0ea9739d9ebcea988f7e5b2cd3",
-      "expected_status": "UNSATISFIABLE"
+      "sha256": "bf7f6522b567210fb8538de68352e4fb167c4d0ea9739d9ebcea988f7e5b2cd3"
     },
     {
+      "expected_status": "SATISFIABLE",
       "file": "sat_unit.cnf",
-      "sha256": "8a3f04e8f347c791e22486daea0512e406fbe6d0a8f06d2ad167ca6e1cf4b10f",
-      "expected_status": "SATISFIABLE"
+      "sha256": "8a3f04e8f347c791e22486daea0512e406fbe6d0a8f06d2ad167ca6e1cf4b10f"
     },
     {
+      "expected_status": "UNSATISFIABLE",
       "file": "unsat_branching.cnf",
-      "sha256": "59f412915c182b7b659bbb01e63a0fd5fa3cebf27ffda6f7933e3f0634cd18b2",
-      "expected_status": "UNSATISFIABLE"
+      "sha256": "59f412915c182b7b659bbb01e63a0fd5fa3cebf27ffda6f7933e3f0634cd18b2"
     },
     {
+      "expected_status": "UNSATISFIABLE",
       "file": "proof_unsat.cnf",
-      "sha256": "7ca1c7d1fdf79d659efd79d9d2f2f7083380b4273cf8bb54464eb95cdd7d7a96",
-      "expected_status": "UNSATISFIABLE"
+      "sha256": "7ca1c7d1fdf79d659efd79d9d2f2f7083380b4273cf8bb54464eb95cdd7d7a96"
     },
     {
+      "expected_status": "UNSATISFIABLE",
       "file": "restart_reduction_unsat.cnf",
-      "sha256": "766e4d9d1a1d7fc25671e79f52f993e9fdeab3fe9e42366f5f1f8f355fcd7d53",
-      "expected_status": "UNSATISFIABLE"
+      "sha256": "766e4d9d1a1d7fc25671e79f52f993e9fdeab3fe9e42366f5f1f8f355fcd7d53"
     },
     {
+      "expected_status": "UNSATISFIABLE",
       "file": "unsat_units.cnf",
-      "sha256": "b043434f7ba4a33555786beba54e44b4b0c7488c31a594551cb9314909c45a86",
-      "expected_status": "UNSATISFIABLE"
+      "sha256": "b043434f7ba4a33555786beba54e44b4b0c7488c31a594551cb9314909c45a86"
     },
     {
+      "expected_status": "SATISFIABLE",
       "file": "wide_clause_sat.cnf",
-      "sha256": "5bc6bb04b0c1520f5f6794f4a5ff53768c887fde50d067217f2ffb5536e47705",
-      "expected_status": "SATISFIABLE"
+      "sha256": "5bc6bb04b0c1520f5f6794f4a5ff53768c887fde50d067217f2ffb5536e47705"
     },
     {
+      "expected_status": "SATISFIABLE",
       "file": "satlib_aim100_16_yes_01.cnf",
       "sha256": "74560a84735393495e1665fb2999f6b7948fb7f12b11c23e530aedccbf8cbbec",
-      "expected_status": "SATISFIABLE",
       "source": "SATLIB AIM benchmark"
     },
     {
+      "expected_status": "SATISFIABLE",
       "file": "satlib_aim100_20_yes_01.cnf",
       "sha256": "c2d8d8d1a0723ed0502b185b757a068b4df088e059bd51e39a0837579fe15114",
-      "expected_status": "SATISFIABLE",
       "source": "SATLIB AIM benchmark"
     },
     {
+      "expected_status": "SATISFIABLE",
       "file": "satlib_aim100_34_yes_01.cnf",
       "sha256": "28bed18fc63fc15ddd8d7d6de295d5dd50933346e901594d8fc0429bf50a0b9c",
-      "expected_status": "SATISFIABLE",
       "source": "SATLIB AIM benchmark"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_aim100_no_01.cnf",
+      "sha256": "42058adae7534bb0613399393b369724c172055a0056a433ddc82cd6512545e2"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_aim100_yes_01.cnf",
+      "sha256": "74560a84735393495e1665fb2999f6b7948fb7f12b11c23e530aedccbf8cbbec"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_uf250_01.cnf",
+      "sha256": "99c853cc0a0fca7e7d7cfa2ed2d1889dde35ecd77e657b976c2dd67294dc86ed"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_uf250_050.cnf",
+      "sha256": "60538e2ae65195c31665c574b919ada9309f884e9805247461fe683e9b97c3c5"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_uuf250_01.cnf",
+      "sha256": "4f332e3efec78fc7875adfb654d531ba1fbf61b24e8e9145baba5f8907b9dad9"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_uuf250_050.cnf",
+      "sha256": "ceead3f854043912fccc3af0cf72e5fe30af7126c239d4f6f1863c3dfb813bc5"
     }
-  ]
+  ],
+  "schema": 1
 }

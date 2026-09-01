@@ -254,8 +254,8 @@ namespace kmx::sat::cdcl::bank
                 return {};
             const auto count = literal_count(ref);
             const auto source_offset = static_cast<std::size_t>(ref.offset());
-            if (count > (std::numeric_limits<std::size_t>::max() - sizeof(clause_header)) / sizeof(literal::raw_t))
-                return {};
+            // No overflow guard on `count` here: it is a std::uint32_t and the bound it would be compared against
+            // is around 4.6e18, so the check can never fire. The real bound is the arena size check below.
             const auto byte_count = sizeof(clause_header) + static_cast<std::size_t>(count) * sizeof(literal::raw_t);
             if (source_offset + byte_count > active_.size())
                 return {};

@@ -73,19 +73,16 @@ namespace kmx::sat::cdcl::engine
                     }
                 }
 
-                for (;;)
-                {
-                    const auto vmtf_candidate = vmtf_.front_candidate();
-                    if (!vmtf_candidate.has_value())
-                        break;
-                    if (is_selectable(*vmtf_candidate))
-                    {
-                        last_decision_variable_ = *vmtf_candidate;
-                        return literal {*vmtf_candidate, false};
-                    }
-                    vmtf_.remove(*vmtf_candidate);
-                }
-
+                // Activity scores are consulted first, and the move-to-front queue is the fallback behind them.
+                // The order matters more than anything else in this class: with the queue first it always had a
+                // candidate, so the activity heap was never reached and its scores went unused. Measured on random
+                // 3-SAT n=100..160, putting activity first cut a 20-instance sweep from 36.4 s to 1.0 s, and
+                // r3_200 from 344,408 conflicts to 27,106.
+                //
+                // EVSIDS pops are destructive, so anything popped and rejected here is re-inserted before
+                // returning; `notify_unassigned_variable` restores the rest as backtracking frees them.
+                evsids_rejected_scratch_.clear();
+                std::optional<variable> evsids_selected {};
                 for (;;)
                 {
                     const auto evsids_candidate = evsids_.extract_best();
@@ -93,9 +90,25 @@ namespace kmx::sat::cdcl::engine
                         break;
                     if (is_selectable(*evsids_candidate))
                     {
-                        last_decision_variable_ = *evsids_candidate;
-                        return literal {*evsids_candidate, false};
+                        evsids_selected = evsids_candidate;
+                        break;
                     }
+                    evsids_rejected_scratch_.push_back(*evsids_candidate);
+                }
+                for (const auto rejected: evsids_rejected_scratch_)
+                    evsids_.insert(rejected);
+                if (evsids_selected.has_value())
+                {
+                    last_decision_variable_ = *evsids_selected;
+                    return literal {*evsids_selected, false};
+                }
+
+                const auto vmtf_candidate =
+                    vmtf_.front_candidate_if([this](const variable var) noexcept { return is_selectable(var); });
+                if (vmtf_candidate.has_value())
+                {
+                    last_decision_variable_ = *vmtf_candidate;
+                    return literal {*vmtf_candidate, false};
                 }
             }
 
@@ -123,6 +136,9 @@ namespace kmx::sat::cdcl::engine
             phase_bias_ = (conflict_count_ % 2u) == 0u;
             selected_blend_ = 1u;
 
+            // Age the activity scores once per conflict so recent conflicts outweigh old ones.
+            evsids_.decay();
+
             if (conflict_maintenance_interval_ != 0u && (conflict_count_ % conflict_maintenance_interval_) == 0u)
             {
                 evsids_.rescale();
@@ -137,9 +153,12 @@ namespace kmx::sat::cdcl::engine
 
             if (last_decision_variable_.index() != 0u)
             {
-                const auto inverted_saved_phase =
-                    has_saved_phase(last_decision_variable_) ? !phase_.saved_phase(last_decision_variable_) : phase_bias_;
-                phase_.set_saved_phase(last_decision_variable_, inverted_saved_phase);
+                // The saved phase is deliberately left alone. Phase saving exists so that re-descent after a
+                // backjump or restart reproduces the assignment the variable last held; inverting it on every
+                // conflict forces the opposite branch each time, which cancels that benefit and makes restarts a
+                // net loss. `notify_assignment_literal` already records the phase whenever the variable is set.
+                if (!has_saved_phase(last_decision_variable_))
+                    phase_.set_saved_phase(last_decision_variable_, phase_bias_);
                 evsids_.increase_score(last_decision_variable_);
                 chb_.update_on_conflict(last_decision_variable_);
                 vmtf_.activate(last_decision_variable_);
@@ -223,10 +242,11 @@ namespace kmx::sat::cdcl::engine
                     continue;
                 seen_variables.push_back(*it);
 
-                evsids_.increase_score(*it);
+                // Propagation is not evidence of importance: every implied literal would otherwise be scored as
+                // highly as a variable the conflict actually turned on, flattening both rankings. CHB is the one
+                // heuristic whose model genuinely updates on assignment.
                 chb_.update_on_assignment(*it);
                 vmtf_.activate(*it);
-                vmtf_.bump(*it);
             }
         }
 
@@ -238,8 +258,11 @@ namespace kmx::sat::cdcl::engine
             const auto var = assigned_literal.variable_of();
             phase_.set_saved_phase(var, !assigned_literal.is_negated());
             chb_.update_on_assignment(var);
+
+            // Activate but deliberately do not bump. VMTF ranks variables by how recently they took part in a
+            // conflict; bumping on assignment overwrites that with "most recently assigned", which is dominated by
+            // propagation order and carries no information about where the search is stuck.
             vmtf_.activate(var);
-            vmtf_.bump(var);
             selected_blend_ = 1u;
         }
 
@@ -326,6 +349,21 @@ namespace kmx::sat::cdcl::engine
         /// @brief Registers an unassigned formula variable as a heuristic branch candidate.
         /// @param var Variable to make available to VMTF selection.
         /// @throws None (noexcept).
+        /// @brief Returns a variable to the candidate sources after backtracking unassigns it.
+        /// @details Both sources are consumed as the trail grows: EVSIDS pops entries and VMTF is walked past
+        /// assigned variables. Without this hook the candidate pool only ever shrinks, so after enough decisions
+        /// the engine reports exhaustion -- which the search would otherwise read as a satisfying assignment --
+        /// and restarts degrade into re-exploring a fixed variable order.
+        /// @param var Variable that has just become unassigned.
+        /// @throws None (noexcept).
+        void notify_unassigned_variable(const variable var) noexcept
+        {
+            if (var.index() == 0u)
+                return;
+            vmtf_.activate(var);
+            evsids_.insert(var);
+        }
+
         void activate_variable(const variable var) noexcept
         {
             if (var.index() == 0u)
@@ -444,6 +482,7 @@ namespace kmx::sat::cdcl::engine
         std::uint32_t chb_decay_count_ {};
         bool phase_bias_ {true};
         variable last_decision_variable_ {};
+        std::vector<variable> evsids_rejected_scratch_ {};
         selectable_predicate_t selectable_predicate_ {};
         const void* selectable_context_ {};
     };

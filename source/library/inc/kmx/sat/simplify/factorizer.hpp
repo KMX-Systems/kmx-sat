@@ -24,6 +24,8 @@ namespace kmx::sat::simplify
     /// `model_reconstructor::drop_internal_only_variables`; it must never be exposed through `model_view`, and its
     /// introduction must be reported to `proof::proof_manager` (and to `stack::extension` if reversibility is
     /// needed) like any other structural transformation.
+    /// @warning Not implemented. No variable is introduced and no clause is rewritten; the counters advance
+    /// without a corresponding transformation.
     class factorizer final
     {
     public:

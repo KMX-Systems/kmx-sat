@@ -38,28 +38,68 @@ namespace kmx::sat::cdcl
         void increase_score(const variable var) noexcept
         {
             const auto index = static_cast<std::size_t>(var.index());
+            const auto activity = retained_activity(index) + bump_increment_;
+            set_retained_activity(index, activity);
+
             const auto position = position_of(index);
             if (position != npos)
             {
-                scores_[position].second += bump_increment_;
+                scores_[position].second = activity;
                 sift_up(position);
             }
             else
             {
-                scores_.emplace_back(var, bump_increment_);
+                scores_.emplace_back(var, activity);
                 const auto new_position = scores_.size() - 1u;
                 set_position(index, new_position);
                 sift_up(new_position);
             }
         }
 
+        /// @brief Re-inserts a variable at its retained activity, typically when backtracking unassigns it.
+        /// @details `extract_best` pops the heap entry, so without a retained activity array a popped variable
+        /// could only ever come back at the default score, and a variable rejected merely for being assigned would
+        /// be lost for the rest of the episode. Activity therefore lives in `retained_activity_`, indexed by
+        /// variable, and the heap entry is a view onto it.
+        /// @param var Variable to re-insert.
+        /// @throws None (noexcept).
+        void insert(const variable var) noexcept
+        {
+            const auto index = static_cast<std::size_t>(var.index());
+            if (position_of(index) != npos)
+                return;
+            scores_.emplace_back(var, retained_activity(index));
+            const auto new_position = scores_.size() - 1u;
+            set_position(index, new_position);
+            sift_up(new_position);
+        }
+
         /// @brief Renormalizes all activity scores and the shared bump increment to avoid floating-point overflow.
         /// @throws None (noexcept).
-        void rescale() noexcept
+        void rescale() noexcept { rescale_by(0.5); }
+
+        /// @brief Ages every score by making subsequent bumps worth more; call once per conflict.
+        /// @details This is what makes the heuristic exponential rather than a plain tally. `increase_score` adds a
+        /// shared increment, so growing that increment by `1 / decay` after each conflict means a bump from the
+        /// current conflict outweighs one from N conflicts ago by `decay^-N`, and the ranking tracks the
+        /// subproblem the search is actually in. Without it every score is an all-time participation count with no
+        /// recency weighting, and `rescale` alone cannot supply that: halving scores and the increment together
+        /// leaves the ordering identical.
+        /// @throws None (noexcept).
+        void decay() noexcept
         {
-            for (auto& entry: scores_)
-                entry.second *= 0.5;
-            bump_increment_ *= 0.5;
+            bump_increment_ /= variable_decay_;
+            if (bump_increment_ > rescale_threshold)
+                rescale_by(1.0 / rescale_threshold);
+        }
+
+        /// @brief Sets the per-conflict decay factor; smaller values forget older conflicts faster.
+        /// @param decay Factor in (0, 1]; values outside that range are ignored.
+        /// @throws None (noexcept).
+        void set_variable_decay(const double decay) noexcept
+        {
+            if (decay > 0.0 && decay <= 1.0)
+                variable_decay_ = decay;
         }
 
         /// @brief Pops and returns the currently unassigned variable with the highest activity score.
@@ -101,6 +141,30 @@ namespace kmx::sat::cdcl
 
     private:
         static constexpr std::size_t npos {static_cast<std::size_t>(~0u)};
+        static constexpr std::size_t direct_activity_limit {std::size_t {1} << 24};
+
+        double retained_activity(const std::size_t index) const noexcept
+        {
+            if (index < direct_activity_limit)
+                return index < retained_activity_.size() ? retained_activity_[index] : 0.0;
+            const auto it = overflow_retained_activity_.find(index);
+            return it == overflow_retained_activity_.end() ? 0.0 : it->second;
+        }
+
+        void set_retained_activity(const std::size_t index, const double activity) noexcept
+        {
+            if (index < direct_activity_limit)
+            {
+                if (index >= retained_activity_.size())
+                    retained_activity_.resize(index + 1u, 0.0);
+                retained_activity_[index] = activity;
+                return;
+            }
+            overflow_retained_activity_[index] = activity;
+        }
+
+        std::vector<double> retained_activity_ {};
+        std::unordered_map<std::size_t, double> overflow_retained_activity_ {};
         /// Variable indices below this bound use the flat table; anything above falls back to the overflow map.
         static constexpr std::size_t direct_index_limit {std::size_t {1u} << 24};
 
@@ -204,6 +268,25 @@ namespace kmx::sat::cdcl
         std::vector<std::pair<variable, double>> scores_ {};
         std::vector<std::size_t> positions_ {};
         std::unordered_map<std::size_t, std::size_t> overflow_positions_ {};
+        /// @brief Multiplicative factor applied per conflict; 0.95 matches the MiniSat-family default.
+        static constexpr double default_variable_decay {0.95};
+        /// @brief Score ceiling that triggers a proportional rescale, keeping the doubles far from overflow.
+        static constexpr double rescale_threshold {1e100};
+
+        /// @brief Scales every score and the shared increment by `factor`, preserving their relative order.
+        /// @throws None (noexcept).
+        void rescale_by(const double factor) noexcept
+        {
+            for (auto& entry: scores_)
+                entry.second *= factor;
+            for (auto& activity: retained_activity_)
+                activity *= factor;
+            for (auto& [index, activity]: overflow_retained_activity_)
+                activity *= factor;
+            bump_increment_ *= factor;
+        }
+
+        double variable_decay_ {default_variable_decay};
         double bump_increment_ {1.0};
     };
 }

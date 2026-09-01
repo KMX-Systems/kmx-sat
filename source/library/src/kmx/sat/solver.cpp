@@ -34,16 +34,41 @@ namespace kmx::sat
             apply_core_configuration();
         }
 
+        /// @brief Conflicts between clause-database reduction passes when the caller sets no interval.
+        /// @details Re-tuned after the decision heuristic was fixed to consult activity scores; the optimum moved
+        /// with it. Measured over random 3-SAT (n=130..200), pigeonhole and uf/uuf250: 50 -> 28.2 s, 100 -> 15.3 s,
+        /// 200 -> 11.0 s, 300 -> 9.7 s, 400 -> 9.7 s, 1000 -> 10.5 s, 2000 -> 13.9 s, 3000 -> 17.3 s. Without
+        /// reduction at all the learned database grows unbounded and every watch-list scan pays for it. Restarts
+        /// remain off by default: they still cost conflicts rather than saving them on this set.
+        static constexpr counter_t default_reduction_interval {400u};
         static constexpr std::uint32_t default_decision_conflict_maintenance_interval {16u};
         static constexpr std::uint32_t default_decision_chb_decay_interval {8u};
         static constexpr std::uint32_t default_decision_restart_decay_interval {4u};
         static constexpr std::size_t max_emitted_statistics_report_lines {64u};
+
+        /// @brief Rebuilds `model_lookup_` from the current contents of `last_model_`.
+        /// @throws None (noexcept).
+        void refresh_model_lookup() noexcept
+        {
+            model_lookup_.clear();
+            for (const auto lit: last_model_)
+            {
+                const auto index = static_cast<std::size_t>(lit.variable_of().index());
+                if (index >= model_lookup_.size())
+                    model_lookup_.resize(index + 1u, std::int8_t {-1});
+                model_lookup_[index] = lit.is_negated() ? std::int8_t {0} : std::int8_t {1};
+            }
+        }
 
         cdcl::solver_core core_ {};
         telemetry::solver_statistics statistics_ {};
         std::vector<literal> pending_clause_ {};
         std::vector<literal> assumptions_ {};
         std::vector<literal> last_model_ {};
+        /// @brief Variable-indexed view of `last_model_`: -1 absent, 0 false, 1 true.
+        /// @details Keeps `value_of`/`ipasir_val` O(1); rebuilt by `refresh_model_lookup` whenever `last_model_`
+        /// changes, since a linear scan per query is O(n) per variable and O(n^2) to read a whole model.
+        std::vector<std::int8_t> model_lookup_ {};
         std::vector<literal> last_failed_core_ {};
         solver_state_machine state_machine_ {};
         terminate_callback_t terminate_callback_ {};
@@ -185,7 +210,8 @@ namespace kmx::sat
             core_.set_decision_maintenance_intervals(conflict_maintenance_interval, chb_decay_interval, restart_decay_interval);
             core_.set_restart_interval(has_configured_restart_interval_ ? configured_restart_interval_ : 0u);
             core_.set_decision_restart_interval(has_configured_decision_restart_interval_ ? configured_decision_restart_interval_ : 0u);
-            core_.set_reduction_interval(has_configured_reduction_interval_ ? configured_reduction_interval_ : 0u);
+            core_.set_reduction_interval(has_configured_reduction_interval_ ? configured_reduction_interval_
+                                                                             : default_reduction_interval);
             core_.set_chb_enabled(configured_chb_enabled_);
             core_.set_reduction_fraction_percent(has_configured_reduction_fraction_percent_ ? configured_reduction_fraction_percent_ : 50u);
             core_.set_activity_retention_threshold(has_configured_activity_retention_threshold_ ? configured_activity_retention_threshold_ :
@@ -324,6 +350,7 @@ namespace kmx::sat
 
         const auto internal_model = impl_->core_.extract_internal_model();
         impl_->last_model_.assign(internal_model.begin(), internal_model.end());
+        impl_->refresh_model_lookup();
         const auto failed_core_span = impl_->core_.extract_failed_core();
         impl_->last_failed_core_.assign(failed_core_span.begin(), failed_core_span.end());
 
@@ -403,10 +430,13 @@ namespace kmx::sat
     /// @throws None (noexcept).
     std::optional<bool> solver::value_of(const variable var) const noexcept
     {
-        for (const auto lit: impl_->last_model_)
-            if (lit.variable_of().index() == var.index())
-                return !lit.is_negated();
-        return {};
+        const auto index = static_cast<std::size_t>(var.index());
+        if (index >= impl_->model_lookup_.size())
+            return {};
+        const auto value = impl_->model_lookup_[index];
+        if (value < 0)
+            return {};
+        return value != 0;
     }
 
     /// @brief Constructs a default-initialized instance.
@@ -712,6 +742,7 @@ namespace kmx::sat
         impl_->pending_clause_.clear();
         impl_->assumptions_.clear();
         impl_->last_model_.clear();
+        impl_->model_lookup_.clear();
         impl_->last_failed_core_.clear();
         impl_->last_consumed_proof_event_count_ = 0u;
         impl_->emitted_statistics_report_lines_.clear();

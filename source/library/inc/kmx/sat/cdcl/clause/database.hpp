@@ -181,6 +181,26 @@ namespace kmx::sat::cdcl::clause
             }
         }
 
+        /// @brief Drops the implication-reason mark from a clause that has stopped being a reason.
+        /// @details Reason marks protect a clause from reduction while a trail entry depends on it. They are set
+        /// when a literal is implied but were previously only cleared at the start of an episode, so marks
+        /// accumulated monotonically and eventually protected the whole learned-clause database -- reduction passes
+        /// then ran and deleted nothing. Backtracking clears the mark as it retracts the implication.
+        /// @param ref Reference to the clause to unmark.
+        /// @throws None (noexcept).
+        void unmark_reason_clause(const ref_t ref) noexcept
+        {
+            if (!ref.valid())
+                return;
+            const auto resolved = storage_.resolve_ref(ref);
+            if (!storage_.is_alive(resolved))
+            {
+                metadata_for(resolved.offset()).reason = false;
+                return;
+            }
+            clear_reason(ref);
+        }
+
         /// @brief Clears all transient implication-reason marks for a fresh solve episode.
         void clear_reason_clauses() noexcept
         {

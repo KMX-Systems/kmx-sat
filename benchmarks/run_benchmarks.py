@@ -28,6 +28,75 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+_CLAUSE_CACHE: dict[str, list[list[int]]] = {}
+
+
+def parse_dimacs_clauses(path: Path) -> list[list[int]]:
+    """Parse a DIMACS CNF into clauses, stopping at the SATLIB '%' trailer."""
+    clauses: list[list[int]] = []
+    current: list[int] = []
+    with path.open("r", encoding="ascii", errors="replace") as stream:
+        for line in stream:
+            line = line.strip()
+            if not line:
+                continue
+            if line[0] == "%":
+                break
+            if line[0] in "cp":
+                continue
+            for token in line.split():
+                value = int(token)
+                if value == 0:
+                    clauses.append(current)
+                    current = []
+                else:
+                    current.append(value)
+    if current:
+        clauses.append(current)
+    return clauses
+
+
+def instance_clauses(instance: Path) -> list[list[int]]:
+    key = str(instance)
+    cached = _CLAUSE_CACHE.get(key)
+    if cached is None:
+        cached = parse_dimacs_clauses(instance)
+        _CLAUSE_CACHE[key] = cached
+    return cached
+
+
+def parse_model_values(output: str) -> dict[int, bool]:
+    """Collect the assignment from the solver's DIMACS 'v' lines."""
+    values: dict[int, bool] = {}
+    for line in output.splitlines():
+        tokens = line.split()
+        if not tokens or tokens[0] != "v":
+            continue
+        for token in tokens[1:]:
+            try:
+                value = int(token)
+            except ValueError:
+                continue
+            if value != 0:
+                values[abs(value)] = value > 0
+    return values
+
+
+def verify_reported_model(instance: Path, output: str) -> bool | None:
+    """Check a reported model against the instance.
+
+    Returns True when every clause is satisfied, False when the model is invalid, and None when the solver
+    emitted no model at all (so the answer is unverifiable rather than wrong).
+    """
+    values = parse_model_values(output)
+    if not values:
+        return None
+    for clause in instance_clauses(instance):
+        if not any(values.get(abs(literal), True) == (literal > 0) for literal in clause):
+            return False
+    return True
+
+
 def run_command(template: str, instance: Path, seed: int, timeout: float, measure_memory: bool, cpu: int | None = None) -> dict[str, object]:
     command = template.format(instance=shlex.quote(str(instance)), seed=seed, timeout=timeout)
     if cpu is not None:
@@ -73,6 +142,7 @@ def run_command(template: str, instance: Path, seed: int, timeout: float, measur
         r"\b(conflicts|decisions|propagations|restarts|learned_clauses|learned_clause_glue_total|learned_clause_glue_samples|reduction_passes|reduced_clauses|deleted_clauses|proof_events|proof_buffered_payload_bytes)=(\d+)", output
     )}
     memory_match = re.search(r"\bkmx-memory-kb=(\d+)", output)
+    model_verified = verify_reported_model(instance, output) if status == "SATISFIABLE" else None
     return {
         "command": command,
         "exit_code": exit_code,
@@ -81,6 +151,7 @@ def run_command(template: str, instance: Path, seed: int, timeout: float, measur
         "elapsed_ms": elapsed_ns / 1_000_000.0,
         "output": output[-8192:],
         "status": status,
+        "model_verified": model_verified,
         "metrics": metrics,
         "peak_rss_kb": int(memory_match.group(1)) if memory_match else None,
     }
@@ -125,8 +196,8 @@ def provenance(configuration: str) -> dict[str, str]:
     }
 
 
-def repeat_signature(result: dict[str, object]) -> tuple[object, object]:
-    return result["status"], tuple(sorted(result["metrics"].items()))
+def repeat_signature(result: dict[str, object]) -> tuple[object, object, object]:
+    return result["status"], result["model_verified"], tuple(sorted(result["metrics"].items()))
 
 
 def representative_run(runs: list[dict[str, object]]) -> dict[str, object]:
@@ -208,6 +279,10 @@ def main() -> int:
         else:
             record["status_matches_manifest"] = True
         record["repeats_deterministic"] = all(repeat_signature(run) == repeat_signature(solver_runs[0]) for run in solver_runs[1:])
+        # A SATISFIABLE answer counts as verified only when the solver emitted a model and that model checks out.
+        record["model_verified"] = all(
+            run["model_verified"] is True for run in solver_runs if run["status"] == "SATISFIABLE"
+        )
         comparison_records = record["comparisons"]
         assert isinstance(comparison_records, dict)
         for label, template in comparisons:
@@ -275,13 +350,15 @@ def main() -> int:
     document["kpi"]["solver_proof_buffered_payload_bytes_max"] = max(
         (item["solver"]["metrics"].get("proof_buffered_payload_bytes", 0) for item in results), default=0
     )
+    document["kpi"]["solver_models_verified"] = sum(1 for item in results if item["model_verified"])
+    document["kpi"]["solver_models_unverified"] = sum(1 for item in results if not item["model_verified"])
     memory_values = [run["peak_rss_kb"] for item in results for run in item["solver_runs"] if run["peak_rss_kb"] is not None]
     document["kpi"]["solver_peak_rss_kb_max"] = max(memory_values, default=0)
     args.output.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps({"output": str(args.output), "instances": len(results)}, sort_keys=True))
     return 1 if any(
         not item["status_matches_manifest"] or not item["hash_matches_manifest"] or not item["repeats_deterministic"]
-        or not item["comparison_status_agreement"]
+        or not item["comparison_status_agreement"] or not item["model_verified"]
         for item in results
     ) else 0
 

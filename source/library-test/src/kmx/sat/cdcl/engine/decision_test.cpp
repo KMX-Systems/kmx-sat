@@ -82,13 +82,24 @@ namespace kmx::sat::cdcl
         engine::decision decision;
         const std::array<variable, 2> propagated_variables {variable {31u}, variable {32u}};
 
+        // Propagation makes variables selectable but must not rank them: an implied literal is not evidence that
+        // the variable matters, and scoring every propagation flattens the ranking for the ones that do.
         decision.notify_propagated_variables(propagated_variables);
         decision.set_next_variable(0u);
 
         const auto candidate = decision.pick_decision_variable();
         REQUIRE(candidate.has_value());
-        REQUIRE(candidate->variable_of().index() == 31u);
+        const auto propagated_only = candidate->variable_of().index();
+        REQUIRE((propagated_only == 31u || propagated_only == 32u));
         REQUIRE(decision.has_active_blend());
+
+        // Conflict participation does rank, and outranks anything merely propagated.
+        const std::array<variable, 1> conflict_variables {variable {32u}};
+        decision.notify_conflict_variables(conflict_variables);
+
+        const auto ranked = decision.pick_decision_variable();
+        REQUIRE(ranked.has_value());
+        REQUIRE(ranked->variable_of().index() == 32u);
     }
 
     TEST_CASE("decision engine weights short learned clauses more aggressively", "[sat]")
@@ -227,17 +238,25 @@ namespace kmx::sat::cdcl
         REQUIRE(branch->is_negated());
     }
 
-    TEST_CASE("decision engine prioritizes most recent assignment literal", "[sat]")
+    TEST_CASE("decision engine prioritizes conflict participation over assignment recency", "[sat]")
     {
         engine::decision decision;
 
+        // Assignment activates a variable and saves its phase, but deliberately does not rank it. Ranking by
+        // assignment recency tracks propagation order rather than where the search is stuck; measured on random
+        // 3-SAT it needed several times as many conflicts as ranking by conflict participation.
         decision.notify_assignment_literal(literal {variable {241u}, false});
         decision.notify_assignment_literal(literal {variable {242u}, false});
         decision.set_next_variable(0u);
 
+        const std::array<variable, 1> conflict_variables {variable {241u}};
+        decision.notify_conflict_variables(conflict_variables);
+
         const auto branch = decision.pick_branch_literal();
         REQUIRE(branch.has_value());
-        REQUIRE(branch->variable_of().index() == 242u);
+        REQUIRE(branch->variable_of().index() == 241u);
+
+        // The saved phase from the assignment is still what decides polarity.
         REQUIRE_FALSE(branch->is_negated());
     }
 

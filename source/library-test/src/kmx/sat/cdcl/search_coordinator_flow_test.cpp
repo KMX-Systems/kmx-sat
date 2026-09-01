@@ -297,9 +297,20 @@ namespace kmx::sat::cdcl
             REQUIRE(coordinator.current_restart_budget() == 0);
             REQUIRE(coordinator.restart_count() == 0);
 
+            // An inprocessing epoch must not swallow a restart that is already due. Epochs complete roughly
+            // every thirty conflicts, so consuming the pending flag here (and rebasing the conflict budget)
+            // starved every restart interval above that cadence: the trigger was pushed out faster than the
+            // conflict counter could reach it. The restart stays pending until the search actually performs it.
             coordinator.notify_inprocess_epoch_completed();
 
+            REQUIRE(coordinator.restart_count() == 0);
+            REQUIRE(coordinator.should_restart());
+            REQUIRE(coordinator.current_restart_budget() == 0);
+
+            coordinator.handle_restart();
+
             REQUIRE(coordinator.restart_count() == 1);
+            REQUIRE_FALSE(coordinator.should_restart());
             REQUIRE(coordinator.current_restart_budget() == 3);
 
             coordinator.set_next_decision_variable(27);
@@ -463,14 +474,17 @@ namespace kmx::sat::cdcl
             coordinator.apply_assumptions({});
             coordinator.set_restart_interval(4);
 
+            // Inprocessing epochs track their own yield/deferral bookkeeping but never consume a due restart
+            // and never rebase the conflict budget; only the search performing the restart does that.
             coordinator.request_restart();
             coordinator.notify_inprocess_epoch_completed(0u);
 
             REQUIRE(coordinator.inprocess_epoch_notification_count() == 1u);
             REQUIRE(coordinator.low_yield_inprocess_epoch_count() == 1u);
             REQUIRE(coordinator.deferred_inprocess_resync_count() == 0u);
-            REQUIRE(coordinator.restart_count() == 1u);
-            REQUIRE(coordinator.current_restart_budget() == 4u);
+            REQUIRE(coordinator.restart_count() == 0u);
+            REQUIRE(coordinator.should_restart());
+            REQUIRE(coordinator.current_restart_budget() == 0u);
 
             coordinator.request_restart();
             coordinator.notify_inprocess_epoch_completed(0u);
@@ -478,14 +492,19 @@ namespace kmx::sat::cdcl
             REQUIRE(coordinator.inprocess_epoch_notification_count() == 2u);
             REQUIRE(coordinator.low_yield_inprocess_epoch_count() == 2u);
             REQUIRE(coordinator.deferred_inprocess_resync_count() == 1u);
-            REQUIRE(coordinator.restart_count() == 1u);
+            REQUIRE(coordinator.restart_count() == 0u);
             REQUIRE(coordinator.current_restart_budget() == 0u);
 
             coordinator.notify_inprocess_epoch_completed(1u);
 
             REQUIRE(coordinator.inprocess_epoch_notification_count() == 3u);
             REQUIRE(coordinator.deferred_inprocess_resync_count() == 1u);
-            REQUIRE(coordinator.restart_count() == 2u);
+            REQUIRE(coordinator.restart_count() == 0u);
+            REQUIRE(coordinator.current_restart_budget() == 0u);
+
+            coordinator.handle_restart();
+
+            REQUIRE(coordinator.restart_count() == 1u);
             REQUIRE(coordinator.current_restart_budget() == 4u);
         }
 
@@ -496,19 +515,26 @@ namespace kmx::sat::cdcl
 
             coordinator.request_restart();
             coordinator.notify_inprocess_epoch_completed(0u);
-            REQUIRE(coordinator.restart_count() == 1u);
-            REQUIRE(coordinator.current_restart_budget() == 5u);
+            REQUIRE(coordinator.restart_count() == 0u);
+            REQUIRE(coordinator.should_restart());
+            REQUIRE(coordinator.current_restart_budget() == 0u);
 
             coordinator.request_restart();
             coordinator.notify_inprocess_epoch_completed(0u);
-            REQUIRE(coordinator.restart_count() == 1u);
+            REQUIRE(coordinator.restart_count() == 0u);
             REQUIRE(coordinator.current_restart_budget() == 0u);
             REQUIRE(coordinator.deferred_inprocess_resync_count() == 1u);
 
+            // The deferral guard bounds how long resynchronization can be postponed; it still must not
+            // manufacture a restart that the search never performed.
             coordinator.notify_inprocess_epoch_completed(0u);
-            REQUIRE(coordinator.restart_count() == 2u);
-            REQUIRE(coordinator.current_restart_budget() == 5u);
+            REQUIRE(coordinator.restart_count() == 0u);
+            REQUIRE(coordinator.current_restart_budget() == 0u);
             REQUIRE(coordinator.deferred_inprocess_resync_count() == 1u);
+
+            coordinator.handle_restart();
+            REQUIRE(coordinator.restart_count() == 1u);
+            REQUIRE(coordinator.current_restart_budget() == 5u);
         }
 
         {
@@ -580,9 +606,11 @@ namespace kmx::sat::cdcl
             coordinator.request_reduce();
             coordinator.notify_inprocess_epoch_completed(0u);
 
-            REQUIRE(coordinator.restart_count() == 1u);
+            // The epoch notification leaves the pending restart and its conflict budget untouched.
+            REQUIRE(coordinator.restart_count() == 0u);
+            REQUIRE(coordinator.should_restart());
             REQUIRE(coordinator.reduction_pass_count() == 0u);
-            REQUIRE(coordinator.current_restart_budget() == 2u);
+            REQUIRE(coordinator.current_restart_budget() == 0u);
             REQUIRE(coordinator.inprocess_epoch_notification_count() == 1u);
 
             coordinator.apply_assumptions({});

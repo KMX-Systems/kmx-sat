@@ -71,6 +71,17 @@ namespace kmx::sat::cdcl::bank
             list.push_back(entry);
         }
 
+        /// @brief Appends a watch entry without checking whether the clause is already watched on this literal.
+        /// @details `watch_literal` scans the whole target list to deduplicate, which is O(list length) on the
+        /// propagation inner loop, where watch replacement runs for every clause visited. Replacement always moves
+        /// a clause from one watched literal to a literal it is not yet watched on, so the scan cannot find
+        /// anything and only costs time. Use this on that path; keep `watch_literal` where a clause may genuinely
+        /// be re-attached.
+        /// @param lit Literal whose list receives the new entry.
+        /// @param entry Watch entry to append.
+        /// @throws None (noexcept).
+        void push_watch(const literal lit, const watch entry) noexcept { ensure_list(lit).push_back(entry); }
+
         /// @brief Removes one watch entry from the list for the given literal.
         /// @param lit Literal whose list loses the entry.
         /// @param entry Watch entry to remove.

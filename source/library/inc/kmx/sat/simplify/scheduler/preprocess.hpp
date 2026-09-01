@@ -28,6 +28,7 @@
 #include <kmx/sat/simplify/extractor/backbone.hpp>
 #include <kmx/sat/simplify/extractor/gate.hpp>
 #include <kmx/sat/simplify/factorizer.hpp>
+#include <kmx/sat/cdcl/stack/extension.hpp>
 #include <kmx/sat/simplify/forward_subsumer.hpp>
 #include <kmx/sat/simplify/preprocessing_profile_selector.hpp>
 #include <kmx/sat/simplify/transitive_reducer.hpp>
@@ -66,13 +67,19 @@ namespace kmx::sat::simplify::scheduler
             std::optional<bool> was_effective {};
         };
 
-        static constexpr std::array<pass_id, 13u> baseline_passes {pass_id::transitive_reducer,
+        /// @brief Passes enabled by default on every pipeline run.
+        /// @note `pass_id::bounded` is deliberately absent. Bounded variable elimination is implemented and is
+        /// verified sound in isolation (satisfiability preservation plus model reconstruction, see
+        /// `bounded_elimination_test`), but enabling it here makes the solver report satisfiable for
+        /// unsatisfiable instances: learned clauses mentioning an eliminated variable are not removed with it, and
+        /// eliminations are not scoped to an incremental epoch, so a later episode can constrain a variable that no
+        /// longer exists. Enable it explicitly through `enable_pass` once those two interactions are handled.
+        static constexpr std::array<pass_id, 12u> baseline_passes {pass_id::transitive_reducer,
                                                                    pass_id::decomposition,
                                                                    pass_id::probing,
                                                                    pass_id::forward_subsumer,
                                                                    pass_id::blocked,
                                                                    pass_id::covered,
-                                                                   pass_id::bounded,
                                                                    pass_id::fast,
                                                                    pass_id::instantiation,
                                                                    pass_id::factorizer,
@@ -120,9 +127,25 @@ namespace kmx::sat::simplify::scheduler
             decomposition_substitutor_.attach_clause_database(database);
             congruence_.attach_clause_database(database);
             profile_selector_.attach_clause_database(database);
+            bounded_.attach_clause_database(database);
         }
 
-        void attach_clause_sink(extractor::backbone::clause_sink_t sink) noexcept { backbone_.attach_clause_sink(std::move(sink)); }
+        /// @brief Attaches the extension stack that bounded variable elimination records eliminations on.
+        /// @details Without this the eliminator cannot record what it removed, and a model of the reduced formula
+        /// could not be repaired into a model of the original, so the pass stays inert until it is attached.
+        /// @param extension_stack Journal receiving one record per eliminated variable.
+        /// @throws None (noexcept).
+        void attach_extension_stack(cdcl::stack::extension& extension_stack) noexcept
+        {
+            bounded_.attach_extension_stack(extension_stack);
+        }
+
+        void attach_clause_sink(extractor::backbone::clause_sink_t sink) noexcept
+        {
+            backbone_.attach_clause_sink(sink);
+            bounded_.attach_clause_sink(sink);
+            forward_subsumer_.attach_clause_sink(sink);
+        }
 
         /// @brief Attaches the watch-list bank consumed by equivalence-rewrite passes.
         /// @param watch_list Watch list to reindex during literal substitution.
@@ -170,6 +193,7 @@ namespace kmx::sat::simplify::scheduler
             probing_.attach_proof_manager(proof_manager);
             forward_subsumer_.attach_proof_manager(proof_manager);
             backbone_.attach_proof_manager(proof_manager);
+            bounded_.attach_proof_manager(proof_manager);
         }
 
         /// @brief Requests that the current or next pipeline run abort before further passes.

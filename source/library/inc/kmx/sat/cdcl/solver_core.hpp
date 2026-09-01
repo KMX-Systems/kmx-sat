@@ -15,7 +15,9 @@
 #include <kmx/sat/cdcl/clause/minimizer.hpp>
 #include <kmx/sat/cdcl/incremental_context.hpp>
 #include <kmx/sat/cdcl/memory_governor.hpp>
+#include <kmx/sat/cdcl/model_reconstructor.hpp>
 #include <kmx/sat/cdcl/propagator.hpp>
+#include <kmx/sat/cdcl/stack/extension.hpp>
 #include <kmx/sat/cdcl/search_coordinator.hpp>
 #include <kmx/sat/cdcl/store/clause_cold.hpp>
 #include <kmx/sat/cdcl/variable_mapper.hpp>
@@ -91,6 +93,7 @@ namespace kmx::sat::cdcl
             clause_cold_ = {};
             flush_restore_manager_ = {};
             clause_minimizer_ = {};
+            extension_stack_.clear_all();
             preprocess_scheduler_ = {};
             inprocess_scheduler_ = {};
             unit_clause_refs_.clear();
@@ -209,7 +212,7 @@ namespace kmx::sat::cdcl
                 }
             }
 
-            status_ = solve_recursive(assignment, decision_levels, reasons, request, conflicts, 0u, trail, request.assumptions).result_status;
+            status_ = run_search(assignment, decision_levels, reasons, request, conflicts, trail, request.assumptions);
 
             if (status_ == status::satisfiable)
                 build_internal_model(assignment);
@@ -526,6 +529,8 @@ namespace kmx::sat::cdcl
             preprocess_scheduler_.attach_watch_list(watch_list_);
             preprocess_scheduler_.attach_variable_mapper(variable_mapper_);
             preprocess_scheduler_.attach_proof_manager(proof_manager_);
+            preprocess_scheduler_.attach_extension_stack(extension_stack_);
+            model_reconstructor_.attach_extension_stack(extension_stack_);
             preprocess_scheduler_.attach_clause_sink([this](const clause::ref_t ref) noexcept { attach_clause_for_propagation(ref); });
             inprocess_scheduler_.attach_memory_governor(memory_governor_);
             inprocess_scheduler_.attach_clause_database(clause_database_);
@@ -534,6 +539,8 @@ namespace kmx::sat::cdcl
             inprocess_scheduler_.attach_proof_manager(proof_manager_);
         }
         store::clause_cold clause_cold_ {};
+        stack::extension extension_stack_ {};
+        model_reconstructor model_reconstructor_ {};
 
         using assignment_vector = std::vector<std::int8_t>;
         using decision_level_vector = std::vector<std::uint32_t>;
@@ -751,38 +758,48 @@ namespace kmx::sat::cdcl
         }
 
         /// Retracts every assignment made past `trail_mark`, restoring the caller's pre-branch search state.
-        static void undo_trail_to(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
-                                  trail_vector& trail, const std::size_t trail_mark) noexcept
+        void undo_trail_to(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
+                           trail_vector& trail, const std::size_t trail_mark) noexcept
         {
             while (trail.size() > trail_mark)
             {
-                const auto index = static_cast<std::size_t>(trail.back().variable_of().index());
+                const auto unassigned_variable = trail.back().variable_of();
+                const auto index = static_cast<std::size_t>(unassigned_variable.index());
                 trail.pop_back();
+                search_coordinator_.notify_unassigned_variable(unassigned_variable);
                 if (index >= assignment.size())
                     continue;
                 assignment[index] = unassigned_value;
                 if (index < decision_levels.size())
                     decision_levels[index] = 0u;
                 if (index < reasons.size())
+                {
+                    clause_database_.unmark_reason_clause(reasons[index]);
                     reasons[index] = clause::ref_t {};
+                }
             }
         }
 
         /// Retracts all assignments above a decision level in one linear trail pass.
-        static void undo_trail_to_level(assignment_vector& assignment, decision_level_vector& decision_levels,
-                                        reason_vector& reasons, trail_vector& trail, const std::uint32_t target_level) noexcept
+        void undo_trail_to_level(assignment_vector& assignment, decision_level_vector& decision_levels,
+                                 reason_vector& reasons, trail_vector& trail, const std::uint32_t target_level) noexcept
         {
             while (!trail.empty())
             {
-                const auto index = static_cast<std::size_t>(trail.back().variable_of().index());
+                const auto unassigned_variable = trail.back().variable_of();
+                const auto index = static_cast<std::size_t>(unassigned_variable.index());
                 if (index >= decision_levels.size() || decision_levels[index] <= target_level)
                     break;
                 trail.pop_back();
+                search_coordinator_.notify_unassigned_variable(unassigned_variable);
                 if (index < assignment.size())
                     assignment[index] = unassigned_value;
                 decision_levels[index] = 0u;
                 if (index < reasons.size())
+                {
+                    clause_database_.unmark_reason_clause(reasons[index]);
                     reasons[index] = clause::ref_t {};
+                }
             }
         }
 
@@ -1175,7 +1192,7 @@ namespace kmx::sat::cdcl
                         if (!candidate_is_false)
                         {
                             std::swap(literals[1], literals[k]);
-                            watch_list_.watch_literal(literals[1], watch {literals[0], ref, false});
+                            watch_list_.push_watch(literals[1], watch {literals[0], ref, false});
                             replacement_found = true;
                             break;
                         }
@@ -1222,87 +1239,120 @@ namespace kmx::sat::cdcl
             return 0;
         }
 
-        search_outcome solve_recursive(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
-                           const solve_request& request, counter_t& conflicts, const std::uint32_t current_level,
-                           trail_vector& trail, const std::span<const literal> seed_literals = {}) noexcept
+        /// @brief Runs the CDCL search to a terminal outcome for one episode.
+        /// @details Iterative by construction: a conflict is resolved by analysis, learning and a backjump applied
+        /// in place, so the decision level is data rather than C++ stack depth. That is what makes restarts and
+        /// clause-database reduction expressible at all -- neither can unwind a call stack -- and it bounds memory
+        /// by the instance rather than by the frame budget. The explicit negated branch a DPLL descent has to try is
+        /// not needed here: the learned clause is asserting at the backjump level and forces that assignment.
+        /// @param assignment Per-variable truth values for the episode.
+        /// @param decision_levels Per-variable decision level.
+        /// @param reasons Per-variable implication reason.
+        /// @param request Solve configuration for this episode.
+        /// @param conflicts Running conflict counter for limit checks.
+        /// @param trail Chronological assignment trail.
+        /// @param initial_seed_literals Literals assigned before entry whose watches still need scanning.
+        /// @return Terminal status for the episode.
+        /// @throws None (noexcept).
+        status run_search(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
+                          const solve_request& request, counter_t& conflicts, trail_vector& trail,
+                          const std::span<const literal> initial_seed_literals) noexcept
         {
-            const auto propagation_seeds = propagation_state_dirty_ ? std::span<const literal> {trail} : seed_literals;
-            propagation_state_dirty_ = false;
-            const auto conflict_ref =
-                propagate_units(assignment, decision_levels, reasons, request, conflicts, current_level, trail, propagation_seeds);
-            if (conflict_ref.valid())
+            std::uint32_t current_level = 0u;
+            std::array<literal, 1> seed_storage {};
+            auto propagation_seeds = initial_seed_literals;
+
+            for (;;)
             {
-                const auto conflict_clause = clause_database_.storage_of().view_literals(conflict_ref);
-                const auto outcome = handle_clause_conflict(conflict_ref, conflict_clause, decision_levels, reasons, request,
-                                                            conflicts, trail, current_level);
-                if (outcome.result_status != status::unsatisfiable || !outcome.learned_ref.valid() ||
-                    outcome.asserting_literal.raw() == 0u)
-                    return search_outcome {outcome.result_status};
-                return search_outcome {.result_status = status::unsatisfiable,
-                                       .has_backjump = true,
-                                       .backjump_level = outcome.backjump_level,
-                                       .learned_ref = outcome.learned_ref,
-                                       .asserting_literal = outcome.asserting_literal};
-            }
-
-            const auto first_unassigned_variable = pick_unassigned_variable(assignment);
-            if (first_unassigned_variable == 0u)
-                return search_outcome {status::satisfiable};
-
-            search_coordinator_.set_variable_selectability_filter(&solver_core::is_unassigned_candidate, &assignment);
-
-            const auto branch_literal = search_coordinator_.take_branch_literal(0u);
-            if (decision_limit_reached(request, search_coordinator_.decision_event_count()))
-                return search_outcome {status::unknown};
-            if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
-                return search_outcome {status::unknown};
-            if (!branch_literal.has_value())
-            {
-                return search_outcome {search_coordinator_.current_outcome() == search_coordinator::outcome::satisfiable ?
-                                           status::satisfiable : status::unknown};
-            }
-
-            auto selected_branch_literal = branch_literal.value();
-            const auto selected_index = selected_branch_literal.variable_of().index();
-            if (selected_index >= assignment.size() || assignment[selected_index] != unassigned_value)
-            {
-                selected_branch_literal = literal {variable {first_unassigned_variable}, selected_branch_literal.is_negated()};
-            }
-
-            for (const auto candidate_literal: {selected_branch_literal, selected_branch_literal.negated()})
-            {
-                const auto trail_mark = trail.size();
-
-                if (!assign_literal(assignment, decision_levels, reasons, candidate_literal, current_level + 1u))
-                    continue;
-
-                search_coordinator_.notify_assignment_literal(candidate_literal);
-                trail.push_back(candidate_literal);
-
-                const std::array<literal, 1> branch_seed {candidate_literal};
-                const auto branch_outcome = solve_recursive(assignment, decision_levels, reasons, request, conflicts,
-                                                            current_level + 1u, trail, std::span<const literal> {branch_seed});
-                if (branch_outcome.result_status == status::satisfiable)
-                    return branch_outcome;
-
-                undo_trail_to(assignment, decision_levels, reasons, trail, trail_mark);
-
-                if (branch_outcome.result_status == status::unknown)
-                    return branch_outcome;
-
-                if (branch_outcome.has_backjump)
+                // An inprocessing epoch rebuilds the watch lists, so the whole trail has to be rescanned rather
+                // than just the literals assigned since the last propagation.
+                if (propagation_state_dirty_)
                 {
-                    if (branch_outcome.backjump_level < current_level)
-                        return branch_outcome;
-                    if (!apply_backjump(assignment, decision_levels, reasons, trail, current_level, branch_outcome))
-                        return search_outcome {status::unsatisfiable};
-                    const std::array<literal, 1> asserting_seed {branch_outcome.asserting_literal};
-                    return solve_recursive(assignment, decision_levels, reasons, request, conflicts, current_level, trail,
-                                           std::span<const literal> {asserting_seed});
+                    propagation_seeds = std::span<const literal> {trail};
+                    propagation_state_dirty_ = false;
                 }
-            }
 
-            return search_outcome {status::unsatisfiable};
+                const auto conflict_ref = propagate_units(assignment, decision_levels, reasons, request, conflicts,
+                                                          current_level, trail, propagation_seeds);
+                propagation_seeds = {};
+
+                if (conflict_ref.valid())
+                {
+                    const auto conflict_clause = clause_database_.storage_of().view_literals(conflict_ref);
+                    const auto resolution = handle_clause_conflict(conflict_ref, conflict_clause, decision_levels, reasons,
+                                                                   request, conflicts, trail, current_level);
+                    if (resolution.result_status == status::unknown)
+                        return status::unknown;
+
+                    // A conflict that survives at the root has no decision to undo: the formula is unsatisfiable.
+                    if (current_level == 0u)
+                        return status::unsatisfiable;
+                    if (!resolution.learned_ref.valid() || resolution.asserting_literal.raw() == 0u)
+                        return status::unsatisfiable;
+
+                    const auto target_level =
+                        resolution.backjump_level < current_level ? resolution.backjump_level : current_level - 1u;
+                    const search_outcome backjump {.result_status = status::unsatisfiable,
+                                                   .has_backjump = true,
+                                                   .backjump_level = target_level,
+                                                   .learned_ref = resolution.learned_ref,
+                                                   .asserting_literal = resolution.asserting_literal};
+                    if (!apply_backjump(assignment, decision_levels, reasons, trail, target_level, backjump))
+                        return status::unsatisfiable;
+
+                    current_level = target_level;
+                    seed_storage[0] = resolution.asserting_literal;
+                    propagation_seeds = std::span<const literal> {seed_storage};
+                    continue;
+                }
+
+                // Restarts unwind the real trail here. `search_coordinator::handle_restart` maintains the
+                // controller and heuristic state but cannot retract assignments, which live in this frame.
+                if (search_coordinator_.should_restart())
+                {
+                    // Only unwind when a conflict has been learned since the last restart. A restart with no
+                    // intervening conflict discards work and adds none, and a decision-triggered schedule would
+                    // otherwise undo the very decision that triggered it, forever, without reaching a conflict.
+                    if (search_coordinator_.has_progress_since_restart())
+                    {
+                        undo_trail_to_level(assignment, decision_levels, reasons, trail, 0u);
+                        current_level = 0u;
+                    }
+                    search_coordinator_.handle_restart();
+                    continue;
+                }
+
+                const auto first_unassigned_variable = pick_unassigned_variable(assignment);
+                if (first_unassigned_variable == 0u)
+                    return status::satisfiable;
+
+                search_coordinator_.set_variable_selectability_filter(&solver_core::is_unassigned_candidate, &assignment);
+
+                // `first_unassigned_variable` is handed to the coordinator as the fallback: the ranked candidate
+                // sources drain as variables are assigned and are not refilled on backtrack, so without it an
+                // exhausted heuristic would be reported as a satisfying assignment while variables are still open.
+                const auto branch_literal = search_coordinator_.take_branch_literal(first_unassigned_variable);
+                if (decision_limit_reached(request, search_coordinator_.decision_event_count()))
+                    return status::unknown;
+                if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
+                    return status::unknown;
+
+                // An unassigned variable provably exists at this point, so an empty pick is heuristic exhaustion
+                // rather than satisfiability; branch on the fallback variable instead of reporting a model.
+                auto decision_literal = branch_literal.value_or(literal {variable {first_unassigned_variable}, false});
+                const auto decision_index = decision_literal.variable_of().index();
+                if (decision_index >= assignment.size() || assignment[decision_index] != unassigned_value)
+                    decision_literal = literal {variable {first_unassigned_variable}, decision_literal.is_negated()};
+
+                ++current_level;
+                if (!assign_literal(assignment, decision_levels, reasons, decision_literal, current_level))
+                    return status::unknown;
+
+                search_coordinator_.notify_assignment_literal(decision_literal);
+                trail.push_back(decision_literal);
+                seed_storage[0] = decision_literal;
+                propagation_seeds = std::span<const literal> {seed_storage};
+            }
         }
 
         bool apply_backjump(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
@@ -1346,6 +1396,16 @@ namespace kmx::sat::cdcl
                 const auto value = assignment[index];
                 const bool negated = value == false_value;
                 internal_model_.push_back(literal {variable {index}, negated});
+            }
+
+            // The search only ever sees the formula that preprocessing left behind, so any variable a pass
+            // eliminated still has to have its value re-derived from the clauses that were removed. With an empty
+            // extension stack this is an identity pass.
+            if (extension_stack_.size() != 0u)
+            {
+                model_reconstructor_.set_initial_model(internal_model_);
+                const auto reconstructed = model_reconstructor_.reconstruct_full_model();
+                internal_model_.assign(reconstructed.values().begin(), reconstructed.values().end());
             }
         }
 

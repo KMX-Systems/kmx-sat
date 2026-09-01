@@ -1,0 +1,16 @@
+{
+  "instances": [
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_lran_f600.cnf",
+      "sha256": "4a56a74dc94a050b0c89de6219946ce43ad3c69f2f70132e9a2079ef19008e65"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_lran_f2000.cnf",
+      "sha256": "b19c2c248e122c70e158fc951974912b4f9059f34c03435c9a538192053c2f7a"
+    }
+  ],
+  "note": "Measurement corpus for instances still beyond the engine. The uf250/uuf250 families were promoted into the gated manifest once the decision heuristic fix brought them under a second to a few seconds; what remains here is the next rung.",
+  "schema": 1
+}

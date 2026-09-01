@@ -36,6 +36,15 @@ namespace kmx::sat::cdcl::controller
         /// @return True if a restart has been requested or a scheduled trigger fired.
         [[nodiscard]] bool has_pending_restart() const noexcept { return restart_pending_; }
 
+        /// @brief Returns whether a conflict has been recorded since the last performed restart.
+        /// @details Restarts are only honoured once the search has learned something new. A restart that unwinds
+        /// the trail without an intervening conflict removes work and adds none, so a decision-triggered schedule
+        /// could otherwise undo the very decision that triggered it and loop forever without reaching a conflict.
+        /// Requiring one conflict per restart gives each restart a learned clause, which is what makes progress --
+        /// and therefore termination -- an argument rather than a hope.
+        /// @throws None (noexcept).
+        [[nodiscard]] bool has_progress_since_restart() const noexcept { return conflict_count_ > conflicts_at_last_restart_; }
+
         /// @brief Resets all restart scheduler counters and pending state for a fresh solve episode.
         /// @throws None (noexcept).
         void reset() noexcept
@@ -43,6 +52,9 @@ namespace kmx::sat::cdcl::controller
             conflict_count_ = 0u;
             decision_count_ = 0u;
             restart_count_ = 0u;
+            restart_sequence_index_ = 0u;
+            decision_restart_sequence_index_ = 0u;
+            conflicts_at_last_restart_ = 0u;
             next_scheduled_restart_at_ = restart_interval_;
             next_scheduled_decision_restart_at_ = decision_restart_interval_;
             restart_pending_ = false;
@@ -63,7 +75,7 @@ namespace kmx::sat::cdcl::controller
             if (conflict_count_ >= next_scheduled_restart_at_)
             {
                 restart_pending_ = true;
-                next_scheduled_restart_at_ = conflict_count_ + restart_interval_;
+                next_scheduled_restart_at_ = conflict_count_ + next_restart_budget();
             }
         }
 
@@ -114,7 +126,7 @@ namespace kmx::sat::cdcl::controller
             if (decision_count_ >= next_scheduled_decision_restart_at_)
             {
                 restart_pending_ = true;
-                next_scheduled_decision_restart_at_ = decision_count_ + decision_restart_interval_;
+                next_scheduled_decision_restart_at_ = decision_count_ + next_decision_restart_budget();
             }
         }
 
@@ -125,12 +137,22 @@ namespace kmx::sat::cdcl::controller
             if (restart_pending_)
                 ++restart_count_;
             restart_pending_ = false;
+            conflicts_at_last_restart_ = conflict_count_;
 
-            if (restart_interval_ != 0)
-                next_scheduled_restart_at_ = conflict_count_ + restart_interval_;
+            rebase_schedule();
+        }
 
+        /// @brief Resynchronizes decision-scheduled restarts after an inprocessing epoch.
+        /// @details Deliberately leaves the *conflict* schedule alone. Inprocessing epochs complete roughly every
+        /// thirty conflicts, so rebasing `next_scheduled_restart_at_` to `conflict_count_ + restart_interval_` on
+        /// each one pushes the trigger further away than the counter can ever reach: any restart interval above the
+        /// epoch cadence is starved outright, and only intervals below it ever fire. The conflict budget is what
+        /// the restart policy is expressed in, so it is left to accumulate across epochs.
+        /// @throws None (noexcept).
+        void resynchronize_after_inprocess() noexcept
+        {
             if (decision_restart_interval_ != 0)
-                next_scheduled_decision_restart_at_ = decision_count_ + decision_restart_interval_;
+                next_scheduled_decision_restart_at_ = decision_count_ + next_decision_restart_budget();
         }
 
         /// @brief Returns the remaining conflict budget before the next scheduled restart.
@@ -160,6 +182,7 @@ namespace kmx::sat::cdcl::controller
         void set_restart_interval(const counter_t interval) noexcept
         {
             restart_interval_ = interval;
+            restart_sequence_index_ = 0u;
             next_scheduled_restart_at_ = conflict_count_ + restart_interval_;
         }
 
@@ -169,6 +192,7 @@ namespace kmx::sat::cdcl::controller
         void set_decision_restart_interval(const counter_t interval) noexcept
         {
             decision_restart_interval_ = interval;
+            decision_restart_sequence_index_ = 0u;
             next_scheduled_decision_restart_at_ = decision_count_ + decision_restart_interval_;
         }
 
@@ -205,12 +229,68 @@ namespace kmx::sat::cdcl::controller
         counter_t restart_count() const noexcept { return restart_count_; }
 
     private:
+        /// @brief Returns the `index`-th Luby multiplier (1, 1, 2, 1, 1, 2, 4, ...).
+        /// @details Restart intervals must grow without bound, otherwise a fixed cadence can prevent the search
+        /// from ever completing: with a short interval the solver restarts before it can accumulate the learned
+        /// clauses that drive progress, and an unsatisfiable instance is never closed out. The Luby sequence gives
+        /// frequent early restarts and unboundedly growing later ones, which preserves completeness.
+        /// @param index Zero-based position in the sequence.
+        /// @return Multiplier applied to the configured base interval.
+        /// @throws None (noexcept).
+        static counter_t luby_multiplier(counter_t index) noexcept
+        {
+            static constexpr counter_t max_sequence_exponent {24u};
+
+            counter_t size = 1u;
+            counter_t sequence = 0u;
+            while (size < index + 1u && sequence < max_sequence_exponent)
+            {
+                ++sequence;
+                size = 2u * size + 1u;
+            }
+            while (size - 1u != index && size > 1u)
+            {
+                size = (size - 1u) >> 1u;
+                --sequence;
+                index = index % size;
+            }
+            return counter_t {1} << sequence;
+        }
+
+        /// @brief Returns the conflict budget for the next restart, growing along the Luby sequence.
+        /// @throws None (noexcept).
+        counter_t next_restart_budget() noexcept { return restart_interval_ * luby_multiplier(restart_sequence_index_++); }
+
+        /// @brief Returns the decision budget for the next restart, growing along the same sequence.
+        /// @details The decision trigger needs the growth just as much as the conflict trigger: an interval of one
+        /// makes a restart due after every decision, and a search that restarts to level zero then undoes exactly
+        /// the decision it just made, forever, without ever reaching a conflict.
+        /// @throws None (noexcept).
+        counter_t next_decision_restart_budget() noexcept
+        {
+            return decision_restart_interval_ * luby_multiplier(decision_restart_sequence_index_++);
+        }
+
+        /// @brief Re-anchors both scheduled triggers to the current counters.
+        /// @throws None (noexcept).
+        void rebase_schedule() noexcept
+        {
+            if (restart_interval_ != 0)
+                next_scheduled_restart_at_ = conflict_count_ + next_restart_budget();
+            if (decision_restart_interval_ != 0)
+                next_scheduled_decision_restart_at_ = decision_count_ + decision_restart_interval_;
+        }
+
+
         static constexpr double fast_glue_alpha_ {0.5};
         static constexpr double slow_glue_alpha_ {0.95};
         static constexpr counter_t glue_restart_warmup_ {4u};
         counter_t conflict_count_ {};
         counter_t decision_count_ {};
         counter_t restart_count_ {};
+        counter_t restart_sequence_index_ {};
+        counter_t conflicts_at_last_restart_ {};
+        counter_t decision_restart_sequence_index_ {};
         counter_t restart_interval_ {};
         counter_t next_scheduled_restart_at_ {};
         counter_t decision_restart_interval_ {};

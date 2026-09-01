@@ -9,7 +9,16 @@ import json
 import shlex
 import subprocess
 import tempfile
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from reference_oracle import (  # noqa: E402
+    brute_force_model as enumerate_model,
+    find_reference_solver,
+    reference_model,
+)
 
 from validate_replay_traces import validate
 
@@ -55,11 +64,18 @@ def evaluate_assignment(clauses: list[list[int]], assumptions: list[int], variab
     return True
 
 
+_REFERENCE_SOLVER = find_reference_solver()
+
+
 def brute_force_model(clauses: list[list[int]], assumptions: list[int], variable_count: int) -> dict[int, bool] | None:
-    for assignment in range(1 << variable_count):
-        if evaluate_assignment(clauses, assumptions, variable_count, assignment):
-            return {variable_index: bool((assignment >> (variable_index - 1)) & 1) for variable_index in range(1, variable_count + 1)}
-    return None
+    """Find a satisfying assignment, using the reference solver so large traces stay tractable.
+
+    The name is kept for call-site compatibility; enumeration is only used when no reference solver is
+    installed, which caps the trace size at BRUTE_FORCE_VARIABLE_LIMIT variables.
+    """
+    if _REFERENCE_SOLVER is not None:
+        return reference_model(_REFERENCE_SOLVER, clauses, assumptions, variable_count)
+    return enumerate_model(clauses, assumptions, variable_count)
 
 
 def failed_assumptions(clauses: list[list[int]], assumptions: list[int], variable_count: int) -> set[int]:
