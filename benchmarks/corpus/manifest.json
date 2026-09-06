@@ -65,32 +65,32 @@
     },
     {
       "expected_status": "UNSATISFIABLE",
-      "file": "satlib_aim100_no_01.cnf",
+      "file": "extended/satlib_aim100_no_01.cnf",
       "sha256": "42058adae7534bb0613399393b369724c172055a0056a433ddc82cd6512545e2"
     },
     {
       "expected_status": "SATISFIABLE",
-      "file": "satlib_aim100_yes_01.cnf",
+      "file": "extended/satlib_aim100_yes_01.cnf",
       "sha256": "74560a84735393495e1665fb2999f6b7948fb7f12b11c23e530aedccbf8cbbec"
     },
     {
       "expected_status": "SATISFIABLE",
-      "file": "satlib_uf250_01.cnf",
+      "file": "extended/satlib_uf250_01.cnf",
       "sha256": "99c853cc0a0fca7e7d7cfa2ed2d1889dde35ecd77e657b976c2dd67294dc86ed"
     },
     {
       "expected_status": "SATISFIABLE",
-      "file": "satlib_uf250_050.cnf",
+      "file": "extended/satlib_uf250_050.cnf",
       "sha256": "60538e2ae65195c31665c574b919ada9309f884e9805247461fe683e9b97c3c5"
     },
     {
       "expected_status": "UNSATISFIABLE",
-      "file": "satlib_uuf250_01.cnf",
+      "file": "extended/satlib_uuf250_01.cnf",
       "sha256": "4f332e3efec78fc7875adfb654d531ba1fbf61b24e8e9145baba5f8907b9dad9"
     },
     {
       "expected_status": "UNSATISFIABLE",
-      "file": "satlib_uuf250_050.cnf",
+      "file": "extended/satlib_uuf250_050.cnf",
       "sha256": "ceead3f854043912fccc3af0cf72e5fe30af7126c239d4f6f1863c3dfb813bc5"
     }
   ],

@@ -1,0 +1,402 @@
+{
+  "schema": 1,
+  "note": "Classic SATLIB/DIMACS families. Expected statuses were established with CaDiCaL 3.0.1 and Kissat 4.0.4 (60 s timeout) and cross-checked against kmx-sat; every listed instance was decided by at least one reference solver.",
+  "instances": [
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_2bitadd_12.cnf",
+      "sha256": "56e5ed82333d00505354ccc989712b531995c890191c9fe9dd0de9bb522393a1",
+      "source": "Beijing SAT competition 1996 (arithmetic circuits)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_2bitcomp_5.cnf",
+      "sha256": "de54f317604f0d8417340897488986a4d55b26ceb54c46bc2af127f3f0cc0a77",
+      "source": "Beijing SAT competition 1996 (arithmetic circuits)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_2bitmax_6.cnf",
+      "sha256": "434fff529d848b08664ac7c24397b4609914151c929553fc18893448bb86be2a",
+      "source": "Beijing SAT competition 1996 (arithmetic circuits)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_3bitadd_32.cnf",
+      "sha256": "acd010ed164afe399b735c872936e1e9a565d269a3ee0c934fce7d7b43a74320",
+      "source": "Beijing SAT competition 1996 (arithmetic circuits)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_4blocksb.cnf",
+      "sha256": "a892f3d5f36bc21cf5398c062721561c4bc553527c3ed8e4fb9283c0aa04a629",
+      "source": "Beijing SAT competition 1996 (blocks world)"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_aim_200_2_0_no_1.cnf",
+      "sha256": "4bf68984da5f2954f795b0326d5aca22969595ddd14d4b6b588b3828d48634cf",
+      "source": "DIMACS AIM artificially generated (Asahiro, Iwama, Miyano)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_aim_200_3_4_yes1_1.cnf",
+      "sha256": "1be1422d3c96d3c648f37842c9bf1d77e7d04422f88b2bb123376302621d55c5",
+      "source": "DIMACS AIM artificially generated (Asahiro, Iwama, Miyano)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_ais10.cnf",
+      "sha256": "ad741512139517014389bab114087f35fb8ffc205dd4e243b2bcab28c77413fa",
+      "source": "SATLIB all-interval series"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_ais12.cnf",
+      "sha256": "11bf168f81fd3302eb1367d35b9cacc3459f585e080dae87aba14e69df3f727b",
+      "source": "SATLIB all-interval series"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_ais8.cnf",
+      "sha256": "7288722a730cd949069ac0877dcfdb9fab518185f217e8d63f1c1c29035a6ddb",
+      "source": "SATLIB all-interval series"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_bf0432_007.cnf",
+      "sha256": "ff22b8c5c381229a7ec7ff2f8d93afc7219a73034c4180b056b8a5594af1a75a",
+      "source": "DIMACS circuit bridge fault analysis"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_bf1355_075.cnf",
+      "sha256": "84cbdea25943d63b9ca46f3fc86c4f5397b70e987855dcb0b7b6908915bb9325",
+      "source": "DIMACS circuit bridge fault analysis"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_bf2670_001.cnf",
+      "sha256": "f68ef1571e8d8aea62ad6b3d369d915f2c1cec6e7e4d140157b05e543ff9ffe0",
+      "source": "DIMACS circuit bridge fault analysis"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_bmc_ibm_1.cnf",
+      "sha256": "ccfe052c64a36c820faa7f373962f9f425df540620da63ab8ba2e3047a32a959",
+      "source": "SATLIB bounded model checking (IBM)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_bmc_ibm_12.cnf",
+      "sha256": "883e1d3cf1fd2623f44bf8895e2a2f1284ff5358d6469bd10b04ab1b642dc93e",
+      "source": "SATLIB bounded model checking (IBM)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_bmc_ibm_13.cnf",
+      "sha256": "0dafcf6bcd20e453eb01cbef4c811b93d65a53d28f5087d26d79cbbe1f646919",
+      "source": "SATLIB bounded model checking (IBM)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_bmc_ibm_2.cnf",
+      "sha256": "f82d90198c950d16ca910d42fd28f3b049334785b275cd02ae6ac1c33cb597ba",
+      "source": "SATLIB bounded model checking (IBM)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_bmc_ibm_5.cnf",
+      "sha256": "786a7c07afa6da37fa1baa2b50cb732731d82b404fb9e1d9e45de73588124f77",
+      "source": "SATLIB bounded model checking (IBM)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_bmc_ibm_7.cnf",
+      "sha256": "2e4305a91ee012754d437d7121fcd701abb19e80119dce4ab5bb1800fed64734",
+      "source": "SATLIB bounded model checking (IBM)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_bw_large_b.cnf",
+      "sha256": "5afee43155740578959da99bd35cda95ce8b931879f87588e7aa4c7cb8f775bd",
+      "source": "SATLIB SATPLAN blocks world"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_bw_large_c.cnf",
+      "sha256": "a854ebc3c5486831d968c0ea66cd8840c9fbfeb1e1e792de5e2d4ff8547b5373",
+      "source": "SATLIB SATPLAN blocks world"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_bw_large_d.cnf",
+      "sha256": "04ef41298c5ee41297669ca193516af91a2d009e3ed4b64d068ab1540d3ff1ba",
+      "source": "SATLIB SATPLAN blocks world"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_cbs_k3_n100_m403_b10_0.cnf",
+      "sha256": "8ef340ffa1d3bd2b216b137146dd3aec648f612607d12373f4cefafe9d5a63dc",
+      "source": "SATLIB controlled-backbone random 3-SAT"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_cbs_k3_n100_m449_b90_0.cnf",
+      "sha256": "2c26ab5dbd82554caf1bf64846838300a3a26f9df982c429122443d9d6856bc5",
+      "source": "SATLIB controlled-backbone random 3-SAT"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_dubois100.cnf",
+      "sha256": "7050b1c4ab56ff4419aa4e0c07f58cb23d0a2b058d8cffa40760e857b7ac6960",
+      "source": "DIMACS Dubois (unsatisfiable, parity-like)"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_dubois50.cnf",
+      "sha256": "417ea88d5df96c7e6da2250cbe6da7effd012d7de0b0e037ee086254e4e2fc59",
+      "source": "DIMACS Dubois (unsatisfiable, parity-like)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_e0ddr2_10_by_5_4.cnf",
+      "sha256": "060a44c813935b5289a36217b0648ed2dae60b6cf0820fb985cab761a3f96d25",
+      "source": "Beijing SAT competition 1996 (scheduling)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_enddr2_10_by_5_8.cnf",
+      "sha256": "3e188edbc7a068703a90a865a3a7d7f2954a423d74c149b61b0719a6145d7a63",
+      "source": "Beijing SAT competition 1996 (scheduling)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_f1000.cnf",
+      "sha256": "c722620eb5d54842006ffaf6133a00bb6fd83c98fc4b355c41a5cdce6c00e93f",
+      "source": "DIMACS large random 3-SAT (Selman)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_flat100_1.cnf",
+      "sha256": "d67e170ea088e1d825f99f324a26663ec49711c71925d366b5550f6f7f4d0b5f",
+      "source": "SATLIB flat graph colouring"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_flat200_1.cnf",
+      "sha256": "f8516312492ea618618ffb65b0052dbfc8c3563c4ee5c341d24bf5b84e30f39f",
+      "source": "SATLIB flat graph colouring"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_flat200_2.cnf",
+      "sha256": "b48527a20b6324333fd9681e0468dc03930da4466653b2ff8782c897b2369ea7",
+      "source": "SATLIB flat graph colouring"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_hanoi4.cnf",
+      "sha256": "ab38df56b8ecdbe955a22df3b1b1afbd3c3f98f6c6ee33e391b3bd67db903f4d",
+      "source": "DIMACS Towers of Hanoi planning"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_hanoi5.cnf",
+      "sha256": "4205042bcd7d63a57d26ba0a3e05e0c775181262838ef8286337bb1676730413",
+      "source": "DIMACS Towers of Hanoi planning"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_hole10.cnf",
+      "sha256": "a8c786ce602fd368158c216bdf58882a3aa1b9cd844f78eb24487fc12711c56f",
+      "source": "DIMACS pigeonhole (unsatisfiable)"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_hole8.cnf",
+      "sha256": "e63ad9adca73c42dab2f89a3cec77dbf7800d595f72ce740b32004431e1bfd84",
+      "source": "DIMACS pigeonhole (unsatisfiable)"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_hole9.cnf",
+      "sha256": "e5821911954338bdf496866bdbdf2bab123cbc09dd8e6d19a38277f393bc30c6",
+      "source": "DIMACS pigeonhole (unsatisfiable)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_huge.cnf",
+      "sha256": "305757cd5b23959a714c37efcdb2596bde921323bbf74ee5a7ba878aff838dba",
+      "source": "SATLIB SATPLAN blocks world"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_ii16a1.cnf",
+      "sha256": "7cf41accdec70ba8c2d9c689fe07b08263d8c1ecd954c79ba52473ae3e3a4f1a",
+      "source": "DIMACS inductive inference (Kamath et al.)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_ii32b1.cnf",
+      "sha256": "180f6a61d3388500f1d3002bf5408751aff83aa13643cf204866d2277a3ba801",
+      "source": "DIMACS inductive inference (Kamath et al.)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_ii32e1.cnf",
+      "sha256": "6d3219445654e75c7dd6dd62e9fd06600d8a6e9e73ab8867c58866add6fada13",
+      "source": "DIMACS inductive inference (Kamath et al.)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_ii8b1.cnf",
+      "sha256": "a18a6b5ef7073109309857a4d0a0ddb9a212c18771913130ad6b2c6b965ab7d6",
+      "source": "DIMACS inductive inference (Kamath et al.)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_jnh1.cnf",
+      "sha256": "59bb51f11ea36e0262ada113fb4120c11786e14b8d03979970efc580a80fd16e",
+      "source": "DIMACS random (Hooker)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_jnh12.cnf",
+      "sha256": "d0c8a5a63a480735ccb4b5c36c9b4048186594077a2384a16ac7d8a19e48ca62",
+      "source": "DIMACS random (Hooker)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_jnh201.cnf",
+      "sha256": "16758d80c349872a6ea45a663899d331c6677bda80b2bc65ec28f7b886a712cf",
+      "source": "DIMACS random (Hooker)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_jnh301.cnf",
+      "sha256": "3fb160c2089e929056f9212838076565d1557deedcc7e767aa6b5b923e4e3ba8",
+      "source": "DIMACS random (Hooker)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_logistics_a.cnf",
+      "sha256": "58143abb64d57e922442a58e775a1c67f9b62435a99a200fb153237d2bf0adf4",
+      "source": "SATLIB SATPLAN logistics"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_logistics_c.cnf",
+      "sha256": "28b9d59a6b980762de3b6ef359b192732505d10bad2805bcca76fb56331f098f",
+      "source": "SATLIB SATPLAN logistics"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_logistics_d.cnf",
+      "sha256": "29ef906fbc201db077488cc4f053d57218a033dba37fe112405ec20036cbea3c",
+      "source": "SATLIB SATPLAN logistics"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_par16_1.cnf",
+      "sha256": "21e9cfbf8803679170ce49ccd099eb0d1df86ef27559b2c058507bd56922a3f9",
+      "source": "DIMACS parity learning (Crawford)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_par16_1_c.cnf",
+      "sha256": "33691e8d6a59db323b77240ae6319353f3adc0738c36e7a3e1e9f3efaa182d8a",
+      "source": "DIMACS parity learning (Crawford)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_par8_1.cnf",
+      "sha256": "a7eccfea7ce54392fdb4511abcec42350a0a6a2baa866bb773eed5d6d7c829bf",
+      "source": "DIMACS parity learning (Crawford)"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_pret150_25.cnf",
+      "sha256": "eea05e6185b1c3a2a16bc03febe726d3be61e0aaaa1935f621cc7b01b6dc595e",
+      "source": "DIMACS Pretolani (unsatisfiable, parity)"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_pret150_75.cnf",
+      "sha256": "d06449945caf4d3aa95495650f12ab811b1b2f30dbdcf9dd561a13aea9f022d8",
+      "source": "DIMACS Pretolani (unsatisfiable, parity)"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_ssa0432_003.cnf",
+      "sha256": "6b16c38f0c39341203a641aa016b4153a9da65a28d9078d25b9d508772b7375a",
+      "source": "DIMACS circuit single-stuck-at fault analysis"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_ssa2670_130.cnf",
+      "sha256": "c4a3c04cec16f2b3eeaf541b9d8ca0b5aa95ab89734f8b5230eff9c19c4092eb",
+      "source": "DIMACS circuit single-stuck-at fault analysis"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_ssa6288_047.cnf",
+      "sha256": "07c8a88b790c161f34ddae1ca013fb8e58854f1cf985a45c7bbfd9b3d32515b6",
+      "source": "DIMACS circuit single-stuck-at fault analysis"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_ssa7552_038.cnf",
+      "sha256": "e852563f9f5e615bf4a713c3aa8f7ba23a00c48b091255689156e572a06dbf23",
+      "source": "DIMACS circuit single-stuck-at fault analysis"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_uf150_01.cnf",
+      "sha256": "cdb64ed8ae19c8da1e2aea504545bf32d53bd8117f60bfe382c69c2f77cd1f50",
+      "source": "SATLIB uniform random 3-SAT (satisfiable)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_uf150_02.cnf",
+      "sha256": "d944806c97caddba166c08a2df5588ae8efa3c9bad83a3e345a7ec565ac4b478",
+      "source": "SATLIB uniform random 3-SAT (satisfiable)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_uf200_01.cnf",
+      "sha256": "e75c7bac4832f70d97aa9cae7e4b370a7528ba449eb30e9dc6aad72045f3c640",
+      "source": "SATLIB uniform random 3-SAT (satisfiable)"
+    },
+    {
+      "expected_status": "SATISFIABLE",
+      "file": "satlib_uf200_02.cnf",
+      "sha256": "4ed3997634afe3276dd4988e3c7b01a134b4cd1e27efee27e494db6fa6b94903",
+      "source": "SATLIB uniform random 3-SAT (satisfiable)"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_uuf150_01.cnf",
+      "sha256": "40b959492b5226b43fcf35d172e6fbb37f51340ad4975933d71506b218dcc398",
+      "source": "SATLIB uniform random 3-SAT (unsatisfiable)"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_uuf150_02.cnf",
+      "sha256": "20eda959bc72794b51aa012ca1cd3dd1ebc9d76d298a55c05d4330bea545e55f",
+      "source": "SATLIB uniform random 3-SAT (unsatisfiable)"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_uuf200_01.cnf",
+      "sha256": "b08a899980af1d0adeacd4fc6f426a7555b417ad9789de25327fc9bda3bcd7f8",
+      "source": "SATLIB uniform random 3-SAT (unsatisfiable)"
+    },
+    {
+      "expected_status": "UNSATISFIABLE",
+      "file": "satlib_uuf200_02.cnf",
+      "sha256": "aeced4745fd94d820a97067b92fdbf8e033f0dc4514362eb9929ea857dddff19",
+      "source": "SATLIB uniform random 3-SAT (unsatisfiable)"
+    }
+  ]
+}

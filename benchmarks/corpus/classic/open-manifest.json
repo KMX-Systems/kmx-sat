@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "note": "Instances of the classic set that no reference solver decided within 60 s; kept as measurement targets, not gated.",
+  "instances": [
+    {
+      "file": "satlib_g125_18.cnf",
+      "sha256": "2f8144fac3c3770fce6f07377a011ef9d50ecdef5ff59c1c5653700ed2c9737e",
+      "source": "DIMACS large graph colouring (Johnson)",
+      "note": "undecided by both reference solvers within 60 s"
+    },
+    {
+      "file": "satlib_par32_1_c.cnf",
+      "sha256": "5e3253738e729c3fda8cde22e67b6d8bae0df6d53e9afabb6bd74d5ceb700312",
+      "source": "DIMACS parity learning (Crawford)",
+      "note": "undecided by both reference solvers within 60 s"
+    }
+  ]
+}
