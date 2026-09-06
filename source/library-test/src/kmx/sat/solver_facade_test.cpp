@@ -188,7 +188,7 @@ namespace kmx::sat
             REQUIRE(option_solver.decision_maintenance_intervals()[1] == 8u);
             REQUIRE(option_solver.decision_maintenance_intervals()[2] == 4u);
             REQUIRE_FALSE(option_solver.chb_enabled());
-            REQUIRE(option_solver.reduction_fraction_percent() == 50u);
+            REQUIRE(option_solver.reduction_fraction_percent() == 75u);
             REQUIRE(option_solver.activity_retention_threshold() == 2.0);
             REQUIRE(option_solver.glue_restart_threshold_percent() == 0u);
             REQUIRE_FALSE(option_solver.cold_storage_enabled());

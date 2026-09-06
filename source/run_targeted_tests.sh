@@ -2,8 +2,9 @@
 set -euo pipefail
 
 PROJECT_FILE="${PROJECT_FILE:-source.qbs}"
-BUILD_DIR="${BUILD_DIR:-$TMPDIR/qbs-source-build}"
-SETTINGS_DIR="${SETTINGS_DIR:-$TMPDIR/qbs-source-settings}"
+TMPDIR_PATH="${TMPDIR:-/tmp}"
+BUILD_DIR="${BUILD_DIR:-$TMPDIR_PATH/qbs-source-build}"
+SETTINGS_DIR="${SETTINGS_DIR:-$TMPDIR_PATH/qbs-source-settings}"
 QBS_CONFIG="${QBS_CONFIG:-default}"
 
 declare -a ALL_PRODUCTS=(

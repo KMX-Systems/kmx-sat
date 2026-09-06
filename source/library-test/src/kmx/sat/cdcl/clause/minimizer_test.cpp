@@ -15,8 +15,8 @@ namespace kmx::sat::cdcl
     {
         using namespace kmx::sat;
 
-        clause::storage storage;
         clause::database database;
+        auto& storage = database.storage_of();
         clause::minimizer minimizer;
         minimizer.attach_storage(storage);
         minimizer.attach_database(database);
@@ -27,7 +27,7 @@ namespace kmx::sat::cdcl
         const literal b_pos {var_b, false};
 
         const std::array<literal, 3> literals {a_pos, b_pos, a_pos};
-        const auto ref = storage.create_learned_clause(literals);
+        const auto ref = database.add_clause(literals, true);
         REQUIRE(ref.valid());
         REQUIRE(database.tier_of(ref) == clause::database::default_tier);
 

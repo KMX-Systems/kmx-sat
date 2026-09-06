@@ -31,6 +31,19 @@ namespace kmx::sat::simplify::eliminator::variable
     /// @note This is one of the risk points requiring explicit handling: interactions between BVE and model
     /// reconstruction, and the corresponding compaction/reindexing of watch lists, reasons, and external mapping once
     /// enough variables have been eliminated (see `compaction_service`).
+    /// @warning Not sound as it stands, and not reachable from the default pass set for that reason. Two
+    /// separate defects are known:
+    ///   - Incremental use. Eliminating a variable discards the clauses constraining it, so a clause added over
+    ///     that variable after a solve has nothing left to contradict it and the next solve reports satisfiable
+    ///     on an unsatisfiable formula. Making this safe needs the eliminated clauses restored when a later
+    ///     clause mentions the variable, which is not implemented.
+    ///   - A remaining loss of constraints on larger formulas, reproducible with this pass as the *only* enabled
+    ///     pass on an 11-pigeon/10-hole pigeonhole instance (110 variables, 561 clauses): the reduced formula
+    ///     becomes satisfiable, and the model verifier rejects the resulting witness. The same family passes at
+    ///     9 holes and below, so it is size- or count-dependent rather than structural. Assumption freezing,
+    ///     one-sided witnesses and the problem-variable range were each found and fixed while narrowing this
+    ///     down; whatever remains is not one of those.
+    /// Enable it only through `solve_request::enabled_pass_mask`, and only with model verification on.
     class bounded final
     {
     public:
@@ -57,6 +70,31 @@ namespace kmx::sat::simplify::eliminator::variable
         /// @param sink Callable receiving each new clause reference so propagation state can be updated.
         /// @throws None (noexcept).
         void attach_clause_sink(std::function<void(cdcl::clause::ref_t)> sink) noexcept { clause_sink_ = std::move(sink); }
+
+        /// @brief Marks variables that must never be eliminated.
+        /// @details Eliminating a variable discards every clause constraining it, keeping only the resolvents. That
+        /// is sound for the formula as it stands, but not for anything said about the variable afterwards: an
+        /// assumption over an eliminated variable has no clauses left to contradict it, so the solver answers
+        /// satisfiable and returns a "model" that violates the assumption. Any variable the caller can still refer
+        /// to therefore has to be off limits.
+        /// @param variables Variables to protect from elimination.
+        /// @throws None (noexcept).
+        void set_frozen_variables(const std::span<const kmx::sat::variable> variables) noexcept
+        {
+            frozen_.assign(variables.begin(), variables.end());
+        }
+
+        /// @brief Clears the frozen set, allowing every variable to be considered again.
+        void clear_frozen_variables() noexcept { frozen_.clear(); }
+
+        /// @brief Returns whether a variable is protected from elimination.
+        [[nodiscard]] bool is_frozen(const kmx::sat::variable var) const noexcept
+        {
+            for (const auto frozen: frozen_)
+                if (frozen.index() == var.index())
+                    return true;
+            return false;
+        }
 
         /// @brief Sets the largest allowed increase in clause count per eliminated variable.
         /// @param growth Maximum resolvents minus removed clauses; zero permits only non-increasing eliminations.
@@ -138,6 +176,9 @@ namespace kmx::sat::simplify::eliminator::variable
 
             const auto index = static_cast<std::size_t>(var.index());
             if (index >= occurrences_.size())
+                return false;
+
+            if (is_frozen(var))
                 return false;
 
             const auto& entry = occurrences_[index];
@@ -243,10 +284,15 @@ namespace kmx::sat::simplify::eliminator::variable
             const auto& entry = occurrences_[index];
             const auto& storage = database_->storage_of();
             const auto mark = extension_stack_->witness_mark();
+            // Only the clauses containing the variable positively are stored, and that is not an economy: it is
+            // what makes reconstruction correct. Setting the variable false satisfies every clause containing it
+            // negatively outright, so those need no witness; the only question left is whether some clause
+            // containing it positively is otherwise unsatisfied, in which case setting it true rescues that clause
+            // without endangering the negative ones -- the resolvents added in its place guarantee a positive and
+            // a negative clause cannot both be otherwise unsatisfied. Storing both sides instead leaves the replay
+            // flipping the variable back and forth per clause and settling on whichever came last, which is how a
+            // reconstructed "model" ends up falsifying a clause of the original formula.
             for (const auto ref: entry.positive)
-                if (!database_->is_garbage(ref))
-                    extension_stack_->append_witness_clause(storage.view_literals(ref));
-            for (const auto ref: entry.negative)
                 if (!database_->is_garbage(ref))
                     extension_stack_->append_witness_clause(storage.view_literals(ref));
             extension_stack_->push_bve_elimination(var, mark);
@@ -341,6 +387,7 @@ namespace kmx::sat::simplify::eliminator::variable
                 });
         }
 
+        std::vector<kmx::sat::variable> frozen_ {};
         cdcl::clause::database* database_ {};
         cdcl::stack::extension* extension_stack_ {};
         kmx::sat::proof_manager* proof_manager_ {};

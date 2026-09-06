@@ -113,8 +113,8 @@ namespace kmx::sat::simplify
         const std::array<literal, 2> clause_literals {lit_five_pos, lit_three_neg};
         const auto clause_ref = clause_database.add_clause(clause_literals, false);
 
+        // A binary watch carries the clause's other literal as its blocking literal; there is no second field.
         cdcl::watch entry {lit_five_neg, clause_ref, true};
-        entry.set_binary_literal(lit_five_pos);
         watch_list.watch_literal(lit_five_pos, entry);
 
         const variable external_var {17u};
@@ -141,7 +141,7 @@ namespace kmx::sat::simplify
         watch_list.iterate(lit_three_pos, [&](const cdcl::watch& watch_entry) noexcept { remapped_entries.push_back(watch_entry); });
         REQUIRE(remapped_entries.size() == 1u);
         REQUIRE(remapped_entries[0].blocking_literal() == lit_three_neg);
-        REQUIRE(remapped_entries[0].binary_literal() == lit_three_pos);
+        REQUIRE(remapped_entries[0].binary_literal() == lit_three_neg);
 
         const auto remapped_internal = mapper.to_internal_literal(literal {external_var, false});
         REQUIRE(remapped_internal.variable_of().index() == var_three.index());
@@ -184,7 +184,6 @@ namespace kmx::sat::simplify
         const auto rewrite_ref = clause_database.add_clause(rewrite_target_clause, false);
 
         cdcl::watch watch_entry {lit_o_neg, rewrite_ref, true};
-        watch_entry.set_binary_literal(lit_o_pos);
         watch_list.watch_literal(lit_o_pos, watch_entry);
 
         scheduler.run_initial_pipeline();
@@ -204,7 +203,7 @@ namespace kmx::sat::simplify
         watch_list.iterate(lit_a_pos, [&](const cdcl::watch& entry) noexcept { remapped_watches.push_back(entry); });
         REQUIRE(remapped_watches.size() == 1u);
         REQUIRE(remapped_watches[0].blocking_literal() == lit_a_neg);
-        REQUIRE(remapped_watches[0].binary_literal() == lit_a_pos);
+        REQUIRE(remapped_watches[0].binary_literal() == lit_a_neg);
 
         const auto remapped_output = mapper.to_internal_literal(literal {external_output, false});
         REQUIRE(remapped_output.variable_of().index() == internal_a.index());
@@ -220,11 +219,13 @@ namespace kmx::sat::simplify
         scheduler.attach_memory_governor(governor);
 
         governor.set_current_usage(11u);
+        // Congruence left the default pipeline; it is enabled here so both memory-heavy passes are under test.
+        scheduler.enable_pass("congruence");
         scheduler.run_initial_pipeline();
         scheduler.report_pass_summary();
 
         const auto expected_skipped = std::size_t {2u};
-        REQUIRE(scheduler.executed_pass_count() + expected_skipped == scheduler::preprocess::baseline_passes.size());
+        REQUIRE(scheduler.executed_pass_count() + expected_skipped == scheduler::preprocess::baseline_passes.size() + 1u);
         REQUIRE(scheduler.profile_selector().fingerprint_count() == 1u);
         REQUIRE(scheduler.profile_selector().pass_plan_count() == 1u);
         REQUIRE(scheduler.profile_selector().policy_update_count() == 1u);
@@ -232,7 +233,7 @@ namespace kmx::sat::simplify
         REQUIRE(scheduler.profile_selector().current_pass_plan().skip_memory_heavy_passes);
 
         const auto& first_summaries = scheduler.last_reported_summaries();
-        REQUIRE(first_summaries.size() == scheduler::preprocess::baseline_passes.size());
+        REQUIRE(first_summaries.size() == scheduler::preprocess::baseline_passes.size() + 1u);
         const auto vivifier_summary =
             std::find_if(first_summaries.begin(), first_summaries.end(), [](const scheduler::preprocess::pass_summary& summary) noexcept
                          { return summary.id == scheduler::preprocess::pass_id::vivifier; });
@@ -250,16 +251,17 @@ namespace kmx::sat::simplify
         governor.set_current_usage(0u);
         scheduler.run_initial_pipeline();
 
-        REQUIRE(scheduler.executed_pass_count() == scheduler::preprocess::baseline_passes.size());
+        // Nine default passes plus the explicitly enabled congruence pass.
+        const auto enabled_passes = scheduler::preprocess::baseline_passes.size() + 1u;
+        REQUIRE(scheduler.executed_pass_count() == enabled_passes);
         REQUIRE(scheduler.profile_selector().fingerprint_count() == 2u);
         REQUIRE(scheduler.profile_selector().pass_plan_count() == 2u);
         REQUIRE(scheduler.profile_selector().policy_update_count() == 2u);
-        REQUIRE(scheduler.profile_selector().effectiveness_count() ==
-                scheduler::preprocess::baseline_passes.size() + (scheduler::preprocess::baseline_passes.size() - expected_skipped));
+        REQUIRE(scheduler.profile_selector().effectiveness_count() == enabled_passes + (enabled_passes - expected_skipped));
         REQUIRE(!scheduler.profile_selector().current_pass_plan().skip_memory_heavy_passes);
     }
 
-    TEST_CASE("preprocess selector skips factorizer on binary dense formulas", "[sat]")
+    TEST_CASE("preprocess selector runs the factorizer on binary dense formulas", "[sat]")
     {
         using namespace kmx::sat;
 
@@ -283,8 +285,8 @@ namespace kmx::sat::simplify
 
         scheduler.run_initial_pipeline();
 
-        REQUIRE(scheduler.executed_pass_count() == 2u);
-        REQUIRE(scheduler.profile_selector().current_pass_plan().skip_factorizer_for_binary_dense);
+        // Binary-dense formulas are where factoring pays (at-most-one constraints), so nothing gates it here.
+        REQUIRE(scheduler.executed_pass_count() == 3u);
         REQUIRE(!scheduler.profile_selector().current_pass_plan().skip_memory_heavy_passes);
 
         const auto& fingerprint = scheduler.profile_selector().current_formula_fingerprint();
@@ -381,7 +383,6 @@ namespace kmx::sat::simplify
 
         REQUIRE(scheduler.executed_pass_count() == 2u);
         REQUIRE(scheduler.profile_selector().current_pass_plan().skip_probing_for_long_clause_heavy);
-        REQUIRE(!scheduler.profile_selector().current_pass_plan().skip_factorizer_for_binary_dense);
 
         const auto& fingerprint = scheduler.profile_selector().current_formula_fingerprint();
         REQUIRE(fingerprint.clause_count == 16u);
@@ -400,6 +401,7 @@ namespace kmx::sat::simplify
         scheduler.attach_memory_governor(governor);
 
         governor.set_current_usage(0u);
+        scheduler.enable_pass("congruence");
         scheduler.set_inprocess_telemetry_snapshot(0.30, 0.01, 0.04, 0.04, 0.10);
         scheduler.run_initial_pipeline();
         scheduler.report_pass_summary();
@@ -463,6 +465,7 @@ namespace kmx::sat::simplify
         scheduler.attach_memory_governor(governor);
 
         governor.set_current_usage(0u);
+        scheduler.enable_pass("congruence");
         scheduler.set_inprocess_telemetry_snapshot(0.01, 0.50, 0.00, 0.00, 0.80);
         scheduler.run_initial_pipeline();
         scheduler.report_pass_summary();
@@ -526,43 +529,5 @@ namespace kmx::sat::simplify
             });
         REQUIRE_FALSE(attached_backbone_unit);
         REQUIRE(proof_manager.last_event().kind == proof::event_kind::shrink_clause);
-    }
-
-    TEST_CASE("preprocess selector adapts factorizer gating after repeated low yield", "[sat]")
-    {
-        using namespace kmx::sat;
-
-        simplify::preprocessing_profile_selector selector;
-        cdcl::clause::database clause_database;
-        selector.attach_clause_database(clause_database);
-
-        // 15/20 binary clauses keeps ratio at 0.75, below the default 0.80 binary-dense threshold.
-        for (std::uint32_t index {1u}; index <= 15u; ++index)
-        {
-            const std::array<literal, 2> binary_clause {literal {variable {index}, false}, literal {variable {index + 100u}, true}};
-            clause_database.add_clause(binary_clause, false);
-        }
-        for (std::uint32_t index {16u}; index <= 20u; ++index)
-        {
-            const std::array<literal, 3> ternary_clause {literal {variable {index}, false}, literal {variable {index + 100u}, false},
-                                                         literal {variable {index + 200u}, true}};
-            clause_database.add_clause(ternary_clause, false);
-        }
-
-        selector.fingerprint_formula();
-        selector.select_pass_plan();
-        REQUIRE(!selector.current_pass_plan().skip_factorizer_for_binary_dense);
-
-        for (std::size_t sample {}; sample < 4u; ++sample)
-        {
-            selector.record_pass_effectiveness("factorizer", false);
-            selector.update_selection_policy();
-        }
-
-        selector.fingerprint_formula();
-        selector.select_pass_plan();
-        REQUIRE(selector.current_pass_plan().skip_factorizer_for_binary_dense);
-        REQUIRE(selector.factorizer_effectiveness().observed_runs == 4u);
-        REQUIRE(selector.factorizer_effectiveness().effective_runs == 0u);
     }
 }

@@ -36,8 +36,8 @@ namespace kmx::sat::simplify
         const auto irredundant_ref = clause_database.add_clause(irredundant_clause, false);
         const auto redundant_ref = clause_database.add_clause(redundant_clause, true);
 
+        // A binary watch carries the clause's other literal as its blocking literal; there is no second field.
         watch binary_watch {lit_five_neg, redundant_ref, true};
-        binary_watch.set_binary_literal(lit_five_pos);
         watch_list.watch_literal(lit_five_pos, binary_watch);
 
         const variable external_var {9u};
@@ -80,7 +80,7 @@ namespace kmx::sat::simplify
         REQUIRE(remapped_watches.size() == 1u);
         REQUIRE(remapped_watches[0].clause_ref() == redundant_ref);
         REQUIRE(remapped_watches[0].blocking_literal() == lit_three_neg);
-        REQUIRE(remapped_watches[0].binary_literal() == lit_three_pos);
+        REQUIRE(remapped_watches[0].binary_literal() == lit_three_neg);
 
         const auto remapped_internal = mapper.to_internal_literal(literal {external_var, false});
         REQUIRE(remapped_internal.variable_of().index() == remapped_internal_target.index());

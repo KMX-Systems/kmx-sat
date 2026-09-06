@@ -114,7 +114,10 @@ namespace kmx::sat::cdcl
                         reduce_controller_.reduce_clauses();
                         reduce_controller_.flush_redundant();
                     }
-                    reduce_controller_.update_tiers();
+                    if (clause_database_ != nullptr)
+                        reduce_controller_.update_tiers(*clause_database_);
+                    else
+                        reduce_controller_.update_tiers();
                     if (clause_database_ != nullptr)
                         clause_database_->decay_quality();
                 }
@@ -153,6 +156,7 @@ namespace kmx::sat::cdcl
             decision_limit_ = request.decision_limit;
             conflict_count_ = 0;
             decision_count_ = 0;
+            lean_learned_clause_count_ = 0u;
             inprocess_epoch_notifications_ = 0u;
             low_yield_inprocess_epoch_count_ = 0u;
             low_yield_inprocess_streak_ = 0u;
@@ -161,6 +165,46 @@ namespace kmx::sat::cdcl
             termination_cause_ = termination_cause::none;
             outcome_ = outcome::in_progress;
         }
+
+        /// @brief Records one conflict on the lean search path: schedules, glue average, episode counter, limit.
+        /// @details The in-core search engine does its own analysis and learning; this is the bookkeeping half of
+        /// `finish_conflict_handling` without the heuristic engine it drives.
+        /// @param glue Glue of the clause learned from this conflict, fed to the adaptive restart trigger.
+        /// @throws None (noexcept).
+        void note_conflict(const std::uint32_t glue) noexcept
+        {
+            restart_controller_.tick_conflict();
+            restart_controller_.observe_glue(glue);
+            reduce_controller_.tick_conflict();
+            ++conflict_count_;
+            if (conflict_limit_ != 0 && conflict_count_ >= conflict_limit_)
+                handle_termination(termination_cause::conflict_limit);
+        }
+
+        /// @brief Records one learned clause produced by the lean search path.
+        void note_learned_clause() noexcept { ++lean_learned_clause_count_; }
+
+        /// @brief Records one branching decision on the lean search path.
+        /// @throws None (noexcept).
+        void note_decision() noexcept
+        {
+            restart_controller_.tick_decision();
+            ++decision_count_;
+            if (decision_limit_ != 0 && decision_count_ >= decision_limit_)
+                handle_termination(termination_cause::decision_limit);
+        }
+
+        /// @brief Records a performed restart on the lean search path: counts it and re-arms the schedule.
+        void note_restart() noexcept { restart_controller_.reset_after_inprocess(); }
+
+        /// @brief Returns whether the reduction schedule is due.
+        [[nodiscard]] bool should_reduce() const noexcept { return reduce_controller_.should_reduce(); }
+
+        /// @brief Exposes the reduction controller so the search engine can run a pass over its clause database.
+        [[nodiscard]] controller::reduce& reduce_controller() noexcept { return reduce_controller_; }
+
+        /// @brief Exposes the restart controller for schedule queries.
+        [[nodiscard]] const controller::restart& restart_controller() const noexcept { return restart_controller_; }
 
         /// @brief Attaches a clause reference to the propagator-owned watch state.
         /// @param ref Clause reference to attach for propagation bookkeeping.
@@ -289,6 +333,18 @@ namespace kmx::sat::cdcl
             decision_engine_.set_maintenance_intervals(conflict_maintenance_interval, chb_decay_interval, restart_decay_interval);
         }
 
+        /// @brief Seeds saved branching polarities from a local-search assignment.
+        void seed_saved_phases(const std::span<const std::uint8_t> assignment) noexcept
+        {
+            decision_engine_.seed_saved_phases(assignment);
+        }
+
+        /// @brief Returns the saved branching polarities, indexed by variable.
+        [[nodiscard]] std::span<const std::uint8_t> saved_phases_view() const noexcept
+        {
+            return decision_engine_.saved_phases_view();
+        }
+
         /// @brief Enables or disables the research-track CHB candidate source.
         void set_chb_enabled(const bool enabled) noexcept { decision_engine_.set_chb_enabled(enabled); }
 
@@ -348,7 +404,7 @@ namespace kmx::sat::cdcl
         /// @brief Returns how many learned clauses were registered during this episode.
         /// @return Number of learned clauses in clause_learner.
         /// @throws None (noexcept).
-        std::size_t learned_clause_count() const noexcept { return clause_learner_.learned_clause_count(); }
+        std::size_t learned_clause_count() const noexcept { return clause_learner_.learned_clause_count() + lean_learned_clause_count_; }
 
         /// @brief Returns the most recently learned clause produced by the clause learner.
         /// @return Read-only span over the latest learned clause.
@@ -411,7 +467,10 @@ namespace kmx::sat::cdcl
                     reduce_controller_.reduce_clauses();
                     reduce_controller_.flush_redundant();
                 }
-                reduce_controller_.update_tiers();
+                if (clause_database_ != nullptr)
+                    reduce_controller_.update_tiers(*clause_database_);
+                else
+                    reduce_controller_.update_tiers();
                 if (clause_database_ != nullptr)
                     clause_database_->decay_quality();
             }
@@ -634,6 +693,7 @@ namespace kmx::sat::cdcl
         counter_t decision_limit_ {};
         counter_t conflict_count_ {};
         counter_t decision_count_ {};
+        std::size_t lean_learned_clause_count_ {};
         counter_t inprocess_epoch_notifications_ {};
         counter_t low_yield_inprocess_epoch_count_ {};
         counter_t low_yield_inprocess_streak_ {};

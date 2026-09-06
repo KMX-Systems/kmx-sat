@@ -1,32 +1,34 @@
 /// @file inc/kmx/sat/cdcl/solver_core.hpp
-/// @brief The main internal solver container, but without degenerating back into an opaque monolith.
+/// @brief The main internal solver container: the CDCL search engine and the episode driver around it.
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <algorithm>
     #include <array>
     #include <cstdint>
     #include <initializer_list>
-    #include <optional>
+    #include <limits>
     #include <span>
+    #include <variant>
     #include <vector>
 #endif
 #include <kmx/sat/cdcl/bank/watch_list.hpp>
 #include <kmx/sat/cdcl/clause/database.hpp>
-#include <kmx/sat/cdcl/clause/minimizer.hpp>
 #include <kmx/sat/cdcl/incremental_context.hpp>
+#include <kmx/sat/cdcl/local_search.hpp>
 #include <kmx/sat/cdcl/memory_governor.hpp>
 #include <kmx/sat/cdcl/model_reconstructor.hpp>
 #include <kmx/sat/cdcl/propagator.hpp>
-#include <kmx/sat/cdcl/stack/extension.hpp>
 #include <kmx/sat/cdcl/search_coordinator.hpp>
+#include <kmx/sat/cdcl/stack/extension.hpp>
 #include <kmx/sat/cdcl/store/clause_cold.hpp>
+#include <kmx/sat/cdcl/var_heap.hpp>
 #include <kmx/sat/cdcl/variable_mapper.hpp>
 #include <kmx/sat/cdcl/watch.hpp>
 #include <kmx/sat/literal.hpp>
 #include <kmx/sat/proof/tracer/view.hpp>
 #include <kmx/sat/proof_manager.hpp>
 #include <kmx/sat/simplify/flush_restore_manager.hpp>
-#include <kmx/sat/simplify/forward_subsumer.hpp>
 #include <kmx/sat/simplify/scheduler/inprocess.hpp>
 #include <kmx/sat/simplify/scheduler/preprocess.hpp>
 #include <kmx/sat/solve_request.hpp>
@@ -34,18 +36,21 @@
 
 namespace kmx::sat::cdcl
 {
-    /// @brief The main internal solver container, but without degenerating back into an opaque monolith.
+    /// @brief The main internal solver container: the CDCL search engine and the episode driver around it.
     /// @details
-    /// `solver_core` plays the same coordinating role as CaDiCaL's `Internal` struct, but as a composition root over
-    /// separately testable objects (`clause::database`, `search_coordinator`, and transitively every CDCL component)
-    /// rather than one large struct holding all state and behavior as fields and methods. `solve`/
-    /// `solve_under_assumptions` are the entry points `external_frontend` calls into for one episode;
-    /// `add_problem_clause` registers an original clause before or between episodes; `current_status` exposes the
-    /// last terminal outcome; `extract_internal_model`/`extract_failed_core` hand raw internal-variable results to
-    /// `model_reconstructor`/`failed_core_extractor` for translation back to external variables.
-    /// @note The aggregate memory layout and call overhead of this composition-root design must remain within
-    /// measurement noise of an equivalent flat-struct baseline, as validated by Phase 5 comparative benchmarking
-    /// against pinned CaDiCaL/Kissat releases.
+    /// `solver_core` plays the coordinating role of CaDiCaL's `Internal`: it owns the clause database, the watch
+    /// lists, the simplification schedulers, the proof manager and the search state, and it runs one solve
+    /// episode per `solve` call. The search itself -- unit propagation, first-UIP conflict analysis with
+    /// recursive minimization, backjumping, restarts with trail reuse, and reduction with in-place arena
+    /// compaction -- lives in this class so that every hot loop touches its arrays directly, with no callback or
+    /// side table in between. `search_coordinator` keeps the schedules, counters and outcome of the episode.
+    ///
+    /// The search state is laid out the way the propagation loop reads it: assignment values are indexed by
+    /// literal (so "is this literal true" is one signed load), levels, reasons and trail positions by variable,
+    /// and the trail is a flat vector with a control stack recording where each decision level starts.
+    /// Assumptions occupy the first decision levels of an episode, so every learned clause is implied by the
+    /// formula alone and can be kept across episodes; a failed assumption is explained by walking the reasons
+    /// that falsified it.
     class solver_core final
     {
     public:
@@ -74,6 +79,7 @@ namespace kmx::sat::cdcl
         solver_core() noexcept
         {
             proof_manager_.set_event_buffering(false);
+            clause_database_.storage_of().set_proof_id_tracking(false);
             rebind_internal_views();
         }
 
@@ -82,6 +88,7 @@ namespace kmx::sat::cdcl
         void reset() noexcept
         {
             clause_database_ = {};
+            clause_database_.storage_of().set_proof_id_tracking(false);
             search_coordinator_ = {};
             propagator_ = {};
             proof_manager_ = {};
@@ -92,24 +99,17 @@ namespace kmx::sat::cdcl
             variable_mapper_ = {};
             clause_cold_ = {};
             flush_restore_manager_ = {};
-            clause_minimizer_ = {};
             extension_stack_.clear_all();
             preprocess_scheduler_ = {};
             inprocess_scheduler_ = {};
+            heap_ = {};
+            saved_phase_.clear();
             unit_clause_refs_.clear();
             original_clause_count_ = 0u;
+            max_problem_variable_ = 0u;
             internal_model_.clear();
             failed_core_.clear();
-            last_conflict_clause_.clear();
-            propagation_queue_scratch_.clear();
-            propagation_state_dirty_ = false;
-            propagation_assignment_count_ = 0u;
-            watch_entry_scan_count_ = 0u;
-            binary_watch_scan_count_ = 0u;
-            binary_watch_conflict_count_ = 0u;
-            learned_clause_shrink_event_count_ = 0u;
-            learned_clause_glue_total_ = 0u;
-            learned_clause_glue_sample_count_ = 0u;
+            reset_episode_counters();
             watch_list_.reset_diagnostics();
             status_ = status::unknown;
             rebind_internal_views();
@@ -123,14 +123,7 @@ namespace kmx::sat::cdcl
         {
             internal_model_.clear();
             failed_core_.clear();
-            last_conflict_clause_.clear();
-            propagation_assignment_count_ = 0u;
-            watch_entry_scan_count_ = 0u;
-            binary_watch_scan_count_ = 0u;
-            binary_watch_conflict_count_ = 0u;
-            learned_clause_shrink_event_count_ = 0u;
-            learned_clause_glue_total_ = 0u;
-            learned_clause_glue_sample_count_ = 0u;
+            reset_episode_counters();
             clause_cold_.reset();
 
             incremental_context_.begin_solve_epoch();
@@ -141,12 +134,31 @@ namespace kmx::sat::cdcl
                 inprocess_scheduler_.conflict_density_ema(), inprocess_scheduler_.structural_gain_ema(),
                 inprocess_scheduler_.restart_pressure_ema(), inprocess_scheduler_.reduction_pressure_ema(),
                 inprocess_scheduler_.learned_clause_pressure_ema());
+            // A caller-supplied pass set replaces the default one; zero keeps the default rather than meaning
+            // "no passes", matching how `solve_request::enabled_pass_mask` is documented and defaulted.
+            if (request.enabled_pass_mask != 0u)
+                preprocess_scheduler_.set_enabled_pass_mask(request.enabled_pass_mask);
+
+            // Anything the caller can still name after simplification must survive it. Assumption variables are
+            // exactly that: eliminating one discards the clauses that constrain it, and the episode then reports
+            // satisfiable with a model that contradicts the assumption it was given.
+            frozen_variables_scratch_.clear();
+            frozen_variables_scratch_.reserve(request.assumptions.size());
+            for (const auto assumption: request.assumptions)
+                frozen_variables_scratch_.push_back(assumption.variable_of());
+            preprocess_scheduler_.set_frozen_variables(frozen_variables_scratch_);
+
+            // The walker takes the formula as stated, before preprocessing rewrites it. Factoring replaces the
+            // at-most-one clauses of a colouring instance with definitions of fresh variables, and on that formula
+            // the walk that solves `gcp125_17` in a third of a second finds nothing in thirty. A model of the
+            // original formula seeds the original variables' phases; the fresh variables follow by propagation.
+            local_search_variable_count_ = find_max_variable(request.assumptions);
+            local_search_prepared_ = local_search_applicable(local_search_variable_count_) &&
+                                     local_search_.prepare(clause_database_, local_search_variable_count_);
+
             preprocess_scheduler_.run_initial_pipeline();
             preprocess_scheduler_.report_pass_summary();
             inprocess_scheduler_.clear_abort();
-            rebuild_propagation_state();
-
-            search_coordinator_.apply_assumptions(request);
 
             const auto finalize_epoch = [this](const status result) noexcept
             {
@@ -158,74 +170,23 @@ namespace kmx::sat::cdcl
                 return status_;
             };
 
-            const auto max_variable = find_max_variable(request.assumptions);
-            assignment_vector assignment(static_cast<std::size_t>(max_variable + 1u), unassigned_value);
-            decision_level_vector decision_levels(static_cast<std::size_t>(max_variable + 1u), 0u);
-            reason_vector reasons(static_cast<std::size_t>(max_variable + 1u), clause::ref_t {});
-            trail_vector trail {};
-            counter_t conflicts = 0;
+            variable_count_ = find_max_variable(request.assumptions);
+            initialize_search_state(request);
+            opening_walk_pending_ = prepare_opening_walk();
+            opening_walk_due_at_ = search_coordinator_.conflict_event_count() + local_search_opening_probe_conflicts;
+            rebuild_propagation_state();
 
-            for (std::uint32_t index = 1u; index <= max_variable; ++index)
-                search_coordinator_.activate_variable(variable {index});
-
-            watch_list_.reserve(static_cast<std::size_t>(max_variable) * 2u + 2u);
-
-            for (const auto assumption: request.assumptions)
-            {
-                if (!assign_literal(assignment, decision_levels, reasons, assumption, 0u))
-                {
-                    failed_core_.clear();
-                    failed_core_.push_back(assumption);
-                    for (const auto prior_assumption: request.assumptions)
-                    {
-                        if (prior_assumption.variable_of().index() != assumption.variable_of().index())
-                            continue;
-                        if (prior_assumption.raw() == assumption.raw())
-                            continue;
-                        failed_core_.push_back(prior_assumption);
-                        break;
-                    }
-                    if (failed_core_.size() < 2u)
-                        failed_core_ = request.assumptions;
-                    return finalize_epoch(status::unsatisfiable);
-                }
-
-                search_coordinator_.notify_assignment_literal(assumption);
-                trail.push_back(assumption);
-            }
-
+            search_coordinator_.apply_assumptions(request);
+            propagator_.reset_episode_state();
             propagator_.set_pending_assumption_count(request.assumptions.size());
-            const auto assumption_conflict = propagator_.propagate_assumptions();
-            if (assumption_conflict.valid())
-            {
-                const auto assumption_clause = clause_database_.storage_of().literals_of(assumption_conflict);
-                const auto assumption_status =
-                    handle_clause_conflict(assumption_conflict, assumption_clause, decision_levels, reasons, request, conflicts, trail, 0u);
-                if (assumption_status.result_status != status::satisfiable)
-                {
-                    failed_core_ = build_failed_core_from_reasons(request.assumptions, reasons);
-                    if (failed_core_.empty())
-                        failed_core_ = build_failed_core_from_conflict(request.assumptions);
-                    if (failed_core_.empty() && !request.assumptions.empty())
-                        failed_core_ = request.assumptions;
-                    return finalize_epoch(assumption_status.result_status);
-                }
-            }
+            (void) propagator_.propagate_assumptions();
 
-            status_ = run_search(assignment, decision_levels, reasons, request, conflicts, trail, request.assumptions);
+            status_ = try_lucky_assignments(request) ? status::satisfiable : run_search(request);
 
             if (status_ == status::satisfiable)
-                build_internal_model(assignment);
-            else if (status_ == status::unsatisfiable)
-            {
-                failed_core_ = build_failed_core_from_reasons(request.assumptions, reasons);
-                if (failed_core_.empty())
-                    failed_core_ = build_failed_core_from_conflict(request.assumptions);
-                if (failed_core_.empty() && !request.assumptions.empty())
-                    failed_core_ = request.assumptions;
-            }
+                build_internal_model();
 
-            run_inprocess_if_due();
+            (void) run_inprocess_if_due();
 
             return finalize_epoch(status_);
         }
@@ -248,19 +209,27 @@ namespace kmx::sat::cdcl
         {
             if (variable_bound == 0)
                 return;
-            const auto slots = static_cast<std::size_t>(variable_bound) * 2u + 2u;
-            watch_list_.reserve(slots);
+            watch_list_.reserve(static_cast<std::size_t>(variable_bound) * 2u + 2u);
+            heap_.resize(variable_bound);
+            saved_phase_.reserve(static_cast<std::size_t>(variable_bound) + 1u);
         }
 
         /// @brief Registers an original (non-redundant) problem clause with the internal clause database.
+        /// @details Duplicate literals are dropped and a tautology is not stored at all: both would put two watches
+        /// of one clause on the same literal, which the propagation loop is not built to tolerate.
         /// @param literals Internal literals composing the clause.
         /// @throws None (noexcept).
         void add_problem_clause(const std::span<const literal> literals) noexcept
         {
-            const auto ref = clause_database_.add_clause(literals, false);
-            attach_clause_for_propagation(ref);
-            proof_manager_.on_add_original(ref, literals);
             ++original_clause_count_;
+            for (const auto lit: literals)
+                if (lit.variable_of().index() > max_problem_variable_)
+                    max_problem_variable_ = lit.variable_of().index();
+
+            if (!normalize_clause(literals))
+                return;
+            const auto ref = clause_database_.add_clause(normalized_clause_scratch_, false);
+            proof_manager_.on_add_original(ref, normalized_clause_scratch_);
         }
 
         /// @brief Convenience overload for adding a clause from a braced literal list.
@@ -272,37 +241,27 @@ namespace kmx::sat::cdcl
         }
 
         /// @brief Returns the terminal status of the most recently completed solve episode.
-        /// @return Current internal status value.
-        /// @throws None (noexcept).
         status current_status() const noexcept { return status_; }
 
         /// @brief Returns how many original problem clauses have been registered.
-        /// @return Number of clauses added via `add_problem_clause`.
-        /// @throws None (noexcept).
         std::size_t original_clause_count() const noexcept { return original_clause_count_; }
 
-        /// @brief Returns how many learned clauses have been registered in the clause database.
-        /// @return Number of redundant clauses currently owned by the database.
-        /// @throws None (noexcept).
+        /// @brief Returns how many learned clauses are currently owned by the clause database.
         std::size_t learned_clause_count() const noexcept { return clause_database_.stats_snapshot().redundant_count; }
 
-        /// @brief Returns how many learned clauses have been processed by the clause minimizer.
-        std::uint32_t minimized_learned_clause_count() const noexcept { return clause_minimizer_.minimized_clause_count(); }
+        /// @brief Returns how many learned clauses went through minimization.
+        std::uint32_t minimized_learned_clause_count() const noexcept { return minimized_clause_count_; }
 
-        /// @brief Returns how many learned clauses have been shrunk in storage by the clause minimizer.
-        std::uint32_t shrunk_learned_clause_count() const noexcept { return clause_minimizer_.shrunk_clause_count(); }
+        /// @brief Returns how many learned clauses minimization actually shortened.
+        std::uint32_t shrunk_learned_clause_count() const noexcept { return shrunk_clause_count_; }
 
-        /// @brief Returns how many learned clauses were promoted after glue recomputation.
-        std::uint32_t promoted_learned_clause_count() const noexcept { return clause_minimizer_.promoted_clause_count(); }
+        /// @brief Returns how many learned clauses entered the core tier on creation.
+        std::uint32_t promoted_learned_clause_count() const noexcept { return promoted_clause_count_; }
 
         /// @brief Extracts the internal-variable model after a satisfiable episode.
-        /// @return Read-only span of internal model literals, to be translated by `model_reconstructor`.
-        /// @throws None (noexcept).
         std::span<const literal> extract_internal_model() const noexcept { return internal_model_; }
 
         /// @brief Extracts the internal-variable failed core after an unsatisfiable episode under assumptions.
-        /// @return Read-only span of internal failed-assumption literals, to be translated by `failed_core_extractor`.
-        /// @throws None (noexcept).
         std::span<const literal> extract_failed_core() const noexcept { return failed_core_; }
 
         std::size_t proof_buffered_event_count() const noexcept { return proof_manager_.buffered_event_count(); }
@@ -312,7 +271,6 @@ namespace kmx::sat::cdcl
         std::span<const proof::proof_event> buffered_proof_events() const noexcept { return proof_manager_.buffered_events(); }
 
         /// @brief Emits the final proof conclusion for a completed solve episode.
-        /// @throws None (noexcept).
         void finalize_proof() noexcept
         {
             if (proof_enabled())
@@ -320,44 +278,33 @@ namespace kmx::sat::cdcl
         }
 
         /// @brief Returns the latest outcome produced by the coordinator-backed search episode.
-        /// @return Coordinator outcome for the most recent solve episode.
-        /// @throws None (noexcept).
         search_coordinator::outcome current_search_outcome() const noexcept { return search_coordinator_.current_outcome(); }
 
         /// @brief Returns why the latest coordinator-backed episode terminated.
-        /// @return Coordinator termination cause for the most recent solve episode.
-        /// @throws None (noexcept).
         search_coordinator::termination_cause current_search_termination_cause() const noexcept
         {
             return search_coordinator_.current_termination_cause();
         }
 
         /// @brief Returns how many learned clauses were retained across completed epochs.
-        /// @return Retained learned-clause count tracked by the incremental context.
         std::uint32_t retained_learned_clause_count() const noexcept { return incremental_context_.retained_learned_clauses(); }
 
         /// @brief Returns whether the latest solve call completed a transient-state reset.
-        /// @return True if transient per-epoch state has been reset.
         bool transient_state_was_reset() const noexcept { return incremental_context_.transient_state_reset(); }
 
         /// @brief Returns whether a persistent option subset has been recorded.
-        /// @return True if persistent option state was marked.
         bool persisted_option_subset() const noexcept { return incremental_context_.persisted_option_subset(); }
 
         /// @brief Marks the currently configured options as persistent across solve epochs.
-        /// @throws None (noexcept).
         void persist_option_subset() noexcept { incremental_context_.persist_option_subset(); }
 
         /// @brief Returns how many clauses the subsumption pass removed.
-        /// @return Subsumed clause count accumulated by the attached forward subsumer.
         std::size_t subsumed_clause_count() const noexcept { return preprocess_scheduler_.subsumed_clause_count(); }
 
         /// @brief Returns how many preprocess pipeline runs have been executed.
-        /// @return Number of preprocess runs.
         std::size_t preprocess_run_count() const noexcept { return preprocess_scheduler_.pipeline_run_count(); }
 
         /// @brief Returns how many inprocess epochs have been executed.
-        /// @return Number of inprocess epochs.
         counter_t inprocess_epoch_count() const noexcept { return inprocess_scheduler_.epoch_count(); }
 
         /// @brief Returns conflicts handled during the latest solve episode.
@@ -372,10 +319,10 @@ namespace kmx::sat::cdcl
         /// @brief Returns learned clauses registered during the latest solve episode.
         std::size_t episode_learned_clause_count() const noexcept { return search_coordinator_.learned_clause_count(); }
 
-        /// @brief Returns how many main propagation calls were observed by the core-owned propagator.
+        /// @brief Returns how many propagation rounds the core ran.
         std::size_t propagator_call_count() const noexcept { return propagator_.propagation_call_count(); }
 
-        /// @brief Returns the number of assignments enqueued by watched-literal propagation in the current core state.
+        /// @brief Returns the number of assignments made by watched-literal propagation in the current core state.
         std::size_t propagation_assignment_count() const noexcept { return propagation_assignment_count_; }
 
         /// @brief Returns the number of watch entries examined by propagation in the current core state.
@@ -390,7 +337,8 @@ namespace kmx::sat::cdcl
         /// @brief Returns how many binary watch entries produced conflicts in the current core state.
         std::size_t binary_watch_conflict_count() const noexcept { return binary_watch_conflict_count_; }
 
-        /// @brief Returns how many finalized learned clauses emitted proof shrink events in the current episode.
+        /// @brief Returns how many learned clauses were shortened after being recorded (always zero: clauses are
+        /// minimized before they are stored).
         std::size_t learned_clause_shrink_event_count() const noexcept { return learned_clause_shrink_event_count_; }
 
         counter_t learned_clause_glue_total() const noexcept { return learned_clause_glue_total_; }
@@ -403,16 +351,29 @@ namespace kmx::sat::cdcl
 
         counter_t deleted_clause_count() const noexcept { return search_coordinator_.deleted_clause_count(); }
 
-        /// @brief Returns how many assumption propagation calls were observed by the core-owned propagator.
+        /// @brief Returns how many assumption propagation rounds the core ran.
         std::size_t propagator_assumption_call_count() const noexcept { return propagator_.assumption_propagation_call_count(); }
 
         /// @brief Exposes the flush/restore policy manager for focused integration tests.
-        /// @return Reference to the clause flush/restore manager.
         simplify::flush_restore_manager& flush_restore_manager() noexcept { return flush_restore_manager_; }
 
         /// @brief Attaches an external proof tracer to the core-owned proof manager.
+        /// @details Proof identities are allocated lazily: until a consumer is attached no clause carries one, so
+        /// attaching first assigns identities to every clause already in the database.
         /// @param sink External proof tracer sink.
-        void attach_proof_tracer(const proof::tracer::view& sink) noexcept { proof_manager_.register_tracer(sink); }
+        void attach_proof_tracer(const proof::tracer::view& sink) noexcept
+        {
+            auto& storage = clause_database_.storage_of();
+            storage.enable_proof_ids(clause_database_.irredundant_refs());
+            for (const auto ref: clause_database_.redundant_refs())
+                if (storage.is_alive(ref))
+                    (void) storage.assign_proof_id(ref);
+            proof_manager_.register_tracer(sink);
+            // Ids for everything already in the database: events were not dispatched while no consumer existed.
+            const auto adopt = [this](const clause::ref_t ref) noexcept { proof_manager_.adopt_clause(ref); };
+            clause_database_.iterate_irredundant(adopt);
+            clause_database_.iterate_redundant(adopt);
+        }
 
         /// @brief Returns whether any proof format is active through the core-owned proof manager.
         bool proof_enabled() const noexcept { return proof_manager_.has_enabled_formats(); }
@@ -420,17 +381,34 @@ namespace kmx::sat::cdcl
         bool proof_checkers_valid() const noexcept { return proof_manager_.validate_checkers(); }
 
         /// @brief Configures decision-heuristic maintenance intervals.
-        /// @param conflict_maintenance_interval EVSIDS rescale interval in conflicts (0 disables).
-        /// @param chb_decay_interval CHB decay interval in conflicts (0 disables).
-        /// @param restart_decay_interval CHB decay interval in restarts (0 disables).
+        /// @param conflict_maintenance_interval Conflicts between EVSIDS renormalizations (0 disables the cadence;
+        /// the heap still renormalizes on its own before its scores can overflow).
+        /// @param chb_decay_interval Retained for the option surface; the search engine no longer runs CHB.
+        /// @param restart_decay_interval Retained for the option surface; the search engine no longer runs CHB.
         void set_decision_maintenance_intervals(const std::uint32_t conflict_maintenance_interval, const std::uint32_t chb_decay_interval,
                                                 const std::uint32_t restart_decay_interval) noexcept
         {
+            evsids_maintenance_interval_ = conflict_maintenance_interval;
             search_coordinator_.set_decision_maintenance_intervals(conflict_maintenance_interval, chb_decay_interval,
                                                                    restart_decay_interval);
         }
 
         void set_restart_interval(const counter_t interval) noexcept { search_coordinator_.set_restart_interval(interval); }
+
+        /// @brief Sets the flip budget per variable of the opening walk; zero disables local search entirely.
+        void set_local_search_flips_per_variable(const std::size_t flips) noexcept { local_search_flips_per_variable_ = flips; }
+
+        /// @brief Sets the share of search effort later walks may spend, in percent; zero disables re-walks.
+        void set_local_search_effort_percent(const std::size_t percent) noexcept
+        {
+            local_search_effort_percent_ = percent > 100u ? 100u : percent;
+        }
+
+        /// @brief Configures how many conflicts and restarts separate inprocessing epochs; zero keeps a window.
+        void set_inprocess_trigger_windows(const counter_t conflict_window, const counter_t restart_window) noexcept
+        {
+            inprocess_scheduler_.set_trigger_windows(conflict_window, restart_window);
+        }
 
         void set_reduction_interval(const counter_t interval) noexcept { search_coordinator_.set_reduction_interval(interval); }
 
@@ -487,8 +465,8 @@ namespace kmx::sat::cdcl
         /// @brief Returns the current cold storage footprint in bytes.
         std::size_t cold_footprint_bytes() const noexcept { return clause_cold_.cold_footprint_bytes(); }
 
-        /// @brief Returns the number of EVSIDS rescale maintenance steps observed in decision heuristics.
-        std::uint32_t decision_evsids_rescale_count() const noexcept { return search_coordinator_.decision_evsids_rescale_count(); }
+        /// @brief Returns the number of EVSIDS rescale maintenance steps observed in the branching heap.
+        std::uint32_t decision_evsids_rescale_count() const noexcept { return heap_.rescale_count(); }
 
         /// @brief Returns the number of CHB decay maintenance steps observed in decision heuristics.
         std::uint32_t decision_chb_decay_count() const noexcept { return search_coordinator_.decision_chb_decay_count(); }
@@ -518,12 +496,14 @@ namespace kmx::sat::cdcl
         }
 
     private:
+        // ------------------------------------------------------------------------------------------------------
+        // Wiring
+        // ------------------------------------------------------------------------------------------------------
+
         void rebind_internal_views() noexcept
         {
             search_coordinator_.attach_database(clause_database_);
             flush_restore_manager_.attach_database(clause_database_);
-            clause_minimizer_.attach_storage(clause_database_.storage_of());
-            clause_minimizer_.attach_database(clause_database_);
             preprocess_scheduler_.attach_memory_governor(memory_governor_);
             preprocess_scheduler_.attach_clause_database(clause_database_);
             preprocess_scheduler_.attach_watch_list(watch_list_);
@@ -531,195 +511,166 @@ namespace kmx::sat::cdcl
             preprocess_scheduler_.attach_proof_manager(proof_manager_);
             preprocess_scheduler_.attach_extension_stack(extension_stack_);
             model_reconstructor_.attach_extension_stack(extension_stack_);
-            preprocess_scheduler_.attach_clause_sink([this](const clause::ref_t ref) noexcept { attach_clause_for_propagation(ref); });
+            // Simplification passes announce new or rewritten clauses through this sink. Watches are rebuilt
+            // wholesale after every pipeline and every epoch, so there is nothing for the sink to do.
+            preprocess_scheduler_.attach_clause_sink([](const clause::ref_t) noexcept {});
             inprocess_scheduler_.attach_memory_governor(memory_governor_);
             inprocess_scheduler_.attach_clause_database(clause_database_);
             inprocess_scheduler_.attach_watch_list(watch_list_);
             inprocess_scheduler_.attach_variable_mapper(variable_mapper_);
             inprocess_scheduler_.attach_proof_manager(proof_manager_);
         }
-        store::clause_cold clause_cold_ {};
-        stack::extension extension_stack_ {};
-        model_reconstructor model_reconstructor_ {};
 
-        using assignment_vector = std::vector<std::int8_t>;
-        using decision_level_vector = std::vector<std::uint32_t>;
-        using reason_vector = std::vector<clause::ref_t>;
-        using trail_vector = std::vector<literal>;
-
-        /// @brief Non-owning context bundle passed to the conflict-analysis lookup callbacks below.
-        struct conflict_resolution_context final
+        void reset_episode_counters() noexcept
         {
-            const clause::database* database;
-            const decision_level_vector* levels;
-            const reason_vector* reasons;
-            mutable std::vector<literal> reason_scratch {};
+            propagation_assignment_count_ = 0u;
+            watch_entry_scan_count_ = 0u;
+            binary_watch_scan_count_ = 0u;
+            binary_watch_conflict_count_ = 0u;
+            learned_clause_shrink_event_count_ = 0u;
+            learned_clause_glue_total_ = 0u;
+            learned_clause_glue_sample_count_ = 0u;
+            minimized_clause_count_ = 0u;
+            shrunk_clause_count_ = 0u;
+            promoted_clause_count_ = 0u;
+        }
+
+        // ------------------------------------------------------------------------------------------------------
+        // Constants and small types
+        // ------------------------------------------------------------------------------------------------------
+
+        /// @brief Variable count above which the phase-seeding probe is skipped as not worth its cost.
+        static constexpr std::uint32_t local_search_variable_limit {200000u};
+        /// @brief Original-clause count below which the probe cannot pay for itself and is skipped.
+        /// @details The probe's cost is fixed by the flip budget, so on a formula the search closes in a few
+        /// milliseconds it is pure overhead, and the instances where it is most wasteful are exactly the small
+        /// crafted ones (the 160-clause aim formulas are built to defeat local search).
+        static constexpr std::size_t local_search_minimum_clause_count {500u};
+        /// @brief Original-clause count above which the phase-seeding probe is skipped.
+        static constexpr std::size_t local_search_clause_limit {2000000u};
+        /// @brief Flip budget per variable of the first walk, split over the strategies of the portfolio.
+        /// @details Measured on the corpus: with the walk restarted from its best assignment every round, uniform
+        /// random 3-SAT near the threshold and graph-colouring encodings both fall within about a thousand flips
+        /// per variable, while a formula the walk cannot improve stops after two stalled rounds, so the budget can
+        /// be generous without being paid in full on unsatisfiable or structured formulas (about 18% on
+        /// unsatisfiable random 3-SAT, a few percent elsewhere).
+        static constexpr std::size_t default_local_search_flips_per_variable {4000u};
+        /// @brief Conflicts between the first search and the first re-walk; the interval then grows geometrically.
+        static constexpr counter_t local_search_initial_interval {1000u};
+        /// @brief Share of search time a re-walk may spend, in percent, before the adaptive scale is applied.
+        static constexpr std::size_t default_local_search_effort_percent {8u};
+        /// @brief Watch visits that cost about as much as one flip; converts search effort into a flip budget.
+        static constexpr std::size_t visits_per_flip {15u};
+        /// @brief Flips per variable every re-walk gets regardless of effort, so that a walk always has a chance
+        /// to improve on the phases the search handed it; on a 250-variable formula this is a few milliseconds.
+        static constexpr std::size_t local_search_rewalk_floor_per_variable {250u};
+        /// @brief Largest opening walk, in flips; formulas whose per-variable budget exceeds it get no opening walk.
+        /// @details Every formula the opening walk has ever solved has at most a few thousand variables, and on
+        /// those the full per-variable budget costs well under a second. On a 10,000-40,000 variable bounded-model
+        /// checking or planning formula the same per-variable budget is tens of millions of flips that creep from
+        /// seven unsatisfied clauses to one and never reach zero, at a cost of one to twelve seconds on formulas
+        /// the search itself finishes in a few hundred conflicts. Above the cap the walk is left to the re-walk
+        /// schedule, where its budget follows the search effort actually spent.
+        static constexpr std::size_t local_search_opening_flip_cap {10'000'000u};
+        /// @brief Conflicts the search spends before the opening walk runs.
+        /// @details Every planning, circuit and bounded-model-checking formula in the classic set that the walk
+        /// cannot help is finished by the search within two thousand conflicts, in a few milliseconds, while the
+        /// walk-friendly random and colouring formulas cost a few hundredths of a second for the same probe.
+        /// Walking first therefore charged the structured formulas a hundred milliseconds each for nothing;
+        /// probing first charges the walk winners a few percent and the held-out random set about as much.
+        static constexpr counter_t local_search_opening_probe_conflicts {2000u};
+        /// @brief Largest learned clause whose reason-side variables are bumped along with the analyzed ones.
+        static constexpr std::size_t reason_bump_size_limit {32u};
+        /// @brief Absolute cap on the re-walk floor: the per-variable floor is meant for small random formulas,
+        /// and uncapped it alone made every re-walk on a 40,000-variable formula a ten-million-flip walk.
+        static constexpr std::size_t local_search_rewalk_floor_cap {200'000u};
+        /// @brief Bounds of the adaptive effort scale: it doubles after a walk that improves on every walk before
+        /// it and halves otherwise, so a formula the walk keeps closing in on gets a growing share of the run and
+        /// one it stalls on costs a shrinking one.
+        static constexpr double local_search_scale_floor {0.125};
+        static constexpr double local_search_scale_ceiling {4.0};
+        /// @brief Rounds an opening strategy is split into; a strategy stops after two rounds without a new best.
+        static constexpr std::size_t local_search_opening_rounds {10u};
+        /// @brief Fixed seed: the probe feeds branching, so it must be reproducible across repeats.
+        static constexpr std::uint64_t local_search_seed {0x5851f42d4c957f2dull};
+        /// @brief The walk portfolio, cycled through by successive walks.
+        /// @details probSAT's polynomial break rule is tuned for uniform 3-SAT and stalls on structured encodings,
+        /// where low-noise WalkSAT succeeds; the two alternate, and the formula's longest clause decides which one
+        /// opens (probSAT on pure 3-SAT, WalkSAT otherwise).
+        static constexpr std::array<local_search::configuration, 4> local_search_portfolio {
+            local_search::configuration {local_search::strategy::probsat, 0u, 2.06, 0.9},
+            local_search::configuration {local_search::strategy::walksat, 12u, 2.06, 0.9},
+            local_search::configuration {local_search::strategy::probsat, 0u, 2.06, 0.9},
+            local_search::configuration {local_search::strategy::walksat, 25u, 2.06, 0.9},
         };
 
-        /// @brief Callback bound to `conflict_resolution_context`, returning a variable's current decision level.
-        static std::uint32_t conflict_level_lookup(const void* context, const variable var) noexcept
+        /// @brief Recursion bound of learned-clause minimization, as in CaDiCaL's `minimizedepth`.
+        static constexpr std::uint32_t minimize_depth_limit {1000u};
+        /// @brief Glue at or below which a learned clause enters the core tier on creation.
+        static constexpr std::uint32_t core_glue_limit {2u};
+        /// @brief Glue at or below which a learned clause enters the retained tier on creation.
+        static constexpr std::uint32_t retained_glue_limit {6u};
+
+        static constexpr std::uint8_t seen_flag {1u << 0u};
+        static constexpr std::uint8_t poison_flag {1u << 1u};
+        static constexpr std::uint8_t removable_flag {1u << 2u};
+        static constexpr std::uint8_t keep_flag {1u << 3u};
+
+        /// @brief One decision level: where its assignments start on the trail, and analysis scratch for it.
+        struct control_frame final
         {
-            const auto* ctx = static_cast<const conflict_resolution_context*>(context);
-            if (ctx == nullptr)
-                return 0u;
-            const auto index = static_cast<std::size_t>(var.index());
-            return index < ctx->levels->size() ? (*ctx->levels)[index] : 0u;
+            std::uint32_t trail_begin {};
+            literal decision {};
+            std::uint32_t seen_count {};
+            std::uint32_t seen_min_trail {};
+        };
+
+        [[nodiscard]] [[gnu::always_inline]] static inline std::uint32_t var_of(const literal lit) noexcept
+        {
+            return lit.variable_of().index();
         }
 
-        /// @brief Callback bound to `conflict_resolution_context`, returning a variable's reason-clause literals.
-        static std::span<const literal> conflict_reason_lookup(const void* context, const variable var) noexcept
+        [[nodiscard]] [[gnu::always_inline]] inline std::int8_t value_of(const literal lit) const noexcept { return values_[lit.raw()]; }
+
+        [[nodiscard]] [[gnu::always_inline]] inline bool is_assigned(const std::uint32_t var) const noexcept
         {
-            const auto* const ctx = static_cast<const conflict_resolution_context*>(context);
-            if (ctx == nullptr)
-                return {};
-            const auto index = static_cast<std::size_t>(var.index());
-            if (index >= ctx->reasons->size())
-                return {};
-            const auto ref = (*ctx->reasons)[index];
-            if (!ref.valid())
-                return {};
-            const auto reason_literals = ctx->database->storage_of().view_literals(ref);
-            ctx->reason_scratch.assign(reason_literals.begin(), reason_literals.end());
-            return ctx->reason_scratch;
+            return values_[static_cast<std::size_t>(var) << 1u] != 0;
         }
 
-        static constexpr std::int8_t unassigned_value = -1;
-        static constexpr std::int8_t false_value = 0;
-        static constexpr std::int8_t true_value = 1;
+        // ------------------------------------------------------------------------------------------------------
+        // Episode setup
+        // ------------------------------------------------------------------------------------------------------
 
-        /// @brief Registers a clause for real propagation: two-watched-literal indexing for size >= 2, a direct
-        /// unit-clause bypass list for size <= 1 (unit clauses are checked every fixpoint pass instead of being
-        /// watched, since a solitary literal has no second slot to watch).
-        /// @param ref Reference to the clause to attach.
-        /// @throws None (noexcept).
-        void attach_clause_for_propagation(const clause::ref_t ref) noexcept
+        /// @brief Drops duplicate literals into `normalized_clause_scratch_`; returns false for a tautology.
+        [[nodiscard]] bool normalize_clause(const std::span<const literal> literals) noexcept
         {
-            if (!ref.valid())
-                return;
-
-            const auto literals = clause_database_.storage_of().view_literals(ref);
-            if (literals.size() <= 1u)
+            normalized_clause_scratch_.clear();
+            if (++literal_stamp_ == 0u)
             {
-                unit_clause_refs_.push_back(ref);
-                return;
+                std::fill(literal_stamps_.begin(), literal_stamps_.end(), 0u);
+                literal_stamp_ = 1u;
             }
-
-            const auto is_binary = literals.size() == 2u;
-            watch watch_on_first {literals[1], ref, is_binary};
-            watch watch_on_second {literals[0], ref, is_binary};
-            if (is_binary)
+            for (const auto lit: literals)
             {
-                watch_on_first.set_binary_literal(literals[1]);
-                watch_on_second.set_binary_literal(literals[0]);
-            }
-            watch_list_.watch_literal(literals[0], watch_on_first);
-            watch_list_.watch_literal(literals[1], watch_on_second);
-        }
-
-        void rebuild_propagation_state() noexcept
-        {
-            watch_list_ = {};
-            unit_clause_refs_.clear();
-            const auto attach = [this](const clause::ref_t ref) noexcept { attach_clause_for_propagation(ref); };
-            clause_database_.iterate_irredundant(attach);
-            clause_database_.iterate_redundant(attach);
-        }
-
-        std::vector<clause::ref_t> active_clause_refs() const noexcept
-        {
-            const auto stats = clause_database_.stats_snapshot();
-            std::vector<clause::ref_t> refs {};
-            refs.reserve(stats.irredundant_count + stats.redundant_count);
-
-            const auto process_clause = [&refs](const clause::ref_t ref) noexcept
-            {
-                if (ref.valid())
-                    refs.push_back(ref);
-            };
-
-            clause_database_.iterate_irredundant(process_clause);
-            clause_database_.iterate_redundant(process_clause);
-
-            return refs;
-        }
-
-        static bool contains_clause_id(const std::vector<proof::clause::id>& ids, const proof::clause::id id) noexcept
-        {
-            for (const auto existing: ids)
-                if (existing.equals(id))
-                    return true;
-            return false;
-        }
-
-        static bool contains_clause_ref(const std::vector<clause::ref_t>& refs, const clause::ref_t ref) noexcept
-        {
-            for (const auto existing: refs)
-                if (existing.offset() == ref.offset())
-                    return true;
-            return false;
-        }
-
-        static bool is_tautological_clause(const std::span<const literal> literals) noexcept
-        {
-            for (std::size_t index = 0u; index < literals.size(); ++index)
-            {
-                const auto lhs = literals[index];
-                for (std::size_t inner = index + 1u; inner < literals.size(); ++inner)
-                {
-                    const auto rhs = literals[inner];
-                    if (lhs.variable_of().index() != rhs.variable_of().index())
-                        continue;
-                    if (lhs.is_negated() != rhs.is_negated())
-                        return true;
-                }
-            }
-            return false;
-        }
-
-        std::span<const clause::ref_t> build_ordered_reason_chain_refs(const std::span<const literal> chain_literals,
-                                                                       const reason_vector& reasons) const noexcept
-        {
-            ordered_reason_refs_scratch_.clear();
-
-            for (const auto lit: chain_literals)
-            {
-                const auto variable_index = static_cast<std::size_t>(lit.variable_of().index());
-                if (variable_index >= reasons.size())
+                const auto slot = static_cast<std::size_t>(lit.raw());
+                if (slot + 1u >= literal_stamps_.size())
+                    literal_stamps_.resize(slot + 2u, 0u);
+                if (literal_stamps_[slot ^ 1u] == literal_stamp_)
+                    return false;
+                if (literal_stamps_[slot] == literal_stamp_)
                     continue;
-
-                const auto reason_ref = reasons[variable_index];
-                if (!reason_ref.valid() || contains_clause_ref(ordered_reason_refs_scratch_, reason_ref))
-                    continue;
-
-                ordered_reason_refs_scratch_.push_back(reason_ref);
+                literal_stamps_[slot] = literal_stamp_;
+                normalized_clause_scratch_.push_back(lit);
             }
-
-            return ordered_reason_refs_scratch_;
+            return true;
         }
 
-        std::span<const proof::clause::id> build_conflict_antecedents(
-            const clause::ref_t conflict_ref, const std::span<const clause::ref_t> ordered_reason_refs) const noexcept
+        [[nodiscard]] std::uint32_t find_max_variable(const std::span<const literal> assumptions) const noexcept
         {
-            antecedents_scratch_.clear();
-
-            const auto conflict_id = proof_manager_.stable_id_for_clause(conflict_ref);
-            if (conflict_id.valid())
-                antecedents_scratch_.push_back(conflict_id);
-
-            for (const auto reason_ref: ordered_reason_refs)
-            {
-                const auto reason_id = proof_manager_.stable_id_for_clause(reason_ref);
-                if (!reason_id.valid() || contains_clause_id(antecedents_scratch_, reason_id))
-                    continue;
-                antecedents_scratch_.push_back(reason_id);
-            }
-
-            return antecedents_scratch_;
-        }
-
-        std::uint32_t find_max_variable(const std::span<const literal> assumptions) const noexcept
-        {
-            std::uint32_t max_variable = 0;
+            // Seeded from what the problem was stated over, not from what survives simplification. Bounded
+            // variable elimination removes a variable's clauses outright, so scanning only the current database
+            // would shrink the variable range after preprocessing and the reported model would omit variables.
+            std::uint32_t max_variable = max_problem_variable_;
             const auto& storage = clause_database_.storage_of();
             const auto process_clause = [&storage, &max_variable](const clause::ref_t ref) noexcept
             {
@@ -727,676 +678,1093 @@ namespace kmx::sat::cdcl
                     if (lit.variable_of().index() > max_variable)
                         max_variable = lit.variable_of().index();
             };
-
             clause_database_.iterate_irredundant(process_clause);
             clause_database_.iterate_redundant(process_clause);
-
             for (const auto lit: assumptions)
                 if (lit.variable_of().index() > max_variable)
                     max_variable = lit.variable_of().index();
-
             return max_variable;
         }
 
-        static bool assign_literal(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
-                                   const literal lit, const std::uint32_t decision_level, const clause::ref_t reason_ref = {}) noexcept
+        void initialize_search_state(const solve_request& request) noexcept
         {
-            const auto index = lit.variable_of().index();
-            if (index >= assignment.size() || index >= reasons.size())
-                return false;
+            const auto slots = static_cast<std::size_t>(variable_count_) + 1u;
+            values_.assign(slots * 2u, 0);
+            levels_.assign(slots, 0u);
+            reasons_.assign(slots, clause::ref_t {});
+            trail_positions_.assign(slots, 0u);
+            flags_.assign(slots, 0u);
+            level_stamps_.assign(slots + 1u, 0u);
+            chain_stamps_.assign(slots, 0u);
+            trail_.clear();
+            trail_.reserve(slots);
+            control_.clear();
+            control_.reserve(slots + 1u);
+            control_.push_back(control_frame {});
+            level_ = 0u;
+            propagated_ = 0u;
+            assumption_count_ = static_cast<std::uint32_t>(request.assumptions.size());
+            analyzed_.clear();
+            minimized_.clear();
+            levels_touched_.clear();
+            glue_stamp_ = 0u;
+            chain_stamp_ = 0u;
 
-            const std::int8_t required_value = lit.is_negated() ? false_value : true_value;
-            const auto current_value = assignment[index];
-            if (current_value == unassigned_value)
+            // Saved phases persist across episodes, so a later solve resumes near the assignment the previous
+            // one settled on; only variables new to this episode get the default polarity.
+            if (saved_phase_.size() < slots)
+                saved_phase_.resize(slots, std::int8_t {1});
+
+            heap_.resize(variable_count_);
+            heap_.clear();
+            for (std::uint32_t index = 1u; index <= variable_count_; ++index)
+                heap_.push(index);
+            local_search_enabled_ = false;
+            opening_walk_pending_ = false;
+            next_local_search_at_ = local_search_initial_interval;
+            visits_at_last_walk_ = 0u;
+            best_walk_unsatisfied_ = std::numeric_limits<std::size_t>::max();
+            local_search_scale_ = 1.0;
+        }
+
+        /// @brief Decides whether the walk is worth running on this formula at all.
+        [[nodiscard]] bool local_search_applicable(const std::uint32_t max_variable) const noexcept
+        {
+            if (max_variable == 0u || max_variable > local_search_variable_limit)
+                return false;
+            const auto clause_count = clause_database_.stats_snapshot().irredundant_count;
+            return clause_count >= local_search_minimum_clause_count && clause_count <= local_search_clause_limit;
+        }
+
+        /// @brief Runs one walk of the portfolio from the current saved phases and folds the result back into them.
+        /// @details The phases are overwritten only when the walk ends closer to a model than any walk before it.
+        /// A walk that merely wanders off to a different local minimum would otherwise redirect a search that was
+        /// making progress on its own; measured on random 3-SAT that perturbation cost more than the walk itself.
+        /// @param max_flips Flip budget for this walk.
+        /// @param force Adopt the result regardless, used for the opening walk that has nothing to compare with.
+        /// @return True if the walk's assignment was adopted, which includes every walk that found a model.
+        bool walk_and_seed_phases(const std::size_t max_flips, const bool force) noexcept
+        {
+            // Once a strategy has produced the best assignment seen, later walks keep using it: alternating with
+            // a rule that stalls on this formula would only waste every second walk.
+            const auto config_index = best_walk_config_ < local_search_portfolio.size() ? best_walk_config_
+                                                                                        : local_search_round_ % local_search_portfolio.size();
+            const auto config = local_search_portfolio[config_index];
+            ++local_search_round_;
+            phase_scratch_.assign(static_cast<std::size_t>(variable_count_) + 1u, 0u);
+            for (std::uint32_t index = 1u; index <= variable_count_; ++index)
+                phase_scratch_[index] = saved_phase_[index] > 0 ? 1u : 0u;
+            const auto solved = local_search_.walk(config, max_flips, phase_scratch_);
+            const auto unsatisfied = local_search_.best_unsatisfied_count();
+            if (!force && !solved && unsatisfied >= best_walk_unsatisfied_)
+                return false;
+            best_walk_unsatisfied_ = unsatisfied;
+            best_walk_config_ = config_index;
+            const auto assignment = local_search_.best_assignment();
+            for (std::uint32_t index = 1u; index <= variable_count_ && index < assignment.size(); ++index)
+                saved_phase_[index] = assignment[index] != 0u ? std::int8_t {1} : std::int8_t {-1};
+            complete_introduced_phases();
+            return true;
+        }
+
+        /// @brief Gives every factoring-introduced variable the phase its definition implies under the current phases.
+        /// @details The walk works on the formula as stated, so its assignment says nothing about the variables
+        /// factoring introduced afterwards; left at a default phase they get decided against the model and the
+        /// search pays thousands of conflicts to undo that (`gcp125_17`: 14,302 conflicts instead of 2,001). An
+        /// introduced variable stands for "every literal of its group holds", and under a model of the original
+        /// formula that phase satisfies both halves of its definition. Records are replayed in order, so a group
+        /// that mentions an earlier introduced variable sees that variable's completed phase.
+        void complete_introduced_phases() noexcept
+        {
+            const auto witnesses = extension_stack_.witness_literals();
+            for (const auto& record: extension_stack_.records())
             {
-                assignment[index] = required_value;
-                decision_levels[index] = decision_level;
-                reasons[index] = reason_ref;
-                return true;
+                const auto* factor = std::get_if<factor_transformation>(&record.payload);
+                if (factor == nullptr)
+                    continue;
+                const auto introduced = factor->introduced_variable.index();
+                if (introduced == 0u || introduced > variable_count_)
+                    continue;
+                bool all_true = true;
+                for (auto position = factor->witness_begin; position < factor->witness_end && position < witnesses.size(); ++position)
+                {
+                    const auto lit = witnesses[position];
+                    if (lit.raw() == 0u)
+                        break;
+                    const auto phase = saved_phase_[lit.variable_of().index()];
+                    if (lit.is_negated() ? phase >= 0 : phase <= 0)
+                    {
+                        all_true = false;
+                        break;
+                    }
+                }
+                saved_phase_[introduced] = all_true ? std::int8_t {1} : std::int8_t {-1};
             }
+        }
+
+        /// @brief Runs one opening strategy in rounds, stopping as soon as the walk stops closing in on a model.
+        /// @details Walk-friendly formulas (random k-SAT, colouring) improve steadily until they are solved;
+        /// structured ones (bounded model checking, scheduling) stall after the first few hundred flips per
+        /// variable, and on those the rest of a per-variable budget is pure overhead. Each round restarts from the
+        /// best assignment so far; two rounds in a row without a new best end the strategy.
+        /// @param budget Total flip budget of this strategy.
+        /// @param force Adopt the first round regardless, for the very first walk of the episode.
+        /// @return True if a model was found.
+        bool walk_in_rounds(const std::size_t budget, const bool force) noexcept
+        {
+            const auto rounds = local_search_opening_rounds;
+            const auto round_flips = std::max<std::size_t>(1u, budget / rounds);
+            const auto config_index = local_search_round_ % local_search_portfolio.size();
+            std::size_t stalled {};
+            for (std::size_t round = 0u; round < rounds; ++round)
+            {
+                const auto before = best_walk_unsatisfied_;
+                local_search_round_ = config_index;
+                if (walk_and_seed_phases(round_flips, force && round == 0u) && best_walk_unsatisfied_ == 0u)
+                    return true;
+                stalled = best_walk_unsatisfied_ < before ? 0u : stalled + 1u;
+                if (stalled >= 2u)
+                    break;
+            }
+            local_search_round_ = config_index + 1u;
             return false;
         }
 
-        /// Retracts every assignment made past `trail_mark`, restoring the caller's pre-branch search state.
-        void undo_trail_to(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
-                           trail_vector& trail, const std::size_t trail_mark) noexcept
+        /// @brief Tries the trivial assignments before any search: each polarity in forward and backward variable
+        /// order, every variable a decision followed by propagation (Kissat's "lucky" phases).
+        /// @details Structured encodings are often satisfied by one of these (`ii16a1`: solved outright where the
+        /// search needed 2,000 conflicts), and each attempt costs at most one propagation of the whole formula.
+        /// Phases are restored afterwards so a failed attempt leaves no trace; assumptions and a root conflict
+        /// hand straight over to the search.
+        /// @return True if an attempt assigned every variable without a conflict; the trail then holds the model.
+        [[nodiscard]] bool try_lucky_assignments(const solve_request& request) noexcept
         {
-            while (trail.size() > trail_mark)
-            {
-                const auto unassigned_variable = trail.back().variable_of();
-                const auto index = static_cast<std::size_t>(unassigned_variable.index());
-                trail.pop_back();
-                search_coordinator_.notify_unassigned_variable(unassigned_variable);
-                if (index >= assignment.size())
-                    continue;
-                assignment[index] = unassigned_value;
-                if (index < decision_levels.size())
-                    decision_levels[index] = 0u;
-                if (index < reasons.size())
-                {
-                    clause_database_.unmark_reason_clause(reasons[index]);
-                    reasons[index] = clause::ref_t {};
-                }
-            }
-        }
-
-        /// Retracts all assignments above a decision level in one linear trail pass.
-        void undo_trail_to_level(assignment_vector& assignment, decision_level_vector& decision_levels,
-                                 reason_vector& reasons, trail_vector& trail, const std::uint32_t target_level) noexcept
-        {
-            while (!trail.empty())
-            {
-                const auto unassigned_variable = trail.back().variable_of();
-                const auto index = static_cast<std::size_t>(unassigned_variable.index());
-                if (index >= decision_levels.size() || decision_levels[index] <= target_level)
-                    break;
-                trail.pop_back();
-                search_coordinator_.notify_unassigned_variable(unassigned_variable);
-                if (index < assignment.size())
-                    assignment[index] = unassigned_value;
-                decision_levels[index] = 0u;
-                if (index < reasons.size())
-                {
-                    clause_database_.unmark_reason_clause(reasons[index]);
-                    reasons[index] = clause::ref_t {};
-                }
-            }
-        }
-
-        static bool literal_is_satisfied(const literal lit, const std::int8_t variable_value) noexcept
-        {
-            if (variable_value == unassigned_value)
+            if (!request.assumptions.empty() || variable_count_ == 0u || level_ != 0u)
                 return false;
-            if (lit.is_negated())
-                return variable_value == false_value;
-            return variable_value == true_value;
-        }
-
-        static bool conflict_limit_reached(const solve_request& request, const counter_t conflicts) noexcept
-        {
-            return request.conflict_limit != 0 && conflicts >= request.conflict_limit;
-        }
-
-        static bool decision_limit_reached(const solve_request& request, const counter_t decisions) noexcept
-        {
-            return request.decision_limit != 0 && decisions >= request.decision_limit;
-        }
-
-        void record_last_conflict_clause(const std::span<const literal> conflict_clause) noexcept
-        {
-            last_conflict_clause_.assign(conflict_clause.begin(), conflict_clause.end());
-        }
-
-        std::vector<literal> build_failed_core_from_conflict(const std::span<const literal> assumptions) const noexcept
-        {
-            std::vector<literal> core {};
-            if (assumptions.empty() || last_conflict_clause_.empty())
-                return core;
-
-            core.reserve(assumptions.size());
-            for (const auto assumption: assumptions)
+            // Unit clauses live outside the watch lists; without them assigned first an attempt can satisfy
+            // every watched clause and still contradict a unit, which is what the model verifier caught.
+            if (!assign_root_units() || propagate().valid())
+                return false;
+            const auto root_trail = trail_.size();
+            for (std::uint32_t strategy = 0u; strategy < 4u; ++strategy)
             {
-                const auto negated_assumption = assumption.negated();
-                const auto conflict_it =
-                    std::find_if(last_conflict_clause_.begin(), last_conflict_clause_.end(),
-                                 [negated_assumption](const literal lit) noexcept { return lit.raw() == negated_assumption.raw(); });
-                if (conflict_it != last_conflict_clause_.end())
-                    core.push_back(assumption);
-            }
-
-            return core;
-        }
-
-        std::vector<literal> build_failed_core_from_reasons(const std::span<const literal> assumptions,
-                                                            const reason_vector& reasons) const noexcept
-        {
-            std::vector<literal> core {};
-            if (assumptions.empty() || last_conflict_clause_.empty() || reasons.empty())
-                return core;
-
-            std::vector<literal> pending_literals {last_conflict_clause_.begin(), last_conflict_clause_.end()};
-            std::vector<bool> visited_variable(reasons.size(), false);
-
-            while (!pending_literals.empty())
-            {
-                const auto lit = pending_literals.back();
-                pending_literals.pop_back();
-
-                const auto variable_index = static_cast<std::size_t>(lit.variable_of().index());
-                if (variable_index == 0u || variable_index >= reasons.size() || variable_index >= visited_variable.size())
-                    continue;
-                if (visited_variable[variable_index])
-                    continue;
-                visited_variable[variable_index] = true;
-
-                const auto assumption_it = std::find_if(assumptions.begin(), assumptions.end(), [lit](const literal assumption) noexcept
-                                                        { return assumption.variable_of().index() == lit.variable_of().index(); });
-                if (assumption_it != assumptions.end())
+                const bool negative = (strategy & 1u) != 0u;
+                const bool backward = strategy >= 2u;
+                bool failed = false;
+                for (std::uint32_t step = 1u; step <= variable_count_ && !failed; ++step)
                 {
-                    const auto duplicate_it = std::find_if(core.begin(), core.end(), [assumption_it](const literal existing) noexcept
-                                                           { return existing.raw() == assumption_it->raw(); });
-                    if (duplicate_it == core.end())
-                        core.push_back(*assumption_it);
-                    continue;
-                }
-
-                const auto reason_ref = reasons[variable_index];
-                if (!reason_ref.valid())
-                    continue;
-
-                const auto reason_clause = clause_database_.storage_of().literals_of(reason_ref);
-                for (const auto reason_literal: reason_clause)
-                {
-                    const auto reason_variable_index = static_cast<std::size_t>(reason_literal.variable_of().index());
-                    if (reason_variable_index == variable_index)
+                    const auto var = backward ? variable_count_ + 1u - step : step;
+                    if (is_assigned(var))
                         continue;
-                    pending_literals.push_back(reason_literal);
+                    // Each attempt's decisions count against the request's decision limit like any other, so a
+                    // limited request that would have stopped in the search stops here too.
+                    search_coordinator_.note_decision();
+                    if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
+                    {
+                        backtrack(0u);
+                        if (!opening_phase_snapshot_.empty())
+                            std::copy(opening_phase_snapshot_.begin(), opening_phase_snapshot_.end(), saved_phase_.begin());
+                        return false;
+                    }
+                    const literal decision {variable {var}, negative};
+                    new_level(decision);
+                    assign(decision, clause::ref_t {});
+                    failed = propagate().valid();
                 }
-            }
-
-            return core;
-        }
-
-        struct conflict_resolution final
-        {
-            status result_status {status::satisfiable};
-            clause::ref_t learned_ref {};
-            literal asserting_literal {};
-            std::uint32_t backjump_level {};
-        };
-
-        struct search_outcome final
-        {
-            status result_status {status::unknown};
-            bool has_backjump {};
-            std::uint32_t backjump_level {};
-            clause::ref_t learned_ref {};
-            literal asserting_literal {};
-        };
-
-        conflict_resolution handle_clause_conflict(const clause::ref_t ref, const std::span<const literal> conflict_clause,
-                                                    const decision_level_vector& decision_levels, const reason_vector& reasons,
-                                                    const solve_request& request, counter_t& conflicts, const trail_vector& trail,
-                                                    const std::uint32_t current_level) noexcept
-        {
-            record_last_conflict_clause(conflict_clause);
-            search_coordinator_.notify_conflict_clause(conflict_clause);
-
-            if (conflict_clause.empty())
-            {
-                ++conflicts;
-                run_inprocess_if_due();
-                if (conflict_limit_reached(request, conflicts))
-                    search_coordinator_.handle_termination(search_coordinator::termination_cause::conflict_limit);
-                if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
-                    return conflict_resolution {.result_status = status::unknown};
-                return conflict_resolution {.result_status = status::unsatisfiable};
-            }
-
-            const auto learned_clause_count_before = search_coordinator_.learned_clause_count();
-
-            search_coordinator_.seed_conflict_clause(conflict_clause);
-            const conflict_resolution_context resolution_context {&clause_database_, &decision_levels, &reasons};
-            search_coordinator_.handle_conflict_via_resolution(trail, current_level, &conflict_level_lookup, &conflict_reason_lookup,
-                                                               &resolution_context);
-
-            clause::ref_t learned_ref {};
-            literal asserting_literal {};
-            const auto backjump_level = search_coordinator_.last_backjump_level();
-
-            if (current_level > 0u && search_coordinator_.learned_clause_count() != learned_clause_count_before)
-            {
-                const auto learned_clause = search_coordinator_.last_learned_clause();
-                if (!learned_clause.empty())
+                if (!failed && trail_.size() == static_cast<std::size_t>(variable_count_))
                 {
-                    if (is_tautological_clause(learned_clause))
-                    {
-                        ++conflicts;
-                        run_inprocess_if_due();
-                        if (conflict_limit_reached(request, conflicts))
-                            search_coordinator_.handle_termination(search_coordinator::termination_cause::conflict_limit);
-                        if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
-                            return conflict_resolution {.result_status = status::unknown};
-                        return conflict_resolution {.result_status = status::unsatisfiable};
-                    }
-
-                    learned_ref = clause_database_.add_clause(learned_clause, true);
-                    clause_minimizer_.minimize_learned_clause(learned_ref, &conflict_level_lookup, &conflict_reason_lookup,
-                                                              &resolution_context);
-                    clause_minimizer_.shrink_clause(learned_ref);
-                    clause_minimizer_.recompute_glue(learned_ref, &conflict_level_lookup, &resolution_context);
-                    clause_minimizer_.promote_if_needed(learned_ref);
-                    search_coordinator_.notify_learned_glue(clause_minimizer_.last_glue());
-                    learned_clause_glue_total_ += clause_minimizer_.last_glue();
-                    ++learned_clause_glue_sample_count_;
-
-                    const auto finalized_learned_clause = clause_database_.storage_of().view_literals(learned_ref);
-                    attach_clause_for_propagation(learned_ref);
-                    if (clause_minimizer_.was_shrunk(learned_ref))
-                    {
-                        proof_manager_.on_shrink_clause(learned_ref, finalized_learned_clause);
-                        ++learned_clause_shrink_event_count_;
-                    }
-                    const auto ordered_reason_refs =
-                        build_ordered_reason_chain_refs(search_coordinator_.last_resolution_chain_literals(), reasons);
-                    clause_database_.increment_activity(ref);
-                    for (const auto reason_ref: ordered_reason_refs)
-                    {
-                        clause_database_.increment_activity(reason_ref);
-                        clause_database_.increment_used_count(reason_ref);
-                    }
-                    const auto antecedents = build_conflict_antecedents(ref, ordered_reason_refs);
-                    proof_manager_.on_add_derived(learned_ref, finalized_learned_clause, antecedents);
-                    incremental_context_.retain_learned_clause();
-
-                    asserting_literal = finalized_learned_clause.empty() ? search_coordinator_.last_asserting_literal() :
-                                                                           finalized_learned_clause.front();
+                    ++lucky_success_count_;
+                    return true;
                 }
+                backtrack(0u);
+                propagated_ = root_trail;
             }
-
-            ++conflicts;
-            run_inprocess_if_due();
-
-            if (conflict_limit_reached(request, conflicts))
-                search_coordinator_.handle_termination(search_coordinator::termination_cause::conflict_limit);
-            if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
-                return conflict_resolution {.result_status = status::unknown};
-
-            return conflict_resolution {
-                .result_status = status::unsatisfiable,
-                .learned_ref = learned_ref,
-                .asserting_literal = asserting_literal,
-                .backjump_level = backjump_level,
-            };
+            if (!opening_phase_snapshot_.empty())
+                std::copy(opening_phase_snapshot_.begin(), opening_phase_snapshot_.end(), saved_phase_.begin());
+            return false;
         }
 
-        void run_inprocess_if_due() noexcept
+        /// @brief Arms the opening walk for this episode, on the walker prepared before preprocessing.
+        /// @details Branching polarity otherwise starts from nothing, which is what makes runtime heavy-tailed on
+        /// satisfiable instances near the ratio where they stop being easy. The opening walk fixes that, but it
+        /// runs only after the search has spent `local_search_opening_probe_conflicts` (formulas the search
+        /// finishes first never walk) and only when its budget stays under `local_search_opening_flip_cap`
+        /// (larger formulas leave walking to the effort-proportional re-walk schedule).
+        /// @return True if `run_opening_walk` should run once the probe budget is spent.
+        [[nodiscard]] bool prepare_opening_walk() noexcept
         {
-            const auto inprocess_epochs_before = inprocess_scheduler_.epoch_count();
-            inprocess_scheduler_.set_conflicts_seen(search_coordinator_.conflict_event_count());
-            inprocess_scheduler_.set_restart_count(search_coordinator_.restart_count());
-            inprocess_scheduler_.set_decisions_seen(search_coordinator_.decision_event_count());
-            inprocess_scheduler_.set_reduction_passes_seen(search_coordinator_.reduction_pass_count());
-            inprocess_scheduler_.set_learned_clauses_seen(static_cast<counter_t>(search_coordinator_.learned_clause_count()));
-            inprocess_scheduler_.run_epoch();
-            if (inprocess_scheduler_.epoch_count() > inprocess_epochs_before)
-            {
-                inprocess_scheduler_.report_epoch_summary();
-                search_coordinator_.notify_inprocess_epoch_completed(inprocess_scheduler_.last_structural_gain());
-                rebuild_propagation_state();
-                propagation_state_dirty_ = true;
-            }
+            local_search_round_ = 0u;
+            best_walk_config_ = local_search_portfolio.size();
+            local_search_enabled_ = local_search_prepared_;
+            if (!local_search_enabled_)
+                return false;
+            if (local_search_.maximum_clause_size() > 3u)
+                local_search_round_ = 1u;
+
+            local_search_.set_seed(local_search_seed);
+            const auto budget = static_cast<std::size_t>(local_search_variable_count_) * local_search_flips_per_variable_;
+            if (budget == 0u || budget > local_search_opening_flip_cap)
+                return false;
+            // The walk starts from the phases as they are now, not from what the probe leaves behind: the probe's
+            // phase-saved assignment is a local minimum the walk climbs out of slowly, and starting there turned
+            // a 0.2 s solve of `lran_f2000` into a timeout. Keeping the snapshot makes the walk's trajectory
+            // independent of the probe.
+            opening_phase_snapshot_.assign(saved_phase_.begin(), saved_phase_.end());
+            return true;
         }
 
-        /// @brief Runs Boolean Constraint Propagation to fixpoint using real two-watched-literal indexing.
-        ///
-        /// @details
-        /// Unit clauses (size <= 1) bypass the watch scheme entirely and are checked directly against the current
-        /// assignment on every call, since a single literal has no second slot to watch. Every other active clause is
-        /// indexed by exactly two watched literals in `watch_list_`; only an assignment that falsifies one of those
-        /// two literals ever triggers a re-check of that clause (the Chaff/MiniSat two-watched-literal scheme), so
-        /// propagation cost here is driven by the number of watch entries touched, not by the total clause count.
-        /// @param seed_literals Externally-assigned literals (a decision, or the episode's assumptions) that were
-        /// assigned by the caller before this call and must still have their watch entries checked here; without
-        /// this seed, a decision/assumption literal that immediately falsifies a watched clause would never be
-        /// detected, since the watch-scan below only follows literals it discovers itself.
-        /// @return Reference to the conflicting clause, or an invalid reference if propagation reached fixpoint.
-        /// @throws None (noexcept).
-        clause::ref_t propagate_units(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
-                                      const solve_request& request, counter_t& conflicts, const std::uint32_t current_level,
-                                      trail_vector& trail, const std::span<const literal> seed_literals = {}) noexcept
+        /// @brief The opening walk: both strategies in rounds, phases seeded from the best assignment found.
+        /// @details The first walk starts from the saved phases (all positive on a fresh solver, the previous
+        /// model's neighbourhood in an incremental session); the second strategy gets the same budget whatever
+        /// the first achieved; both stop early when they stall. The walk cannot affect soundness -- it only
+        /// chooses which way each variable is tried first.
+        /// @return True if a walk found a model, in which case the phases are that model.
+        [[nodiscard]] bool run_opening_walk() noexcept
         {
-            (void) request;
-            (void) conflicts;
-
-            if (propagator_.has_staged_conflicts())
-            {
-                const auto staged = propagator_.propagate();
-                if (staged.valid())
-                    return staged;
-            }
-
-            propagation_queue_scratch_.clear();
-            propagation_queue_scratch_.insert(propagation_queue_scratch_.end(), seed_literals.begin(), seed_literals.end());
-            auto& propagation_queue = propagation_queue_scratch_;
-
-            const auto enqueue_assignment = [&](const literal lit, const clause::ref_t reason_ref) noexcept -> bool
-            {
-                const auto index = lit.variable_of().index();
-                if (index >= assignment.size() || index >= reasons.size())
-                    return false;
-                const std::int8_t required_value = lit.is_negated() ? false_value : true_value;
-                const auto current_value = assignment[index];
-                if (current_value != unassigned_value)
-                    return current_value == required_value;
-
-                assignment[index] = required_value;
-                decision_levels[index] = current_level;
-                reasons[index] = reason_ref;
-                if (reason_ref.valid())
-                {
-                    clause_database_.mark_reason_clause(reason_ref);
-                    clause_database_.increment_used_count(reason_ref);
-                }
-                ++propagation_assignment_count_;
-                search_coordinator_.notify_assignment_literal(lit);
-                propagation_queue.push_back(lit);
-                trail.push_back(lit);
+            std::copy(opening_phase_snapshot_.begin(), opening_phase_snapshot_.end(), saved_phase_.begin());
+            const auto budget = static_cast<std::size_t>(local_search_variable_count_) * local_search_flips_per_variable_;
+            if (walk_in_rounds(budget / 2u, true))
                 return true;
-            };
+            // The second opening walk always tries the other rule, whatever the first one achieved.
+            const auto first_best = best_walk_config_;
+            best_walk_config_ = local_search_portfolio.size();
+            const auto second_best_before = best_walk_unsatisfied_;
+            const auto solved = walk_in_rounds(budget / 2u, false);
+            if (!solved && best_walk_unsatisfied_ >= second_best_before)
+                best_walk_config_ = first_best;
+            return solved;
+        }
 
+        /// @brief Re-walks from the current phases once enough search effort has accrued since the last walk.
+        /// @details The budget is a fixed share of the watch visits spent since the previous walk, so on an
+        /// unsatisfiable formula the walks stay a small constant fraction of the run while on a satisfiable one
+        /// they keep growing with the search until one of them lands on a model.
+        void rewalk_if_due() noexcept
+        {
+            if (!local_search_enabled_ || local_search_effort_percent_ == 0u || opening_walk_pending_)
+                return;
+            const auto conflicts = search_coordinator_.conflict_event_count();
+            if (conflicts < next_local_search_at_)
+                return;
+            const auto visits = watch_entry_scan_count_ - visits_at_last_walk_;
+            visits_at_last_walk_ = watch_entry_scan_count_;
+            const auto interval = next_local_search_at_ == 0u ? local_search_initial_interval : next_local_search_at_ * 2u;
+            next_local_search_at_ = conflicts + interval;
+            const auto minimum = std::min(static_cast<std::size_t>(local_search_variable_count_) * local_search_rewalk_floor_per_variable,
+                                          local_search_rewalk_floor_cap);
+            const auto share = static_cast<double>(visits) * static_cast<double>(local_search_effort_percent_) / (100.0 * visits_per_flip);
+            const auto budget = std::max(minimum, static_cast<std::size_t>(share * local_search_scale_));
+            const auto improved = walk_and_seed_phases(budget, false);
+            local_search_scale_ = improved ? std::min(local_search_scale_ * 2.0, local_search_scale_ceiling)
+                                           : std::max(local_search_scale_ * 0.5, local_search_scale_floor);
+        }
+
+        /// @brief Rebuilds every watch list and the unit list from the clause database.
+        void rebuild_propagation_state() noexcept
+        {
+            watch_list_.reserve(static_cast<std::size_t>(variable_count_) * 2u + 2u);
+            watch_list_.clear_entries();
+            unit_clause_refs_.clear();
+            const auto attach = [this](const clause::ref_t ref) noexcept { attach_clause_for_propagation(ref); };
+            clause_database_.iterate_irredundant(attach);
+            clause_database_.iterate_redundant(attach);
+        }
+
+        /// @brief Registers a clause for propagation: two watches for size >= 2, the unit list otherwise.
+        void attach_clause_for_propagation(const clause::ref_t ref) noexcept
+        {
+            const auto& storage = clause_database_.storage_of();
+            const auto literals = storage.view_literals(ref);
+            if (literals.size() <= 1u)
+            {
+                unit_clause_refs_.push_back(ref);
+                return;
+            }
+            const auto is_binary = literals.size() == 2u;
+            watch_list_.push_watch(literals[0], watch {literals[1], ref, is_binary});
+            watch_list_.push_watch(literals[1], watch {literals[0], ref, is_binary});
+        }
+
+        /// @brief Assigns every root-level unit; returns false if one is already falsified or a clause is empty.
+        [[nodiscard]] bool assign_root_units() noexcept
+        {
+            const auto& storage = clause_database_.storage_of();
             for (const auto ref: unit_clause_refs_)
             {
-                if (!clause_database_.storage_of().is_alive(ref))
+                if (!storage.is_alive(ref))
                     continue;
-
-                const auto literals = clause_database_.storage_of().view_literals(ref);
+                const auto literals = storage.view_literals(ref);
                 if (literals.empty())
-                {
-                    propagator_.stage_conflict(ref);
-                    return propagator_.propagate();
-                }
-
+                    return false;
                 const auto lit = literals.front();
-                const auto index = lit.variable_of().index();
-                if (index >= assignment.size())
-                    continue;
-
-                const auto value = assignment[index];
-                if (value == unassigned_value)
+                const auto value = value_of(lit);
+                if (value < 0)
+                    return false;
+                if (value == 0)
                 {
-                    if (!enqueue_assignment(lit, ref))
-                    {
-                        propagator_.stage_conflict(ref);
-                        return propagator_.propagate();
-                    }
-                }
-                else if (!literal_is_satisfied(lit, value))
-                {
-                    propagator_.stage_conflict(ref);
-                    return propagator_.propagate();
+                    assign(lit, ref);
+                    ++propagation_assignment_count_;
                 }
             }
+            return true;
+        }
 
-            std::size_t queue_head = 0u;
+        // ------------------------------------------------------------------------------------------------------
+        // Search state primitives
+        // ------------------------------------------------------------------------------------------------------
 
-            while (queue_head < propagation_queue.size())
+        [[gnu::always_inline]] inline void assign(const literal lit, const clause::ref_t reason) noexcept
+        {
+            const auto var = var_of(lit);
+            values_[lit.raw()] = 1;
+            values_[lit.raw() ^ 1u] = -1;
+            levels_[var] = level_;
+            reasons_[var] = reason;
+            trail_positions_[var] = static_cast<std::uint32_t>(trail_.size());
+            saved_phase_[var] = lit.is_negated() ? std::int8_t {-1} : std::int8_t {1};
+            trail_.push_back(lit);
+        }
+
+        /// @brief Opens a new decision level; `decision` may be a placeholder for an already-true assumption.
+        void new_level(const literal decision) noexcept
+        {
+            ++level_;
+            control_.push_back(control_frame {static_cast<std::uint32_t>(trail_.size()), decision, 0u, 0u});
+        }
+
+        /// @brief Unassigns everything above `target_level` and returns those variables to the branching heap.
+        void backtrack(const std::uint32_t target_level) noexcept
+        {
+            if (target_level >= level_)
+                return;
+            const auto begin = control_[target_level + 1u].trail_begin;
+            for (auto index = trail_.size(); index-- > begin;)
             {
-                const auto assigned_literal = propagation_queue[queue_head++];
-                const auto false_literal = assigned_literal.negated();
+                const auto lit = trail_[index];
+                const auto var = var_of(lit);
+                values_[lit.raw()] = 0;
+                values_[lit.raw() ^ 1u] = 0;
+                if (!heap_.contains(var))
+                    heap_.push(var);
+            }
+            trail_.resize(begin);
+            if (propagated_ > begin)
+                propagated_ = begin;
+            control_.resize(target_level + 1u);
+            level_ = target_level;
+        }
 
-                auto& ws = watch_list_.watches_of(false_literal);
-                std::size_t i = 0u;
-                std::size_t j = 0u;
+        // ------------------------------------------------------------------------------------------------------
+        // Unit propagation
+        // ------------------------------------------------------------------------------------------------------
 
-                while (i < ws.size())
+        /// @brief Propagates every unpropagated trail literal to fixpoint or to the first falsified clause.
+        /// @details Two-watched-literal scheme with a blocking literal per watch. For each trail literal `l` the
+        /// list of clauses watching `¬l` is compacted in place: a satisfied blocking literal keeps the entry
+        /// untouched; a binary clause is decided from the entry alone; otherwise the other watched literal is
+        /// computed by XOR (the pair is always the clause's first two literals), a replacement is searched from
+        /// the third literal on and the watch moves to it, and only a clause with no replacement is unit or
+        /// conflicting. Deleted clauses never appear here: every deleting pass rewrites the watch lists.
+        /// @return Reference to the conflicting clause, or an invalid reference at fixpoint.
+        [[nodiscard]] clause::ref_t propagate() noexcept
+        {
+            (void) propagator_.propagate();
+            auto& storage = clause_database_.storage_of();
+            std::int8_t* const values = values_.data();
+            std::size_t visits {};
+            std::size_t binary_visits {};
+            std::size_t assigned {};
+            std::size_t partitions {};
+            clause::ref_t conflict {};
+
+            while (propagated_ < trail_.size())
+            {
+                const literal lit = trail_[propagated_++];
+                const literal not_lit = lit.negated();
+                auto& list = watch_list_.list_at(not_lit.raw());
+                ++partitions;
+                watch* const begin = list.data();
+                watch* const end = begin + list.size();
+                watch* read = begin;
+                watch* write = begin;
+
+                while (read != end)
                 {
-                    auto entry = ws[i++];
-                    ++watch_entry_scan_count_;
-                    const auto ref = entry.clause_ref();
-                    if (!clause_database_.storage_of().is_alive(ref))
-                        continue;
-
-                    const auto blocking = entry.blocking_literal();
-                    const auto blocking_index = blocking.variable_of().index();
-                    const auto blocking_value = blocking_index < assignment.size() ? assignment[blocking_index] : unassigned_value;
-                    if (literal_is_satisfied(blocking, blocking_value))
+                    const watch entry = *read++;
+                    ++visits;
+                    const literal blocking = entry.blocking_literal();
+                    const auto blocking_value = values[blocking.raw()];
+                    if (blocking_value > 0)
                     {
-                        ws[j++] = entry;
+                        *write++ = entry;
                         continue;
                     }
 
                     if (entry.is_binary())
                     {
-                        ++binary_watch_scan_count_;
-                        ws[j++] = entry;
-                        if (blocking_value == unassigned_value)
+                        ++binary_visits;
+                        *write++ = entry;
+                        if (blocking_value < 0)
                         {
-                            if (enqueue_assignment(blocking, ref))
-                                continue;
-                        }
-                        ++binary_watch_conflict_count_;
-                        while (i < ws.size())
-                            ws[j++] = ws[i++];
-                        ws.resize(j);
-                        propagator_.stage_conflict(ref);
-                        return propagator_.propagate();
-                    }
-
-                    auto literals = clause_database_.storage_of().mutable_literals(ref);
-                    if (literals.size() < 2u)
-                        continue;
-
-                    if (literals[0].raw() == false_literal.raw())
-                        std::swap(literals[0], literals[1]);
-
-                    const auto first_lit = literals[0];
-                    const auto first_index = first_lit.variable_of().index();
-                    const auto first_value = first_index < assignment.size() ? assignment[first_index] : unassigned_value;
-                    if (literal_is_satisfied(first_lit, first_value))
-                    {
-                        entry.set_blocking_literal(first_lit);
-                        ws[j++] = entry;
-                        continue;
-                    }
-
-                    bool replacement_found = false;
-                    for (std::size_t k = 2u; k < literals.size(); ++k)
-                    {
-                        const auto candidate = literals[k];
-                        const auto candidate_index = candidate.variable_of().index();
-                        const auto candidate_value =
-                            candidate_index < assignment.size() ? assignment[candidate_index] : unassigned_value;
-                        const auto candidate_is_false =
-                            candidate_value != unassigned_value && !literal_is_satisfied(candidate, candidate_value);
-                        if (!candidate_is_false)
-                        {
-                            std::swap(literals[1], literals[k]);
-                            watch_list_.push_watch(literals[1], watch {literals[0], ref, false});
-                            replacement_found = true;
+                            ++binary_watch_conflict_count_;
+                            conflict = entry.clause_ref();
                             break;
                         }
-                    }
-
-                    if (replacement_found)
+                        assign(blocking, entry.clause_ref());
+                        ++assigned;
                         continue;
-
-                    entry.set_blocking_literal(first_lit);
-                    ws[j++] = entry;
-
-                    if (first_value == unassigned_value)
-                    {
-                        if (enqueue_assignment(first_lit, ref))
-                            continue;
                     }
 
-                    while (i < ws.size())
-                        ws[j++] = ws[i++];
-                    ws.resize(j);
-                    propagator_.stage_conflict(ref);
-                    return propagator_.propagate();
+                    const clause::ref_t ref {entry.raw_offset()};
+                    literal* const lits = storage.literal_data(ref);
+                    const literal other {lits[0].raw() ^ lits[1].raw() ^ not_lit.raw()};
+                    const auto other_value = values[other.raw()];
+                    if (other_value > 0)
+                    {
+                        *write++ = watch {other, ref, false};
+                        continue;
+                    }
+
+                    literal* const lits_end = lits + storage.header_at(ref).size;
+                    literal* candidate = lits + 2;
+                    while (candidate != lits_end && values[candidate->raw()] < 0)
+                        ++candidate;
+
+                    if (candidate != lits_end)
+                    {
+                        const literal replacement = *candidate;
+                        lits[0] = other;
+                        lits[1] = replacement;
+                        *candidate = not_lit;
+                        watch_list_.list_at(replacement.raw()).push_back(watch {other, ref, false});
+                        continue;
+                    }
+
+                    *write++ = watch {other, ref, false};
+                    if (other_value < 0)
+                    {
+                        conflict = ref;
+                        break;
+                    }
+                    lits[0] = other;
+                    lits[1] = not_lit;
+                    assign(other, ref);
+                    ++assigned;
                 }
-                ws.resize(j);
+
+                while (read != end)
+                    *write++ = *read++;
+                list.resize(static_cast<std::size_t>(write - begin));
+                if (conflict.valid())
+                    break;
             }
 
-            if (!propagation_queue.empty())
-            {
-                propagated_variables_scratch_.clear();
-                propagated_variables_scratch_.reserve(propagation_queue.size());
-                for (const auto lit: propagation_queue)
-                    propagated_variables_scratch_.push_back(lit.variable_of());
-                search_coordinator_.notify_propagated_variables(propagated_variables_scratch_);
-            }
-
-            return {};
+            watch_entry_scan_count_ += visits;
+            binary_watch_scan_count_ += binary_visits;
+            propagation_assignment_count_ += assigned;
+            watch_list_.add_iterate_count(partitions);
+            return conflict;
         }
 
-        static std::uint32_t pick_unassigned_variable(const assignment_vector& assignment) noexcept
+        // ------------------------------------------------------------------------------------------------------
+        // Conflict analysis, minimization and learning
+        // ------------------------------------------------------------------------------------------------------
+
+        void bump_clause(const clause::ref_t ref) noexcept
         {
-            for (std::uint32_t index = 1; index < assignment.size(); ++index)
-                if (assignment[index] == unassigned_value)
-                    return index;
-            return 0;
+            auto& header = clause_database_.storage_of().header_at(ref);
+            if (header.used != std::numeric_limits<std::uint8_t>::max())
+                ++header.used;
+            header.activity += 1.0f;
+        }
+
+        [[gnu::always_inline]] inline void analyze_literal(const literal lit, std::uint32_t& open, const bool want_chain) noexcept
+        {
+            const auto var = var_of(lit);
+            const auto lvl = levels_[var];
+            if (lvl == 0u)
+            {
+                if (want_chain)
+                    collect_root_chain(var);
+                return;
+            }
+            if ((flags_[var] & seen_flag) != 0u)
+                return;
+            flags_[var] |= seen_flag;
+            analyzed_.push_back(var);
+            auto& frame = control_[lvl];
+            const auto position = trail_positions_[var];
+            if (frame.seen_count++ == 0u)
+            {
+                levels_touched_.push_back(lvl);
+                frame.seen_min_trail = position;
+            }
+            else if (position < frame.seen_min_trail)
+                frame.seen_min_trail = position;
+            if (lvl < level_)
+                learned_.push_back(lit);
+            else
+                ++open;
+        }
+
+        /// @brief Records, in dependency order, the clauses that derive a root-level literal (proof chains only).
+        void collect_root_chain(const std::uint32_t var) noexcept
+        {
+            if (chain_stamps_[var] == chain_stamp_)
+                return;
+            chain_stamps_[var] = chain_stamp_;
+            const auto reason = reasons_[var];
+            if (!reason.valid())
+                return;
+            const auto& storage = clause_database_.storage_of();
+            for (const auto other: storage.view_literals(reason))
+                if (var_of(other) != var)
+                    collect_root_chain(var_of(other));
+            root_chain_refs_.push_back(reason);
+        }
+
+        /// @brief Records the clauses that justify removing a minimized literal (proof chains only).
+        void collect_minimize_chain(const std::uint32_t var) noexcept
+        {
+            if (chain_stamps_[var] == chain_stamp_)
+                return;
+            chain_stamps_[var] = chain_stamp_;
+            const auto reason = reasons_[var];
+            const auto& storage = clause_database_.storage_of();
+            for (const auto other: storage.view_literals(reason))
+            {
+                const auto other_var = var_of(other);
+                if (other_var == var)
+                    continue;
+                if (levels_[other_var] == 0u)
+                    collect_root_chain(other_var);
+                else if ((flags_[other_var] & keep_flag) == 0u && (flags_[other_var] & removable_flag) != 0u)
+                    collect_minimize_chain(other_var);
+            }
+            minimize_chain_refs_.push_back(reason);
+        }
+
+        /// @brief Recursive removability test of a learned-clause literal through its implication ancestry.
+        /// @details A literal is redundant when every literal of its reason is itself in the clause, fixed at the
+        /// root, or recursively redundant. Two early rejections from CaDiCaL prune the search: a literal that is
+        /// the only one of its level in the clause, or the earliest one of its level on the trail, cannot be
+        /// implied by the others. `poison` caches failures and `removable` successes for the rest of this clause.
+        [[nodiscard]] bool minimize_literal(const std::uint32_t var, const std::uint32_t depth) noexcept
+        {
+            const auto var_flags = flags_[var];
+            const auto lvl = levels_[var];
+            if (lvl == 0u || (var_flags & (removable_flag | keep_flag)) != 0u)
+                return true;
+            const auto reason = reasons_[var];
+            if (!reason.valid() || (var_flags & poison_flag) != 0u || lvl == level_)
+                return false;
+            const auto& frame = control_[lvl];
+            if (depth == 0u && frame.seen_count < 2u)
+                return false;
+            if (trail_positions_[var] <= frame.seen_min_trail)
+                return false;
+            if (depth > minimize_depth_limit)
+                return false;
+
+            bool removable = true;
+            const auto& storage = clause_database_.storage_of();
+            const literal* const lits = storage.literal_data(reason);
+            const literal* const lits_end = lits + storage.header_at(reason).size;
+            for (const literal* current = lits; current != lits_end; ++current)
+            {
+                const auto other_var = var_of(*current);
+                if (other_var == var)
+                    continue;
+                if (!minimize_literal(other_var, depth + 1u))
+                {
+                    removable = false;
+                    break;
+                }
+            }
+            flags_[var] |= removable ? removable_flag : poison_flag;
+            minimized_.push_back(var);
+            return removable;
+        }
+
+        /// @brief Runs first-UIP analysis from `conflict`, minimizes, bumps, and leaves the result in `learned_`.
+        /// @details Resolution walks the trail backwards: literals of the current level are counted as `open`
+        /// and their reasons resolved in trail order until one remains, the first UIP; lower-level literals are
+        /// collected into the clause. Level-zero literals are dropped as they can never be falsified again.
+        /// @return The glue (number of distinct decision levels) of the learned clause.
+        [[nodiscard]] std::uint32_t analyze_conflict(const clause::ref_t conflict) noexcept
+        {
+            auto& storage = clause_database_.storage_of();
+            const bool want_chain = proof_manager_.has_active_consumers();
+            learned_.clear();
+            learned_.push_back(literal {});
+            analyzed_.clear();
+            minimized_.clear();
+            levels_touched_.clear();
+            resolution_chain_refs_.clear();
+            root_chain_refs_.clear();
+            minimize_chain_refs_.clear();
+            if (want_chain && ++chain_stamp_ == 0u)
+            {
+                std::fill(chain_stamps_.begin(), chain_stamps_.end(), 0u);
+                chain_stamp_ = 1u;
+            }
+
+            std::uint32_t open {};
+            auto trail_index = trail_.size();
+            literal uip {};
+            clause::ref_t reason = conflict;
+            for (;;)
+            {
+                bump_clause(reason);
+                if (want_chain)
+                    resolution_chain_refs_.push_back(reason);
+                const literal* const lits = storage.literal_data(reason);
+                const literal* const lits_end = lits + storage.header_at(reason).size;
+                for (const literal* current = lits; current != lits_end; ++current)
+                    if (*current != uip)
+                        analyze_literal(*current, open, want_chain);
+
+                for (;;)
+                {
+                    const literal candidate = trail_[--trail_index];
+                    const auto var = var_of(candidate);
+                    if ((flags_[var] & seen_flag) != 0u && levels_[var] == level_)
+                    {
+                        uip = candidate;
+                        break;
+                    }
+                }
+                if (--open == 0u)
+                    break;
+                reason = reasons_[var_of(uip)];
+            }
+            learned_[0] = uip.negated();
+
+            // Minimize: literals earlier on the trail are decided first, so that their keep/removable marks are
+            // available when later, deeper literals are examined. A unit has nothing to minimize.
+            if (learned_.size() > 1u)
+                ++minimized_clause_count_;
+            if (learned_.size() > 2u)
+                std::sort(learned_.begin() + 1, learned_.end(), [this](const literal left, const literal right) noexcept
+                          { return trail_positions_[var_of(left)] < trail_positions_[var_of(right)]; });
+            std::size_t write {1u};
+            for (std::size_t index = 1u; index < learned_.size(); ++index)
+            {
+                const auto lit = learned_[index];
+                const auto var = var_of(lit);
+                if (minimize_literal(var, 0u))
+                {
+                    if (want_chain)
+                        collect_minimize_chain(var);
+                    continue;
+                }
+                flags_[var] |= keep_flag;
+                learned_[write++] = lit;
+            }
+            if (write < learned_.size())
+            {
+                ++shrunk_clause_count_;
+                learned_.resize(write);
+            }
+
+            // The literal of highest level after the UIP goes second: it is the backjump level's watch partner.
+            std::uint32_t glue {1u};
+            if (learned_.size() > 1u)
+            {
+                std::size_t best_index {1u};
+                auto best_level = levels_[var_of(learned_[1])];
+                ++glue_stamp_;
+                if (glue_stamp_ == 0u)
+                {
+                    std::fill(level_stamps_.begin(), level_stamps_.end(), 0u);
+                    glue_stamp_ = 1u;
+                }
+                level_stamps_[level_] = glue_stamp_;
+                for (std::size_t index = 1u; index < learned_.size(); ++index)
+                {
+                    const auto lvl = levels_[var_of(learned_[index])];
+                    if (level_stamps_[lvl] != glue_stamp_)
+                    {
+                        level_stamps_[lvl] = glue_stamp_;
+                        ++glue;
+                    }
+                    if (lvl > best_level)
+                    {
+                        best_level = lvl;
+                        best_index = index;
+                    }
+                }
+                if (best_index != 1u)
+                    std::swap(learned_[1], learned_[best_index]);
+            }
+
+            // Reason-side bumping: the variables that forced the learned clause's literals are as much a part of
+            // the conflict as the literals themselves; bumping them focuses the search on the structure behind
+            // the clause rather than only its surface. Kissat and CaDiCaL both do this for short clauses.
+            if (learned_.size() <= reason_bump_size_limit)
+            {
+                for (std::size_t index = 1u; index < learned_.size(); ++index)
+                {
+                    const auto reason_ref = reasons_[var_of(learned_[index])];
+                    if (!reason_ref.valid())
+                        continue;
+                    const literal* const lits = storage.literal_data(reason_ref);
+                    const literal* const lits_end = lits + storage.header_at(reason_ref).size;
+                    for (const literal* current = lits; current != lits_end; ++current)
+                    {
+                        const auto var = var_of(*current);
+                        if ((flags_[var] & seen_flag) != 0u || levels_[var] == 0u)
+                            continue;
+                        flags_[var] |= seen_flag;
+                        analyzed_.push_back(var);
+                    }
+                }
+            }
+
+            for (const auto var: analyzed_)
+                heap_.bump(var);
+            heap_.decay();
+
+            for (const auto var: analyzed_)
+                flags_[var] = 0u;
+            for (const auto var: minimized_)
+                flags_[var] = 0u;
+            for (const auto lvl: levels_touched_)
+                control_[lvl].seen_count = 0u;
+            return glue;
+        }
+
+        /// @brief Stores the learned clause, backjumps, asserts its first literal, and reports the proof step.
+        void learn_clause(const std::uint32_t glue) noexcept
+        {
+            const auto backjump_level = learned_.size() > 1u ? levels_[var_of(learned_[1])] : 0u;
+            backtrack(backjump_level);
+
+            const auto ref = clause_database_.add_clause(learned_, true);
+            auto& header = clause_database_.storage_of().header_at(ref);
+            header.glue = glue;
+            header.tier = static_cast<std::uint8_t>(glue <= core_glue_limit ? 0u : glue <= retained_glue_limit ? 1u : 2u);
+            if (header.tier == 0u)
+                ++promoted_clause_count_;
+
+            if (learned_.size() == 1u)
+                unit_clause_refs_.push_back(ref);
+            else
+                attach_clause_for_propagation(ref);
+            assign(learned_[0], ref);
+
+            if (proof_manager_.has_active_consumers())
+            {
+                antecedents_scratch_.clear();
+                const auto append = [this](const clause::ref_t chain_ref) noexcept
+                {
+                    const auto id = proof_manager_.stable_id_for_clause(chain_ref);
+                    if (id.valid())
+                        antecedents_scratch_.push_back(id);
+                };
+                for (const auto chain_ref: root_chain_refs_)
+                    append(chain_ref);
+                for (const auto chain_ref: minimize_chain_refs_)
+                    append(chain_ref);
+                for (auto it = resolution_chain_refs_.rbegin(); it != resolution_chain_refs_.rend(); ++it)
+                    append(*it);
+                proof_manager_.on_add_derived(ref, learned_, antecedents_scratch_);
+            }
+            else
+                proof_manager_.on_add_derived(ref, learned_);
+
+            learned_clause_glue_total_ += glue;
+            ++learned_clause_glue_sample_count_;
+            search_coordinator_.note_learned_clause();
+            incremental_context_.retain_learned_clause();
+        }
+
+        // ------------------------------------------------------------------------------------------------------
+        // Assumptions
+        // ------------------------------------------------------------------------------------------------------
+
+        /// @brief Explains a falsified assumption by the assumptions that imply its negation.
+        void analyze_final(const literal failed) noexcept
+        {
+            failed_core_.clear();
+            failed_core_.push_back(failed);
+            analyzed_.clear();
+            const auto failed_var = var_of(failed);
+            flags_[failed_var] |= seen_flag;
+            analyzed_.push_back(failed_var);
+
+            const auto& storage = clause_database_.storage_of();
+            for (auto index = trail_.size(); index-- > 0;)
+            {
+                const auto lit = trail_[index];
+                const auto var = var_of(lit);
+                if ((flags_[var] & seen_flag) == 0u || levels_[var] == 0u)
+                    continue;
+                const auto reason = reasons_[var];
+                if (!reason.valid())
+                {
+                    // A decision below the search levels is an assumption; the failed literal's own negation
+                    // reaches here only when the caller assumed both polarities.
+                    failed_core_.push_back(lit);
+                    continue;
+                }
+                for (const auto other: storage.view_literals(reason))
+                {
+                    const auto other_var = var_of(other);
+                    if ((flags_[other_var] & seen_flag) == 0u)
+                    {
+                        flags_[other_var] |= seen_flag;
+                        analyzed_.push_back(other_var);
+                    }
+                }
+            }
+            for (const auto var: analyzed_)
+                flags_[var] = 0u;
+            analyzed_.clear();
+        }
+
+        // ------------------------------------------------------------------------------------------------------
+        // Restarts, reduction, inprocessing
+        // ------------------------------------------------------------------------------------------------------
+
+        /// @brief Restarts, keeping the trail prefix whose decisions the heap would repeat anyway.
+        void restart() noexcept
+        {
+            std::uint32_t reuse = assumption_count_;
+            if (reuse < level_)
+            {
+                while (!heap_.empty() && is_assigned(heap_.top()))
+                    (void) heap_.pop();
+                if (!heap_.empty())
+                {
+                    const auto next_score = heap_.score(heap_.top());
+                    while (reuse < level_)
+                    {
+                        const auto decision = control_[reuse + 1u].decision;
+                        if (decision.raw() == 0u || heap_.score(var_of(decision)) < next_score)
+                            break;
+                        ++reuse;
+                    }
+                }
+            }
+            backtrack(reuse);
+            search_coordinator_.note_restart();
+        }
+
+        void protect_trail_reasons(const bool protect) noexcept
+        {
+            for (const auto lit: trail_)
+            {
+                const auto reason = reasons_[var_of(lit)];
+                if (!reason.valid())
+                    continue;
+                if (protect)
+                    clause_database_.mark_reason_clause(reason);
+                else
+                    clause_database_.unmark_reason_clause(reason);
+            }
+        }
+
+        /// @brief Reduces the learned-clause database and compacts the arena.
+        void reduce() noexcept
+        {
+            protect_trail_reasons(true);
+            auto& controller = search_coordinator_.reduce_controller();
+            controller.select_reduction_candidates(clause_database_);
+            controller.reduce_clauses(clause_database_);
+            controller.flush_redundant(clause_database_);
+            controller.update_tiers(clause_database_);
+            clause_database_.decay_quality();
+            protect_trail_reasons(false);
+            collect_garbage();
+        }
+
+        /// @brief Slides live clauses down the arena and re-targets every watch, reason and unit reference.
+        void collect_garbage() noexcept
+        {
+            const auto slots = clause_database_.storage_of().arena_bytes() / sizeof(std::uint32_t) + 1u;
+            forwarding_.assign(slots, clause::ref_t::invalid_offset);
+            clause_database_.compact([this](const clause::ref_t old_ref, const clause::ref_t new_ref) noexcept
+                                     { forwarding_[old_ref.offset() / sizeof(std::uint32_t)] = new_ref.offset(); });
+            const auto forward = [this](const clause::ref_t ref) noexcept
+            {
+                return clause::ref_t {forwarding_[ref.offset() / sizeof(std::uint32_t)]};
+            };
+            watch_list_.rewrite_refs(forward);
+            for (const auto lit: trail_)
+            {
+                auto& reason = reasons_[var_of(lit)];
+                if (reason.valid())
+                    reason = forward(reason);
+            }
+            std::size_t write {};
+            for (const auto ref: unit_clause_refs_)
+            {
+                const auto moved = forward(ref);
+                if (moved.valid())
+                    unit_clause_refs_[write++] = moved;
+            }
+            unit_clause_refs_.resize(write);
+            forwarding_.clear();
+        }
+
+        /// @brief Runs an inprocessing epoch at the root when the scheduler says one is due.
+        /// @return `unsatisfiable` if the simplified formula is refuted at the root, `unknown` otherwise.
+        [[nodiscard]] status run_inprocess_if_due() noexcept
+        {
+            inprocess_scheduler_.set_conflicts_seen(search_coordinator_.conflict_event_count());
+            inprocess_scheduler_.set_restart_count(search_coordinator_.restart_count());
+            inprocess_scheduler_.set_decisions_seen(search_coordinator_.decision_event_count());
+            inprocess_scheduler_.set_reduction_passes_seen(search_coordinator_.reduction_pass_count());
+            inprocess_scheduler_.set_learned_clauses_seen(static_cast<counter_t>(search_coordinator_.learned_clause_count()));
+            if (!inprocess_scheduler_.should_run())
+                return status::unknown;
+
+            backtrack(0u);
+            protect_trail_reasons(true);
+            const auto epochs_before = inprocess_scheduler_.epoch_count();
+            inprocess_scheduler_.run_epoch();
+            protect_trail_reasons(false);
+            if (inprocess_scheduler_.epoch_count() == epochs_before)
+                return status::unknown;
+
+            inprocess_scheduler_.report_epoch_summary();
+            search_coordinator_.notify_inprocess_epoch_completed(inprocess_scheduler_.last_structural_gain());
+            rebuild_propagation_state();
+            propagated_ = 0u;
+            if (!assign_root_units())
+                return root_conflict() == status::unsatisfiable ? status::unsatisfiable : status::unknown;
+            return status::unknown;
+        }
+
+        // ------------------------------------------------------------------------------------------------------
+        // The search loop
+        // ------------------------------------------------------------------------------------------------------
+
+        /// @brief Per-conflict bookkeeping shared by search conflicts and root conflicts.
+        void note_conflict(const std::uint32_t glue) noexcept
+        {
+            search_coordinator_.note_conflict(glue);
+            if (evsids_maintenance_interval_ != 0u && search_coordinator_.conflict_event_count() % evsids_maintenance_interval_ == 0u)
+                heap_.rescale_by(0.5);
+        }
+
+        /// @brief Accounts for a root-level conflict: the formula is refuted, unless the conflict budget ran out on
+        /// this very conflict, in which case the episode reports the limit like any other conflict would.
+        [[nodiscard]] status root_conflict() noexcept
+        {
+            note_conflict(0u);
+            if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
+                return status::unknown;
+            return status::unsatisfiable;
         }
 
         /// @brief Runs the CDCL search to a terminal outcome for one episode.
         /// @details Iterative by construction: a conflict is resolved by analysis, learning and a backjump applied
-        /// in place, so the decision level is data rather than C++ stack depth. That is what makes restarts and
-        /// clause-database reduction expressible at all -- neither can unwind a call stack -- and it bounds memory
-        /// by the instance rather than by the frame budget. The explicit negated branch a DPLL descent has to try is
-        /// not needed here: the learned clause is asserting at the backjump level and forces that assignment.
-        /// @param assignment Per-variable truth values for the episode.
-        /// @param decision_levels Per-variable decision level.
-        /// @param reasons Per-variable implication reason.
-        /// @param request Solve configuration for this episode.
-        /// @param conflicts Running conflict counter for limit checks.
-        /// @param trail Chronological assignment trail.
-        /// @param initial_seed_literals Literals assigned before entry whose watches still need scanning.
-        /// @return Terminal status for the episode.
-        /// @throws None (noexcept).
-        status run_search(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
-                          const solve_request& request, counter_t& conflicts, trail_vector& trail,
-                          const std::span<const literal> initial_seed_literals) noexcept
+        /// in place, so the decision level is data rather than C++ stack depth. Assumptions occupy the first
+        /// decision levels; a falsified assumption ends the episode with its core, a root-level conflict with the
+        /// empty core.
+        [[nodiscard]] status run_search(const solve_request& request) noexcept
         {
-            std::uint32_t current_level = 0u;
-            std::array<literal, 1> seed_storage {};
-            auto propagation_seeds = initial_seed_literals;
+            if (!assign_root_units())
+                return root_conflict();
 
             for (;;)
             {
-                // An inprocessing epoch rebuilds the watch lists, so the whole trail has to be rescanned rather
-                // than just the literals assigned since the last propagation.
-                if (propagation_state_dirty_)
+                const auto conflict = propagate();
+                if (conflict.valid())
                 {
-                    propagation_seeds = std::span<const literal> {trail};
-                    propagation_state_dirty_ = false;
-                }
-
-                const auto conflict_ref = propagate_units(assignment, decision_levels, reasons, request, conflicts,
-                                                          current_level, trail, propagation_seeds);
-                propagation_seeds = {};
-
-                if (conflict_ref.valid())
-                {
-                    const auto conflict_clause = clause_database_.storage_of().view_literals(conflict_ref);
-                    const auto resolution = handle_clause_conflict(conflict_ref, conflict_clause, decision_levels, reasons,
-                                                                   request, conflicts, trail, current_level);
-                    if (resolution.result_status == status::unknown)
+                    if (level_ == 0u)
+                        return root_conflict();
+                    const auto glue = analyze_conflict(conflict);
+                    learn_clause(glue);
+                    note_conflict(glue);
+                    if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
                         return status::unknown;
-
-                    // A conflict that survives at the root has no decision to undo: the formula is unsatisfiable.
-                    if (current_level == 0u)
-                        return status::unsatisfiable;
-                    if (!resolution.learned_ref.valid() || resolution.asserting_literal.raw() == 0u)
-                        return status::unsatisfiable;
-
-                    const auto target_level =
-                        resolution.backjump_level < current_level ? resolution.backjump_level : current_level - 1u;
-                    const search_outcome backjump {.result_status = status::unsatisfiable,
-                                                   .has_backjump = true,
-                                                   .backjump_level = target_level,
-                                                   .learned_ref = resolution.learned_ref,
-                                                   .asserting_literal = resolution.asserting_literal};
-                    if (!apply_backjump(assignment, decision_levels, reasons, trail, target_level, backjump))
-                        return status::unsatisfiable;
-
-                    current_level = target_level;
-                    seed_storage[0] = resolution.asserting_literal;
-                    propagation_seeds = std::span<const literal> {seed_storage};
                     continue;
                 }
 
-                // Restarts unwind the real trail here. `search_coordinator::handle_restart` maintains the
-                // controller and heuristic state but cannot retract assignments, which live in this frame.
+                if (level_ < assumption_count_)
+                {
+                    const auto assumption = request.assumptions[level_];
+                    const auto value = value_of(assumption);
+                    if (value < 0)
+                    {
+                        // A falsified assumption is the episode's conflict: it is counted like one, so limits and
+                        // statistics treat an assumption-refuted episode the same way as a root-refuted one.
+                        analyze_final(assumption);
+                        return root_conflict();
+                    }
+                    if (value > 0)
+                    {
+                        new_level(literal {});
+                        continue;
+                    }
+                    new_level(assumption);
+                    assign(assumption, clause::ref_t {});
+                    continue;
+                }
+
+                if (opening_walk_pending_ && search_coordinator_.conflict_event_count() >= opening_walk_due_at_)
+                {
+                    // The probe is over: a full restart, not the reusing kind, because the trail prefix a restart
+                    // keeps follows the phases the walk is about to replace.
+                    opening_walk_pending_ = false;
+                    backtrack(assumption_count_);
+                    search_coordinator_.note_restart();
+                    (void) run_opening_walk();
+                    continue;
+                }
+
                 if (search_coordinator_.should_restart())
                 {
-                    // Only unwind when a conflict has been learned since the last restart. A restart with no
-                    // intervening conflict discards work and adds none, and a decision-triggered schedule would
-                    // otherwise undo the very decision that triggered it, forever, without reaching a conflict.
                     if (search_coordinator_.has_progress_since_restart())
                     {
-                        undo_trail_to_level(assignment, decision_levels, reasons, trail, 0u);
-                        current_level = 0u;
+                        restart();
+                        rewalk_if_due();
+                        if (run_inprocess_if_due() == status::unsatisfiable)
+                            return status::unsatisfiable;
                     }
-                    search_coordinator_.handle_restart();
+                    else
+                        search_coordinator_.note_restart();
                     continue;
                 }
 
-                const auto first_unassigned_variable = pick_unassigned_variable(assignment);
-                if (first_unassigned_variable == 0u)
+                if (search_coordinator_.should_reduce())
+                    reduce();
+
+                std::uint32_t decision_var {};
+                while (!heap_.empty())
+                {
+                    const auto candidate = heap_.pop();
+                    if (!is_assigned(candidate))
+                    {
+                        decision_var = candidate;
+                        break;
+                    }
+                }
+                if (decision_var == 0u)
                     return status::satisfiable;
 
-                search_coordinator_.set_variable_selectability_filter(&solver_core::is_unassigned_candidate, &assignment);
-
-                // `first_unassigned_variable` is handed to the coordinator as the fallback: the ranked candidate
-                // sources drain as variables are assigned and are not refilled on backtrack, so without it an
-                // exhausted heuristic would be reported as a satisfying assignment while variables are still open.
-                const auto branch_literal = search_coordinator_.take_branch_literal(first_unassigned_variable);
-                if (decision_limit_reached(request, search_coordinator_.decision_event_count()))
-                    return status::unknown;
+                const literal decision {variable {decision_var}, saved_phase_[decision_var] < 0};
+                new_level(decision);
+                assign(decision, clause::ref_t {});
+                search_coordinator_.note_decision();
                 if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
                     return status::unknown;
-
-                // An unassigned variable provably exists at this point, so an empty pick is heuristic exhaustion
-                // rather than satisfiability; branch on the fallback variable instead of reporting a model.
-                auto decision_literal = branch_literal.value_or(literal {variable {first_unassigned_variable}, false});
-                const auto decision_index = decision_literal.variable_of().index();
-                if (decision_index >= assignment.size() || assignment[decision_index] != unassigned_value)
-                    decision_literal = literal {variable {first_unassigned_variable}, decision_literal.is_negated()};
-
-                ++current_level;
-                if (!assign_literal(assignment, decision_levels, reasons, decision_literal, current_level))
-                    return status::unknown;
-
-                search_coordinator_.notify_assignment_literal(decision_literal);
-                trail.push_back(decision_literal);
-                seed_storage[0] = decision_literal;
-                propagation_seeds = std::span<const literal> {seed_storage};
             }
         }
 
-        bool apply_backjump(assignment_vector& assignment, decision_level_vector& decision_levels, reason_vector& reasons,
-                    trail_vector& trail, const std::uint32_t target_level, const search_outcome& outcome) noexcept
-        {
-            undo_trail_to_level(assignment, decision_levels, reasons, trail, target_level);
+        // ------------------------------------------------------------------------------------------------------
+        // Results
+        // ------------------------------------------------------------------------------------------------------
 
-            const auto asserting_index = static_cast<std::size_t>(outcome.asserting_literal.variable_of().index());
-            if (asserting_index >= assignment.size() || assignment[asserting_index] != unassigned_value)
-                return false;
-            if (!assign_literal(assignment, decision_levels, reasons, outcome.asserting_literal, target_level, outcome.learned_ref))
-                return false;
-            clause_database_.mark_reason_clause(outcome.learned_ref);
-            clause_database_.increment_used_count(outcome.learned_ref);
-            search_coordinator_.notify_assignment_literal(outcome.asserting_literal);
-            trail.push_back(outcome.asserting_literal);
-            return true;
-        }
-
-        static bool is_unassigned_candidate(const variable var, const void* context) noexcept
-        {
-            if (context == nullptr)
-                return true;
-
-            const auto* assignment = static_cast<const assignment_vector*>(context);
-            const auto index = static_cast<std::size_t>(var.index());
-            if (index >= assignment->size())
-                return false;
-            return (*assignment)[index] == unassigned_value;
-        }
-
-        void build_internal_model(const assignment_vector& assignment) noexcept
+        void build_internal_model() noexcept
         {
             internal_model_.clear();
-            if (assignment.size() <= 1)
-                return;
-
-            internal_model_.reserve(assignment.size() - 1);
-            for (std::uint32_t index = 1; index < assignment.size(); ++index)
-            {
-                const auto value = assignment[index];
-                const bool negated = value == false_value;
-                internal_model_.push_back(literal {variable {index}, negated});
-            }
+            internal_model_.reserve(variable_count_);
+            for (std::uint32_t index = 1u; index <= variable_count_; ++index)
+                internal_model_.push_back(literal {variable {index}, values_[static_cast<std::size_t>(index) << 1u] < 0});
 
             // The search only ever sees the formula that preprocessing left behind, so any variable a pass
             // eliminated still has to have its value re-derived from the clauses that were removed. With an empty
@@ -1429,7 +1797,13 @@ namespace kmx::sat::cdcl
             }
         }
 
+        // ------------------------------------------------------------------------------------------------------
+        // Members
+        // ------------------------------------------------------------------------------------------------------
+
         clause::database clause_database_ {};
+        local_search local_search_ {};
+        std::vector<variable> frozen_variables_scratch_ {};
         search_coordinator search_coordinator_ {};
         propagator propagator_ {};
         incremental_context incremental_context_ {};
@@ -1438,16 +1812,73 @@ namespace kmx::sat::cdcl
         variable_mapper variable_mapper_ {};
         proof_manager proof_manager_ {};
         simplify::flush_restore_manager flush_restore_manager_ {};
-        clause::minimizer clause_minimizer_ {};
         simplify::scheduler::preprocess preprocess_scheduler_ {};
         simplify::scheduler::inprocess inprocess_scheduler_ {};
+        store::clause_cold clause_cold_ {};
+        stack::extension extension_stack_ {};
+        model_reconstructor model_reconstructor_ {};
+
+        // Search state, sized per episode.
+        std::vector<std::int8_t> values_ {};
+        std::vector<std::uint32_t> levels_ {};
+        std::vector<clause::ref_t> reasons_ {};
+        std::vector<std::uint32_t> trail_positions_ {};
+        std::vector<literal> trail_ {};
+        std::vector<control_frame> control_ {};
+        std::size_t propagated_ {};
+        std::uint32_t level_ {};
+        std::uint32_t variable_count_ {};
+        std::uint32_t assumption_count_ {};
+        std::uint32_t evsids_maintenance_interval_ {16u};
+
+        // Branching.
+        var_heap heap_ {};
+        std::vector<std::int8_t> saved_phase_ {};
+        std::vector<std::uint8_t> phase_scratch_ {};
+        bool local_search_enabled_ {};
+        std::size_t local_search_flips_per_variable_ {default_local_search_flips_per_variable};
+        std::size_t local_search_effort_percent_ {default_local_search_effort_percent};
+        std::size_t local_search_round_ {};
+        counter_t next_local_search_at_ {};
+        std::size_t visits_at_last_walk_ {};
+        bool opening_walk_pending_ {};
+        counter_t opening_walk_due_at_ {};
+        bool local_search_prepared_ {};
+        std::uint32_t local_search_variable_count_ {};
+        std::uint64_t lucky_success_count_ {};
+        std::vector<std::int8_t> opening_phase_snapshot_ {};
+        std::size_t best_walk_unsatisfied_ {};
+        std::size_t best_walk_config_ {};
+        double local_search_scale_ {1.0};
+
+        // Analysis scratch.
+        std::vector<std::uint8_t> flags_ {};
+        std::vector<std::uint32_t> analyzed_ {};
+        std::vector<std::uint32_t> minimized_ {};
+        std::vector<std::uint32_t> levels_touched_ {};
+        std::vector<literal> learned_ {};
+        std::vector<std::uint32_t> level_stamps_ {};
+        std::uint32_t glue_stamp_ {};
+        std::vector<std::uint32_t> chain_stamps_ {};
+        std::uint32_t chain_stamp_ {};
+        std::vector<clause::ref_t> resolution_chain_refs_ {};
+        std::vector<clause::ref_t> root_chain_refs_ {};
+        std::vector<clause::ref_t> minimize_chain_refs_ {};
+        std::vector<proof::clause::id> antecedents_scratch_ {};
+
+        // Clause bookkeeping.
         std::vector<clause::ref_t> unit_clause_refs_ {};
+        std::vector<std::uint32_t> forwarding_ {};
+        std::vector<literal> normalized_clause_scratch_ {};
+        std::vector<std::uint32_t> literal_stamps_ {};
+        std::uint32_t literal_stamp_ {};
         std::size_t original_clause_count_ {};
+        /// @brief Highest variable index the problem was stated over, independent of later simplification.
+        std::uint32_t max_problem_variable_ {};
+
+        // Results and counters.
         std::vector<literal> internal_model_ {};
         std::vector<literal> failed_core_ {};
-        std::vector<literal> last_conflict_clause_ {};
-        bool propagation_state_dirty_ {};
-        std::vector<literal> propagation_queue_scratch_ {};
         std::size_t propagation_assignment_count_ {};
         std::size_t watch_entry_scan_count_ {};
         std::size_t binary_watch_scan_count_ {};
@@ -1455,9 +1886,9 @@ namespace kmx::sat::cdcl
         std::size_t learned_clause_shrink_event_count_ {};
         counter_t learned_clause_glue_total_ {};
         counter_t learned_clause_glue_sample_count_ {};
+        std::uint32_t minimized_clause_count_ {};
+        std::uint32_t shrunk_clause_count_ {};
+        std::uint32_t promoted_clause_count_ {};
         status status_ {status::unknown};
-        mutable std::vector<clause::ref_t> ordered_reason_refs_scratch_ {};
-        mutable std::vector<proof::clause::id> antecedents_scratch_ {};
-        std::vector<variable> propagated_variables_scratch_ {};
     };
 }

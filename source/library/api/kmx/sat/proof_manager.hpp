@@ -75,6 +75,17 @@ namespace kmx::sat
         /// @return True if at least one proof format is active.
         [[nodiscard]] bool has_enabled_formats() const noexcept { return !enabled_formats_.empty(); }
 
+        /// @brief Returns whether anything would observe an emitted proof event.
+        /// @details Lets a caller skip assembling event payloads -- notably per-conflict antecedent chains, which
+        /// cost a stable-id lookup and a duplicate scan per resolution step -- when no tracer, checker or event
+        /// buffer is attached to read them. A solve with proofs disabled is the default configuration, so this is
+        /// the common case rather than an optimization for an unusual one.
+        [[nodiscard]] bool has_active_consumers() const noexcept
+        {
+            return event_buffering_enabled_ || online_checker_enabled_ || lrat_checker_enabled_ || !enabled_tracers_.empty() ||
+                   !registered_tracers_.empty();
+        }
+
         /// @brief Returns whether a specific proof format is currently enabled.
         /// @param format_name Identifier of the proof format to query.
         /// @return True if `format_name` is active.
@@ -146,6 +157,10 @@ namespace kmx::sat
             if (!antecedents.empty())
                 record_checker_antecedents(stable_id_for_clause(ref), antecedents);
         }
+
+        /// @brief Gives a clause that predates the first consumer a proof id, so later deletions and antecedent
+        /// references can name it; a clause that already has an id keeps it.
+        void adopt_clause(const cdcl::clause::ref_t ref) noexcept { (void) id_allocator_.allocate_for_new_clause(ref); }
 
         /// @brief Reports that a clause was deleted.
         /// @param ref Reference to the deleted clause.
@@ -271,6 +286,11 @@ namespace kmx::sat
         void dispatch_event(const proof::event_kind kind, const cdcl::clause::ref_t ref, const std::span<const literal> literals = {},
                             const std::span<const proof::clause::id> antecedents = {}) noexcept
         {
+            // With nothing attached there is nothing to record: the clause-id table alone was a third of the
+            // instructions a proof-free run spent on reading and preprocessing a 114k-clause formula. A consumer
+            // attached later receives ids for every clause alive at that point through `adopt_clause`.
+            if (!has_active_consumers())
+                return;
             // Reuse `last_event_`'s buffers so a solve with no proof consumer performs no per-event allocation.
             auto& event = last_event_;
             event.kind = kind;

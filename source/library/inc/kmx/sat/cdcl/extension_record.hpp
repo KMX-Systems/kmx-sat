@@ -46,6 +46,12 @@ namespace kmx::sat::cdcl
     struct factor_transformation final
     {
         variable introduced_variable {};
+        /// @brief First index, in the extension stack's witness buffer, of the literals the variable stands for.
+        /// @details The variable is true exactly when all of them are; the search uses that to give it a phase
+        /// consistent with an assignment of the original variables, which a local-search walk produces.
+        std::uint32_t witness_begin {};
+        /// @brief One past the last index of those literals.
+        std::uint32_t witness_end {};
     };
 
     /// @brief Atomic unit stored in the extension stack: variant type for BVE eliminations, BCE blockings, factoring

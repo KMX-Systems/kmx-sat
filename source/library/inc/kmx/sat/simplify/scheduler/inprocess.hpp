@@ -58,7 +58,12 @@ namespace kmx::sat::simplify::scheduler
             std::optional<bool> was_effective {};
         };
 
-        static constexpr std::array<std::string_view, 3> baseline_passes {"forward_subsumer", "vivifier", "congruence"};
+        /// @brief Passes enabled by default. `congruence` is deliberately absent: its equivalence substitution
+        /// merges variables without polarity and records no witness for model reconstruction, so an epoch could
+        /// leave the search with a model that violates the original formula (observed on `bmc-ibm-13`). It stays
+        /// available through `enable_pass` until that is fixed.
+        static constexpr std::array<std::string_view, 3> known_passes {"forward_subsumer", "vivifier", "congruence"};
+        static constexpr std::array<std::string_view, 2> baseline_passes {"forward_subsumer", "vivifier"};
 
         /// @brief Constructs an inprocess scheduler with a default epoch schedule.
         /// @throws None (noexcept).
@@ -109,6 +114,9 @@ namespace kmx::sat::simplify::scheduler
             if (!is_known_pass(pass_name) || is_enabled(pass_name))
                 return;
             enabled_passes_.push_back(pass_name);
+            // The adaptive cap is expressed in passes of the enabled set; changing the set resets it so that a
+            // newly enabled pass is not silently throttled out of every epoch.
+            adaptive_pass_cap_ = enabled_passes_.size();
         }
 
         /// @brief Disables one inprocessing pass by name.
@@ -117,6 +125,7 @@ namespace kmx::sat::simplify::scheduler
         void disable_pass(const std::string_view pass_name) noexcept
         {
             enabled_passes_.erase(std::remove(enabled_passes_.begin(), enabled_passes_.end(), pass_name), enabled_passes_.end());
+            adaptive_pass_cap_ = enabled_passes_.size();
         }
 
         /// @brief Requests that the next inprocessing epoch be skipped.
@@ -133,6 +142,28 @@ namespace kmx::sat::simplify::scheduler
             if (conflicts < conflicts_seen_)
                 next_conflict_trigger_ = conflict_trigger_window_;
             conflicts_seen_ = conflicts;
+        }
+
+        /// @brief Sets the conflict and restart cadences at which epochs become due.
+        /// @details Exposed so a caller that knows its own workload -- or a test that wants a specific cadence --
+        /// can state the schedule rather than inherit the default. Both counters are re-anchored to the values
+        /// already seen, so the next epoch is one full window away rather than immediately due.
+        /// @param conflict_window Conflicts between epochs (zero leaves the current window unchanged).
+        /// @param restart_window Restarts between epochs (zero leaves the current window unchanged).
+        void set_trigger_windows(const std::uint64_t conflict_window, const std::uint64_t restart_window) noexcept
+        {
+            if (conflict_window != 0u)
+            {
+                base_conflict_trigger_window_ = conflict_window;
+                conflict_trigger_window_ = conflict_window;
+                next_conflict_trigger_ = conflicts_seen_ + conflict_window;
+            }
+            if (restart_window != 0u)
+            {
+                base_restart_trigger_window_ = restart_window;
+                restart_trigger_window_ = restart_window;
+                next_restart_trigger_ = restart_count_ + restart_window;
+            }
         }
 
         /// @brief Sets how many restarts have already occurred.
@@ -383,8 +414,11 @@ namespace kmx::sat::simplify::scheduler
             cooldown_low_yield_streak_ = 0u;
             if (cooldown_high_yield_streak_ >= 1u)
             {
-                conflict_trigger_window_ = std::max(default_conflict_trigger_window, conflict_trigger_window_ / 2u);
-                restart_trigger_window_ = std::max(default_restart_trigger_window, restart_trigger_window_ - 1u);
+                // The floor is the cadence this scheduler was configured with, not the shipped default. A caller
+                // that asked for a short cadence must get it back after a productive epoch; recovering to the
+                // default instead would silently override the configuration.
+                conflict_trigger_window_ = std::max(base_conflict_trigger_window_, conflict_trigger_window_ / 2u);
+                restart_trigger_window_ = std::max(base_restart_trigger_window_, restart_trigger_window_ - 1u);
             }
         }
 
@@ -526,10 +560,22 @@ namespace kmx::sat::simplify::scheduler
         const std::vector<pass_summary>& last_reported_summaries() const noexcept { return last_reported_summaries_; }
 
     private:
-        static constexpr std::uint64_t default_conflict_trigger_window {32u};
-        static constexpr std::uint64_t default_restart_trigger_window {1u};
-        static constexpr std::uint64_t max_conflict_trigger_window {8192u};
-        static constexpr std::uint64_t max_restart_trigger_window {8u};
+        /// @brief Conflicts between inprocessing epochs, before yield-based adaptation.
+        /// @details Every epoch runs subsumption, vivification and congruence over the whole clause database, so
+        /// its cost is proportional to that database rather than to the window. At the previous value of 32 the
+        /// sweeps cost about fifteen percent of total runtime and, worse, made a larger learned-clause database
+        /// unaffordable: raising the retention limit from one thousand to ten thousand clauses took uuf250_01 from
+        /// 7.5 s to 121 s, because the extra clauses were re-swept every 32 conflicts. Search is what closes an
+        /// instance and simplification only assists it, so the window is set where an epoch is amortized over
+        /// enough search to pay for itself.
+        static constexpr std::uint64_t default_conflict_trigger_window {2000u};
+        /// @brief Restarts between inprocessing epochs.
+        /// @details Previously 1, which made every restart trigger a full simplification sweep. That coupling is
+        /// what made restarts look like a regression and left them disabled: with restarts enabled on a Luby
+        /// schedule the solver restarts thousands of times, and each one paid for a database-wide sweep.
+        static constexpr std::uint64_t default_restart_trigger_window {512u};
+        static constexpr std::uint64_t max_conflict_trigger_window {1u << 20u};
+        static constexpr std::uint64_t max_restart_trigger_window {1u << 16u};
         static constexpr double telemetry_alpha {0.25};
         static constexpr double medium_conflict_density_threshold {0.10};
         static constexpr double high_conflict_density_threshold {0.25};
@@ -544,7 +590,7 @@ namespace kmx::sat::simplify::scheduler
 
         bool is_known_pass(const std::string_view pass_name) const noexcept
         {
-            return std::find(baseline_passes.begin(), baseline_passes.end(), pass_name) != baseline_passes.end();
+            return std::find(known_passes.begin(), known_passes.end(), pass_name) != known_passes.end();
         }
 
         bool is_enabled(const std::string_view pass_name) const noexcept
@@ -638,6 +684,8 @@ namespace kmx::sat::simplify::scheduler
         std::uint64_t last_restart_snapshot_ {};
         std::uint64_t last_reduction_snapshot_ {};
         std::uint64_t last_learned_clause_snapshot_ {};
+        std::uint64_t base_conflict_trigger_window_ {default_conflict_trigger_window};
+        std::uint64_t base_restart_trigger_window_ {default_restart_trigger_window};
         std::uint64_t conflict_trigger_window_ {default_conflict_trigger_window};
         std::uint64_t restart_trigger_window_ {default_restart_trigger_window};
         std::uint64_t next_conflict_trigger_ {default_conflict_trigger_window};

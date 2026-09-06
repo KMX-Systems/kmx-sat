@@ -186,6 +186,8 @@ namespace kmx::sat::cdcl
             database.set_glue(candidates[index], static_cast<std::uint32_t>(index + 1u));
         }
 
+        // The shipped default is 75 percent; this scenario exercises the quota arithmetic at half.
+        reduce.set_reduction_fraction_percent(50u);
         reduce.select_reduction_candidates(database, candidates);
         REQUIRE(reduce.reduction_fraction_percent() == 50u);
         REQUIRE(reduce.candidate_offsets().size() == 2u);

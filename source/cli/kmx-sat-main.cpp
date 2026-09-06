@@ -236,6 +236,9 @@ static void print_usage(const char* const program) noexcept
               << "  --restart-interval <n>             Conflicts between scheduled restarts.\n"
               << "  --decision-restart-interval <n>    Decisions between scheduled restarts.\n"
               << "  --reduction-interval <n>           Conflicts between clause-database reductions.\n"
+              << "  --inprocess-conflict-window <n>    Conflicts between inprocessing epochs.\n"
+              << "  --local-search-flips-per-variable <n>  Flip budget of the opening walk (0 disables local search).\n"
+              << "  --local-search-effort-percent <n>  Share of search effort spent on later walks (0 disables them).\n"
               << "  --reduction-fraction-percent <n>   Percentage of ranked learned clauses to drop.\n"
               << "  --no-model                         Suppress the `v` line on a satisfiable result.\n"
               << "  --no-verify                        Skip the independent model check before printing.\n"
@@ -311,10 +314,26 @@ int main(int argc, char* argv[])
             solver.set_option("restart_interval", std::strtoull(argv[++index], nullptr, 10));
         else if (option == "--decision-restart-interval" && index + 1 < argc)
             solver.set_option("decision_restart_interval", std::strtoull(argv[++index], nullptr, 10));
+        else if (option == "--enabled-pass-mask" && index + 1 < argc)
+            solver.set_option("enabled_pass_mask", std::strtoull(argv[++index], nullptr, 10));
         else if (option == "--reduction-interval" && index + 1 < argc)
             solver.set_option("reduction_interval", std::strtoull(argv[++index], nullptr, 10));
+        else if (option == "--inprocess-conflict-window" && index + 1 < argc)
+            solver.set_option("inprocess_conflict_window", std::strtoull(argv[++index], nullptr, 10));
+        else if (option == "--local-search-flips-per-variable" && index + 1 < argc)
+            solver.set_option("local_search_flips_per_variable", std::strtoull(argv[++index], nullptr, 10));
+        else if (option == "--local-search-effort-percent" && index + 1 < argc)
+            solver.set_option("local_search_effort_percent", std::strtoull(argv[++index], nullptr, 10));
+        else if (option == "--decision-conflict-maintenance-interval" && index + 1 < argc)
+            solver.set_option("decision_conflict_maintenance_interval", std::strtoull(argv[++index], nullptr, 10));
         else if (option == "--reduction-fraction-percent" && index + 1 < argc)
             solver.set_option("reduction_fraction_percent", std::strtoull(argv[++index], nullptr, 10));
+        else if (option == "--glue-restart-threshold-percent" && index + 1 < argc)
+            solver.set_option("glue_restart_threshold_percent", std::strtoull(argv[++index], nullptr, 10));
+        else if (option == "--activity-retention-threshold-percent" && index + 1 < argc)
+            solver.set_option("activity_retention_threshold_percent", std::strtoull(argv[++index], nullptr, 10));
+        else if (option == "--chb-enabled" && index + 1 < argc)
+            solver.set_option("chb_enabled", std::strtoull(argv[++index], nullptr, 10));
         else
         {
             std::cerr << "Error: unknown or incomplete option: " << option << "\n";

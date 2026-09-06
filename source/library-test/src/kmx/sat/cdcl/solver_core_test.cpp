@@ -228,7 +228,8 @@ namespace kmx::sat::cdcl
         maintenance_solver.add_problem_clause({literal {variable {42}, true}});
         REQUIRE(maintenance_solver.solve({}) == solver_core::status::unsatisfiable);
         REQUIRE(maintenance_solver.decision_evsids_rescale_count() >= 1u);
-        REQUIRE(maintenance_solver.decision_chb_decay_count() >= 1u);
+        // CHB is no longer part of the search engine; its decay counter stays at zero.
+        REQUIRE(maintenance_solver.decision_chb_decay_count() == 0u);
 
         solver_core reset_solver;
         proof::tracer::view reset_drat_sink {proof::tracer::drat {}};
@@ -255,7 +256,14 @@ namespace kmx::sat::cdcl
         proof_gated_solver.add_problem_clause({literal {variable {9}, false}});
         REQUIRE(proof_gated_solver.proof_buffered_event_count() == 1u);
         REQUIRE(proof_gated_solver.last_proof_event().kind == proof::event_kind::add_original);
-        REQUIRE(proof_gated_solver.solve({}) == solver_core::status::satisfiable);
+        // Gate extraction and congruence closure left the default pipeline; the proof gating they exercise is
+        // still theirs to show, so this request enables them on top of the defaults.
+        solve_request gated_request {};
+        for (const auto id: simplify::scheduler::preprocess::baseline_passes)
+            gated_request.enabled_pass_mask |= std::uint64_t {1u} << static_cast<std::size_t>(id);
+        gated_request.enabled_pass_mask |= std::uint64_t {1u} << static_cast<std::size_t>(simplify::scheduler::preprocess::pass_id::gate);
+        gated_request.enabled_pass_mask |= std::uint64_t {1u} << static_cast<std::size_t>(simplify::scheduler::preprocess::pass_id::congruence);
+        REQUIRE(proof_gated_solver.solve(gated_request) == solver_core::status::satisfiable);
         REQUIRE(proof_gated_solver.proof_enabled());
         REQUIRE(proof_gated_solver.proof_checkers_valid());
 

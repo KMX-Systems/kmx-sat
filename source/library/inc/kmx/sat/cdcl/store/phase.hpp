@@ -4,6 +4,7 @@
 #pragma once
 #ifndef PCH
     #include <cstddef>
+    #include <span>
     #include <cstdint>
     #include <vector>
 #endif
@@ -28,6 +29,18 @@ namespace kmx::sat::cdcl::store
 
         void set_saved_phase(const variable var, const bool value) noexcept { set_value(var, value, saved_phases_); }
 
+        /// @brief Replaces the saved polarities with a full assignment, indexed by variable (index zero unused).
+        /// @param assignment Per-variable polarity, as produced by a local-search probe.
+        void seed_saved_phases(const std::span<const std::uint8_t> assignment) noexcept
+        {
+            if (assignment.size() <= 1u)
+                return;
+            if (saved_phases_.size() < assignment.size())
+                saved_phases_.resize(assignment.size(), 0u);
+            for (std::size_t index = 1; index < assignment.size(); ++index)
+                saved_phases_[index] = assignment[index] != 0u ? 1u : 0u;
+        }
+
         void flip_all() noexcept
         {
             for (std::size_t i = 0; i < saved_phases_.size(); ++i)
@@ -39,6 +52,9 @@ namespace kmx::sat::cdcl::store
             for (std::size_t i = 0; i < saved_phases_.size(); ++i)
                 saved_phases_[i] = (saved_phases_[i] + 1u) & 1u;
         }
+
+        /// @brief Returns the saved polarities as a contiguous view, indexed by variable (index zero unused).
+        [[nodiscard]] std::span<const std::uint8_t> saved_phases_view() const noexcept { return saved_phases_; }
 
         /// @brief Returns how many saved-phase slots are currently tracked.
         /// @return Number of saved-phase entries (including index zero).

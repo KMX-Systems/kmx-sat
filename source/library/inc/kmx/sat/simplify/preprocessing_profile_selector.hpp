@@ -84,7 +84,6 @@ namespace kmx::sat::simplify
         {
             std::uint64_t skip_pass_mask {};
             bool skip_memory_heavy_passes {};
-            bool skip_factorizer_for_binary_dense {};
             bool skip_probing_for_long_clause_heavy {};
             bool skip_memory_heavy_from_inprocess_pressure {};
             bool skip_memory_heavy_from_learned_clause_pressure {};
@@ -159,15 +158,11 @@ namespace kmx::sat::simplify
                     is_elevated_learned_clause_pressure() && inprocess_structural_gain_ema_ <= low_structural_gain_threshold;
                 current_plan_.skip_memory_heavy_passes = true;
             }
-            current_plan_.skip_factorizer_for_binary_dense =
-                current_fingerprint_.clause_count >= 16u && current_fingerprint_.binary_clause_ratio >= factorizer_binary_dense_threshold_;
             current_plan_.skip_probing_for_long_clause_heavy = current_fingerprint_.clause_count >= 16u &&
                                                                current_fingerprint_.long_clause_ratio >= probing_long_clause_threshold_ &&
                                                                current_fingerprint_.binary_clause_ratio <= 0.10;
             if (current_plan_.skip_memory_heavy_passes)
                 current_plan_.skip_pass_mask |= pass_bit(pass_id::congruence) | pass_bit(pass_id::vivifier);
-            if (current_plan_.skip_factorizer_for_binary_dense)
-                current_plan_.skip_pass_mask |= pass_bit(pass_id::factorizer);
             if (current_plan_.skip_probing_for_long_clause_heavy)
                 current_plan_.skip_pass_mask |= pass_bit(pass_id::probing);
         }
@@ -261,15 +256,6 @@ namespace kmx::sat::simplify
         {
             ++policy_update_count_;
 
-            factorizer_binary_dense_threshold_ = default_factorizer_binary_dense_threshold;
-            if (factorizer_effectiveness_.observed_runs >= minimum_effectiveness_sample_size)
-            {
-                const auto factorizer_hit_rate = static_cast<double>(factorizer_effectiveness_.effective_runs) /
-                                                 static_cast<double>(factorizer_effectiveness_.observed_runs);
-                if (factorizer_hit_rate <= low_effectiveness_hit_rate_threshold)
-                    factorizer_binary_dense_threshold_ = 0.70;
-            }
-
             probing_long_clause_threshold_ = default_probing_long_clause_threshold;
             if (probing_effectiveness_.observed_runs >= minimum_effectiveness_sample_size)
             {
@@ -295,7 +281,6 @@ namespace kmx::sat::simplify
     private:
         static constexpr std::uint64_t pass_bit(const pass_id id) noexcept { return std::uint64_t {1u} << static_cast<std::size_t>(id); }
 
-        static constexpr double default_factorizer_binary_dense_threshold {0.80};
         static constexpr double default_probing_long_clause_threshold {0.75};
         static constexpr double low_effectiveness_hit_rate_threshold {0.10};
         static constexpr std::size_t minimum_effectiveness_sample_size {4u};
@@ -332,7 +317,6 @@ namespace kmx::sat::simplify
         double inprocess_restart_pressure_ema_ {};
         double inprocess_reduction_pressure_ema_ {};
         double inprocess_learned_clause_pressure_ema_ {};
-        double factorizer_binary_dense_threshold_ {default_factorizer_binary_dense_threshold};
         double probing_long_clause_threshold_ {default_probing_long_clause_threshold};
         std::size_t fingerprint_count_ {};
         std::size_t pass_plan_count_ {};

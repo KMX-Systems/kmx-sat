@@ -3,11 +3,11 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <algorithm>
     #include <cstddef>
     #include <cstdint>
+    #include <limits>
     #include <span>
-    #include <unordered_map>
-    #include <unordered_set>
     #include <vector>
 #endif
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
@@ -19,15 +19,16 @@ namespace kmx::sat::cdcl::clause
     /// @brief Logical orchestration of clauses, clause tiers, and their relation to watched literals.
     /// @details
     /// `clause::database` is the logical layer built on top of `clause::storage`: it decides which clauses are
-    /// irredundant (original) versus redundant (learned), tracks tier membership used by `reduce_controller` for
+    /// irredundant (original) versus redundant (learned), tracks tier membership used by `controller::reduce` for
     /// retention decisions, marks clauses as garbage or as active reasons, and exposes `iterate_irredundant`/
-    /// `iterate_redundant` for passes (`forward_subsumer`, `vivifier`, proof replay) that must visit one class of
-    /// clause without scanning the other. `promote_clause`/`demote_clause` move a clause between tiers as its
-    /// activity/glue changes; `flush_satisfied` removes clauses already satisfied at decision level zero;
-    /// `stats_snapshot` feeds `telemetry::solver_statistics`.
-    /// @note This class only coordinates clause lifecycle and tiering; physical byte-level operations always
-    /// delegate to the owned `clause::storage` instance, and watch-list bookkeeping is owned separately by
-    /// `bank::watch_list`.
+    /// `iterate_redundant` for passes that must visit one class of clause without scanning the other.
+    ///
+    /// Every per-clause attribute (glue, tier, usage, activity, flags) lives in the clause's own arena header, so
+    /// the database keeps no side table: it owns the two reference vectors and the garbage count, nothing else.
+    /// `compact` is the garbage collector: it slides live clauses down the arena and reports every move so the
+    /// owner can rewrite watches and reasons.
+    /// @note A clause flagged as an active reason is never flushed, so deleting passes cannot invalidate an
+    /// implication on the trail; the search flags trail reasons before any deleting pass runs and clears them after.
     class database final
     {
     public:
@@ -73,141 +74,129 @@ namespace kmx::sat::cdcl::clause
                 redundant_refs_.push_back(ref);
             else
                 irredundant_refs_.push_back(ref);
-            auto header = storage_.header_of(ref);
+            auto& header = storage_.header_at(ref);
             header.glue = static_cast<std::uint32_t>(literals.size());
-            header.tier = redundant ? default_tier : tier_t {};
+            header.tier = static_cast<std::uint8_t>(redundant ? default_tier : tier_t {});
             header.flags |= bank::tracked_flag;
-            storage_.set_header(ref, header);
-            auto& entry = metadata_for(ref.offset());
-            entry.used_count = 0u;
-            entry.activity = {};
+            header.used = 0u;
+            header.activity = 0.0f;
             return ref;
         }
 
         /// @brief Returns live quality metadata for a clause.
         [[nodiscard]] quality quality_of(const ref_t ref) const noexcept
         {
-            const auto resolved = storage_.resolve_ref(ref);
-            const auto header = storage_.header_of(resolved);
-            const auto* entry = metadata_of(resolved.offset());
-            return quality {tier_of(resolved), header.glue, entry != nullptr ? entry->used_count : 0u, header.size,
-                            entry != nullptr ? entry->activity : 0.0};
+            const auto header = storage_.header_of(ref);
+            return quality {tier_from(header), header.glue, header.used, header.size, static_cast<double>(header.activity)};
         }
 
         /// @brief Records a clause's current LBD/glue value.
         void set_glue(const ref_t ref, const std::uint32_t glue) noexcept
         {
-            if (ref.valid())
-            {
-                const auto resolved = storage_.resolve_ref(ref);
-                if (!storage_.is_alive(resolved))
-                {
-                    auto& entry = metadata_for(resolved.offset());
-                    entry.glue = glue;
-                    entry.tracked = true;
-                    return;
-                }
-                auto header = storage_.header_of(resolved);
-                header.glue = glue;
-                header.flags |= bank::tracked_flag;
-                storage_.set_header(resolved, header);
-            }
+            if (!storage_.is_alive(ref))
+                return;
+            auto& header = storage_.header_at(ref);
+            header.glue = glue;
+            header.flags |= bank::tracked_flag;
         }
 
-        /// @brief Records one use of a clause as an implication reason.
+        /// @brief Records one use of a clause as an implication reason; saturates at the counter's range.
         void increment_used_count(const ref_t ref) noexcept
         {
-            if (ref.valid())
-                ++metadata_for(storage_.resolve_ref(ref).offset()).used_count;
+            if (!storage_.is_alive(ref))
+                return;
+            auto& used = storage_.header_at(ref).used;
+            if (used != std::numeric_limits<std::uint8_t>::max())
+                ++used;
+        }
+
+        /// @brief Overwrites a clause's use counter; the reduction pass uses it to grant a pass of grace.
+        void set_used_count(const ref_t ref, const std::uint8_t used) noexcept
+        {
+            if (storage_.is_alive(ref))
+                storage_.header_at(ref).used = used;
         }
 
         /// @brief Adds conflict-derived activity to a clause's retention score.
         void increment_activity(const ref_t ref, const double amount = 1.0) noexcept
         {
-            if (ref.valid())
-                metadata_for(storage_.resolve_ref(ref).offset()).activity += amount;
+            if (!storage_.is_alive(ref))
+                return;
+            storage_.header_at(ref).activity += static_cast<float>(amount);
         }
 
         /// @brief Ages activity and usage metadata so old conflict history cannot dominate indefinitely.
         void decay_quality(const double factor = 0.5) noexcept
         {
             const auto bounded_factor = factor < 0.0 ? 0.0 : (factor > 1.0 ? 1.0 : factor);
-            for (auto& entry: metadata_)
+            const auto age = [&](const ref_t ref) noexcept
             {
-                entry.activity *= bounded_factor;
-                entry.used_count = static_cast<std::uint32_t>(static_cast<double>(entry.used_count) * bounded_factor);
-            }
+                if (!storage_.is_alive(ref))
+                    return;
+                auto& header = storage_.header_at(ref);
+                header.activity = static_cast<float>(static_cast<double>(header.activity) * bounded_factor);
+                header.used = static_cast<std::uint8_t>(static_cast<double>(header.used) * bounded_factor);
+            };
+            for (const auto ref: irredundant_refs_)
+                age(ref);
+            for (const auto ref: redundant_refs_)
+                age(ref);
         }
 
-        /// @brief Marks a clause as garbage, making it eligible for physical reclamation by the garbage collector.
+        /// @brief Marks a clause as garbage, making it eligible for physical reclamation.
         /// @param ref Reference to the clause to mark.
         /// @throws None (noexcept).
         void mark_garbage(const ref_t ref) noexcept
         {
-            if (!ref.valid())
+            if (!storage_.is_alive(ref))
                 return;
-            auto header = storage_.header_of(storage_.resolve_ref(ref));
-            if (!storage_.is_alive(storage_.resolve_ref(ref)))
-            {
-                auto& entry = metadata_for(storage_.resolve_ref(ref).offset());
-                entry.garbage = true;
-                ++garbage_count_;
+            auto& header = storage_.header_at(ref);
+            if ((header.flags & bank::garbage_flag) != 0u)
                 return;
-            }
-            if ((header.flags & bank::garbage_flag) == 0u)
-            {
-                header.flags |= bank::garbage_flag;
-                storage_.set_header(storage_.resolve_ref(ref), header);
-                ++garbage_count_;
-            }
+            header.flags |= bank::garbage_flag;
+            ++garbage_count_;
         }
 
         /// @brief Marks a clause as currently serving as an implication reason on the trail.
-        /// @param ref Reference to the clause to mark.
-        /// @throws None (noexcept).
         void mark_reason_clause(const ref_t ref) noexcept
         {
-            if (ref.valid())
-            {
-                const auto resolved = storage_.resolve_ref(ref);
-                if (!storage_.is_alive(resolved))
-                {
-                    metadata_for(resolved.offset()).reason = true;
-                    return;
-                }
-                auto header = storage_.header_of(resolved);
-                header.flags |= bank::reason_flag;
-                storage_.set_header(resolved, header);
-            }
+            if (storage_.is_alive(ref))
+                storage_.header_at(ref).flags |= bank::reason_flag;
         }
 
         /// @brief Drops the implication-reason mark from a clause that has stopped being a reason.
-        /// @details Reason marks protect a clause from reduction while a trail entry depends on it. They are set
-        /// when a literal is implied but were previously only cleared at the start of an episode, so marks
-        /// accumulated monotonically and eventually protected the whole learned-clause database -- reduction passes
-        /// then ran and deleted nothing. Backtracking clears the mark as it retracts the implication.
-        /// @param ref Reference to the clause to unmark.
-        /// @throws None (noexcept).
         void unmark_reason_clause(const ref_t ref) noexcept
         {
-            if (!ref.valid())
-                return;
-            const auto resolved = storage_.resolve_ref(ref);
-            if (!storage_.is_alive(resolved))
-            {
-                metadata_for(resolved.offset()).reason = false;
-                return;
-            }
-            clear_reason(ref);
+            if (storage_.is_alive(ref))
+                storage_.header_at(ref).flags &= static_cast<std::uint8_t>(~bank::reason_flag);
         }
 
         /// @brief Clears all transient implication-reason marks for a fresh solve episode.
         void clear_reason_clauses() noexcept
         {
             for (const auto ref: irredundant_refs_)
-                clear_reason(ref);
+                unmark_reason_clause(ref);
             for (const auto ref: redundant_refs_)
-                clear_reason(ref);
+                unmark_reason_clause(ref);
+        }
+
+        /// @brief Turns a learned clause into an irredundant one, so that reduction can never remove it.
+        /// @details Required whenever a learned clause is used to delete an original clause it subsumes: the
+        /// original is implied by the learned one only while the learned one exists, so the learned one has to
+        /// inherit the original's permanence. Returns false if the clause is not a live learned clause.
+        bool make_irredundant(const ref_t ref) noexcept
+        {
+            if (!storage_.is_alive(ref))
+                return false;
+            const auto it = std::find(redundant_refs_.begin(), redundant_refs_.end(), ref);
+            if (it == redundant_refs_.end())
+                return false;
+            redundant_refs_.erase(it);
+            irredundant_refs_.push_back(ref);
+            auto& header = storage_.header_at(ref);
+            header.flags &= static_cast<std::uint8_t>(~bank::redundant_flag);
+            header.tier = 0u;
+            return true;
         }
 
         /// @brief Rewrites database bookkeeping after a live clause moves to a new physical reference.
@@ -217,103 +206,56 @@ namespace kmx::sat::cdcl::clause
                 return;
             rewrite_ref_in_vector(irredundant_refs_, old_ref, new_ref);
             rewrite_ref_in_vector(redundant_refs_, old_ref, new_ref);
-            const auto* old_entry = metadata_of(old_ref.offset());
-            if (old_entry == nullptr)
-                return;
-            const auto migrated = *old_entry;
-            reset_metadata(old_ref.offset());
-            auto& new_entry = metadata_for(new_ref.offset());
-            new_entry = migrated;
-            if ((storage_.header_of(new_ref).flags & bank::garbage_flag) != 0u)
-                ++garbage_count_;
         }
 
         /// @brief Checks whether a clause is currently marked garbage.
-        /// @param ref Reference to the clause to query.
-        /// @return True if `ref` was previously passed to `mark_garbage`.
-        /// @throws None (noexcept).
         [[nodiscard]] bool is_garbage(const ref_t ref) const noexcept
         {
-            const auto* entry = ref.valid() ? metadata_of(ref.offset()) : nullptr;
-            const auto resolved = storage_.resolve_ref(ref);
-            return entry != nullptr && (storage_.is_alive(resolved) ?
-                                            (storage_.header_of(resolved).flags & bank::garbage_flag) != 0u : entry->garbage);
+            return storage_.is_alive(ref) && (storage_.header_of(ref).flags & bank::garbage_flag) != 0u;
         }
 
         /// @brief Checks whether a clause is currently serving as an implication reason.
-        /// @param ref Reference to the clause to query.
-        /// @return True if `ref` was previously passed to `mark_reason_clause` and not yet cleared.
-        /// @throws None (noexcept).
         [[nodiscard]] bool is_reason_clause(const ref_t ref) const noexcept
         {
-            const auto* entry = ref.valid() ? metadata_of(ref.offset()) : nullptr;
-            const auto resolved = storage_.resolve_ref(ref);
-            return entry != nullptr && (storage_.is_alive(resolved) ?
-                                            (storage_.header_of(resolved).flags & bank::reason_flag) != 0u : entry->reason);
+            return storage_.is_alive(ref) && (storage_.header_of(ref).flags & bank::reason_flag) != 0u;
         }
 
         /// @brief Returns a clause's current tier, or `default_tier` if it is not tracked.
-        /// @param ref Reference to the clause to query.
-        /// @return Current tier of `ref`.
-        /// @throws None (noexcept).
-        [[nodiscard]] tier_t tier_of(const ref_t ref) const noexcept
+        [[nodiscard]] tier_t tier_of(const ref_t ref) const noexcept { return tier_from(storage_.header_of(ref)); }
+
+        /// @brief Assigns a clause's tier outright, clamped to the valid range.
+        void set_tier(const ref_t ref, const tier_t tier) noexcept
         {
-            const auto header = storage_.header_of(storage_.resolve_ref(ref));
-            const auto* entry = metadata_of(ref.offset());
-            if (!storage_.is_alive(storage_.resolve_ref(ref)))
-                return entry != nullptr && entry->tracked ? entry->tier : default_tier;
-            return (header.flags & bank::tracked_flag) != 0u ? header.tier : default_tier;
+            if (!storage_.is_alive(ref))
+                return;
+            auto& header = storage_.header_at(ref);
+            header.flags |= bank::tracked_flag;
+            header.tier = static_cast<std::uint8_t>(tier > lowest_tier ? lowest_tier : tier);
         }
 
         /// @brief Moves a clause to a higher-quality tier, typically after repeated useful activity.
-        /// @param ref Reference to the clause to promote.
-        /// @throws None (noexcept).
         void promote_clause(const ref_t ref) noexcept
         {
-            if (!ref.valid())
+            if (!storage_.is_alive(ref))
                 return;
-            const auto resolved = storage_.resolve_ref(ref);
-            if (!storage_.is_alive(resolved))
-            {
-                auto& entry = metadata_for(resolved.offset());
-                entry.tracked = true;
-                if (entry.tier > 0u)
-                    --entry.tier;
-                return;
-            }
-            auto header = storage_.header_of(resolved);
+            auto& header = storage_.header_at(ref);
             header.flags |= bank::tracked_flag;
             if (header.tier > 0u)
                 --header.tier;
-            storage_.set_header(resolved, header);
         }
 
         /// @brief Moves a clause to a lower-quality tier, typically after prolonged inactivity.
-        /// @param ref Reference to the clause to demote.
-        /// @throws None (noexcept).
         void demote_clause(const ref_t ref) noexcept
         {
-            if (!ref.valid())
+            if (!storage_.is_alive(ref))
                 return;
-            const auto resolved = storage_.resolve_ref(ref);
-            if (!storage_.is_alive(resolved))
-            {
-                auto& entry = metadata_for(resolved.offset());
-                entry.tracked = true;
-                if (entry.tier < lowest_tier)
-                    ++entry.tier;
-                return;
-            }
-            auto header = storage_.header_of(resolved);
+            auto& header = storage_.header_at(ref);
             header.flags |= bank::tracked_flag;
             if (header.tier < lowest_tier)
                 ++header.tier;
-            storage_.set_header(resolved, header);
         }
 
         /// @brief Visits every irredundant (original) clause currently in the database.
-        /// @param visitor Callable invoked with each non-garbage irredundant clause's `ref_t`.
-        /// @throws None (noexcept).
         template <typename visitor_t>
         void iterate_irredundant(visitor_t&& visitor) const noexcept
         {
@@ -321,8 +263,6 @@ namespace kmx::sat::cdcl::clause
         }
 
         /// @brief Visits every redundant (learned) clause currently in the database.
-        /// @param visitor Callable invoked with each non-garbage redundant clause's `ref_t`.
-        /// @throws None (noexcept).
         template <typename visitor_t>
         void iterate_redundant(visitor_t&& visitor) const noexcept
         {
@@ -330,8 +270,10 @@ namespace kmx::sat::cdcl::clause
         }
 
         /// @brief Removes clauses already satisfied at decision level zero from the database.
+        /// @details A clause flagged as an active implication reason is never removed, whatever the predicate
+        /// says: an implication on the trail must not lose the clause that justifies it. Such a clause has its
+        /// garbage mark cleared instead.
         /// @param is_satisfied Predicate returning true for a clause `ref_t` that is satisfied and removable.
-        /// @throws None (noexcept).
         template <typename predicate_t>
         void flush_satisfied(predicate_t&& is_satisfied) noexcept
         {
@@ -339,78 +281,45 @@ namespace kmx::sat::cdcl::clause
             flush_matching(redundant_refs_, is_satisfied);
         }
 
+        /// @brief Slides every live clause down the arena in offset order and reports each move.
+        /// @param forward Callable `(ref_t old_ref, ref_t new_ref)` invoked for every live clause, moved or not.
+        /// @details Dead clauses simply disappear; the caller drops their watches when `forward` never names them.
+        template <typename forward_t>
+        void compact(forward_t&& forward) noexcept
+        {
+            compaction_slots_.clear();
+            compaction_slots_.reserve(irredundant_refs_.size() + redundant_refs_.size());
+            for (auto& ref: irredundant_refs_)
+                compaction_slots_.push_back(&ref);
+            for (auto& ref: redundant_refs_)
+                compaction_slots_.push_back(&ref);
+            std::sort(compaction_slots_.begin(), compaction_slots_.end(),
+                      [](const ref_t* left, const ref_t* right) noexcept { return left->offset() < right->offset(); });
+            storage_.compact(compaction_slots_, forward);
+        }
+
         /// @brief Captures a snapshot of clause-count/tier statistics for telemetry reporting.
-        /// @return Current clause-count statistics.
-        /// @throws None (noexcept).
         [[nodiscard]] stats stats_snapshot() const noexcept
         {
             return stats {irredundant_refs_.size(), redundant_refs_.size(), garbage_count_};
         }
 
         /// @brief Returns the underlying physical clause storage.
-        /// @return Reference to the owned `clause::storage` instance.
-        /// @throws None (noexcept).
         [[nodiscard]] storage& storage_of() noexcept { return storage_; }
 
         /// @copydoc storage_of
         [[nodiscard]] const storage& storage_of() const noexcept { return storage_; }
 
         /// @brief Exposes the raw irredundant reference set, including garbage-marked entries.
-        /// @return Snapshot view over irredundant references.
         [[nodiscard]] std::span<const ref_t> irredundant_refs() const noexcept { return irredundant_refs_; }
 
         /// @brief Exposes the raw redundant reference set, including garbage-marked entries.
-        /// @return Snapshot view over redundant references.
         [[nodiscard]] std::span<const ref_t> redundant_refs() const noexcept { return redundant_refs_; }
 
     private:
-        /// Per-clause bookkeeping, kept in a flat table indexed by 4-byte-aligned arena offset.
-        struct clause_metadata final
+        static tier_t tier_from(const bank::clause_header& header) noexcept
         {
-            double activity {};
-            std::uint32_t used_count {};
-            std::uint32_t glue {};
-            tier_t tier {};
-            bool tracked {};
-            bool garbage {};
-            bool reason {};
-        };
-
-        static std::size_t metadata_slot_of(const ref_t::offset_t offset) noexcept
-        {
-            return static_cast<std::size_t>(offset) / sizeof(std::uint32_t);
-        }
-
-        const clause_metadata* metadata_of(const ref_t::offset_t offset) const noexcept
-        {
-            const auto slot = metadata_slot_of(offset);
-            return slot < metadata_.size() ? &metadata_[slot] : nullptr;
-        }
-
-        clause_metadata& metadata_for(const ref_t::offset_t offset) noexcept
-        {
-            const auto slot = metadata_slot_of(offset);
-            if (slot >= metadata_.size())
-                metadata_.resize(slot + 1u);
-            return metadata_[slot];
-        }
-
-        void clear_reason(const ref_t ref) noexcept
-        {
-            const auto resolved = storage_.resolve_ref(ref);
-            auto header = storage_.header_of(resolved);
-            header.flags &= static_cast<std::uint8_t>(~bank::reason_flag);
-            storage_.set_header(resolved, header);
-        }
-
-        void reset_metadata(const ref_t::offset_t offset) noexcept
-        {
-            const auto slot = metadata_slot_of(offset);
-            if (slot >= metadata_.size())
-                return;
-            if ((storage_.header_of(ref_t {offset}).flags & bank::garbage_flag) != 0u)
-                --garbage_count_;
-            metadata_[slot] = clause_metadata {};
+            return (header.flags & bank::tracked_flag) != 0u ? tier_t {header.tier} : default_tier;
         }
 
         static void rewrite_ref_in_vector(std::vector<ref_t>& refs, const ref_t old_ref, const ref_t new_ref) noexcept
@@ -437,7 +346,20 @@ namespace kmx::sat::cdcl::clause
                 const auto ref = refs[read_index];
                 if (is_satisfied(ref))
                 {
-                    reset_metadata(ref.offset());
+                    if (is_reason_clause(ref))
+                    {
+                        auto& header = storage_.header_at(ref);
+                        if ((header.flags & bank::garbage_flag) != 0u)
+                        {
+                            header.flags &= static_cast<std::uint8_t>(~bank::garbage_flag);
+                            if (garbage_count_ != 0u)
+                                --garbage_count_;
+                        }
+                        refs[write_index++] = ref;
+                        continue;
+                    }
+                    if (is_garbage(ref) && garbage_count_ != 0u)
+                        --garbage_count_;
                     storage_.destroy_clause(ref);
                     continue;
                 }
@@ -449,7 +371,7 @@ namespace kmx::sat::cdcl::clause
         storage storage_ {};
         std::vector<ref_t> irredundant_refs_ {};
         std::vector<ref_t> redundant_refs_ {};
-        std::vector<clause_metadata> metadata_ {};
+        std::vector<ref_t*> compaction_slots_ {};
         std::size_t garbage_count_ {};
     };
 }

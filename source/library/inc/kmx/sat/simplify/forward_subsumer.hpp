@@ -120,12 +120,12 @@ namespace kmx::sat::simplify
                     if (candidate_index == left_index || !clauses_[candidate_index].active)
                         continue;
 
-                    const auto& candidate = clauses_[candidate_index];
+                    auto& candidate = clauses_[candidate_index];
                     const bool precedes_equal_clause = candidate_index < left_index && candidate.literals.size() == left.literals.size();
                     if ((candidate.literals.size() < left.literals.size() || precedes_equal_clause) &&
                         (candidate.signature & ~left.signature) == 0u && clause_subsumes(candidate.literals, left.literals))
                     {
-                        mark_subsumed(left);
+                        subsume(left, candidate);
                         left_subsumed = true;
                         break;
                     }
@@ -141,7 +141,7 @@ namespace kmx::sat::simplify
                     auto& candidate = clauses_[candidate_index];
                     if (left.literals.size() <= candidate.literals.size() && (left.signature & ~candidate.signature) == 0u &&
                         clause_subsumes(left.literals, candidate.literals))
-                        mark_subsumed(candidate);
+                        subsume(candidate, left);
                 }
             }
 
@@ -378,6 +378,23 @@ namespace kmx::sat::simplify
                 return {};
             const auto begin = occurrence_start_[slot];
             return {occurrence_entries_.data() + begin, occurrence_start_[slot + 1u] - begin};
+        }
+
+        /// @brief Deletes `subsumed`, which `subsuming` makes redundant.
+        /// @details An original clause may only be dropped in favour of a clause that is itself permanent: a
+        /// learned clause can be reduced away later, and the formula would then be weaker than the original.
+        /// So a learned clause that subsumes an original one is promoted to irredundant first (CaDiCaL does the
+        /// same). Before this rule the pigeonhole and bounded-model-checking instances of the classic set were
+        /// answered with models violating a deleted original clause.
+        void subsume(indexed_clause& subsumed, indexed_clause& subsuming) noexcept
+        {
+            if (!subsumed.redundant && subsuming.redundant)
+            {
+                if (!database_->make_irredundant(subsuming.ref))
+                    return;
+                subsuming.redundant = false;
+            }
+            mark_subsumed(subsumed);
         }
 
         void mark_subsumed(indexed_clause& clause) noexcept

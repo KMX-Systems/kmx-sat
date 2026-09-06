@@ -91,9 +91,18 @@ namespace kmx::sat::cdcl
                     else if constexpr (std::is_same_v<payload_t, bve_elimination>)
                     {
                         // The variable was resolved away, so the remaining model may falsify a clause it used to
-                        // satisfy. Give it whichever polarity rescues such a clause; the resolvents elimination
-                        // added guarantee that at most one polarity is ever demanded.
+                        // satisfy. The witness holds only the clauses it occurred in positively: false satisfies
+                        // the negative ones outright, and if any positive one is otherwise unsatisfied, true
+                        // rescues it without endangering the rest.
                         const auto eliminated = payload.eliminated_variable;
+                        // Force it false, overriding whatever the reduced model carried. That is not a default
+                        // for a missing value, it is the first half of the reconstruction rule: false satisfies
+                        // every clause the variable occurred in negatively, which is why those need no witness.
+                        // The override matters because the search reports a value for every variable index,
+                        // including eliminated ones it never assigned, so this variable arrives here already
+                        // labelled true and the repair below would then find nothing to do while the unwitnessed
+                        // negative clauses stayed violated.
+                        set_value(eliminated, false);
                         for_each_witness_clause(payload.witness_begin, payload.witness_end,
                                                 [this, eliminated](const std::span<const literal> clause) noexcept
                                                 {
@@ -191,11 +200,22 @@ namespace kmx::sat::cdcl
             for (const auto lit: clause)
             {
                 const auto index = static_cast<std::size_t>(lit.variable_of().index());
-                const auto value = index < values_.size() && values_[index];
-                if (value != lit.is_negated())
+                // A variable with no value yet cannot satisfy anything. Treating absent as false made every
+                // clause containing a negative literal over an unassigned variable look satisfied, so the
+                // elimination replay below skipped clauses it existed to repair.
+                if (index >= present_.size() || !present_[index])
+                    continue;
+                if (values_[index] != lit.is_negated())
                     return true;
             }
             return false;
+        }
+
+        /// @brief Returns whether a variable currently carries a value.
+        [[nodiscard]] bool has_value(const variable var) const noexcept
+        {
+            const auto index = static_cast<std::size_t>(var.index());
+            return index < present_.size() && present_[index];
         }
 
         /// @brief Splits one record's witness range into clauses and hands each to `visitor`.

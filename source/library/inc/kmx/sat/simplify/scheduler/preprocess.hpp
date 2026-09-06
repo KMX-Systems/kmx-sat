@@ -74,18 +74,30 @@ namespace kmx::sat::simplify::scheduler
         /// unsatisfiable instances: learned clauses mentioning an eliminated variable are not removed with it, and
         /// eliminations are not scoped to an incremental epoch, so a later episode can constrain a variable that no
         /// longer exists. Enable it explicitly through `enable_pass` once those two interactions are handled.
-        static constexpr std::array<pass_id, 12u> baseline_passes {pass_id::transitive_reducer,
-                                                                   pass_id::decomposition,
-                                                                   pass_id::probing,
-                                                                   pass_id::forward_subsumer,
-                                                                   pass_id::blocked,
-                                                                   pass_id::covered,
-                                                                   pass_id::fast,
-                                                                   pass_id::instantiation,
-                                                                   pass_id::factorizer,
-                                                                   pass_id::gate,
-                                                                   pass_id::congruence,
-                                                                   pass_id::vivifier};
+        /// @details `bounded` is deliberately absent. Bounded variable elimination is what collapses the auxiliary
+        /// variables of a Tseitin encoding -- enabling it takes a 1500-variable XOR chain from 0.16 s to 0.01 s --
+        /// but eliminating a variable discards the clauses constraining it, and this class is used behind an
+        /// incremental API. A clause added over an eliminated variable after a solve has nothing left to
+        /// contradict it, and the next solve answers satisfiable on an unsatisfiable formula. Making it safe for
+        /// incremental use needs the eliminated clauses restored when a later clause mentions the variable, which
+        /// is not implemented. Callers that add every clause before solving once can opt in through
+        /// `solve_request::enabled_pass_mask`; `baseline_pass_mask_with_variable_elimination` is that mask.
+        /// @brief Passes enabled by default. `decomposition` (equivalent-literal substitution) is deliberately
+        /// absent, like `bounded`: `equivalence_substitutor` merges variables without polarity and records no
+        /// witness for model reconstruction, so a substitution can produce a model that violates the original
+        /// formula (observed on `bmc-ibm-13`). It stays available by explicit enablement until that is fixed.
+        /// `congruence` shares the substitutor and is absent for the same reason, and `gate` extraction, which
+        /// only feeds congruence closure, goes with it: on a 114k-clause scheduling formula it was 3% of the
+        /// preprocessing instructions spent copying clauses for a consumer that never ran.
+        static constexpr std::array<pass_id, 9u> baseline_passes {pass_id::transitive_reducer,
+                                                                  pass_id::probing,
+                                                                  pass_id::forward_subsumer,
+                                                                  pass_id::blocked,
+                                                                  pass_id::covered,
+                                                                  pass_id::fast,
+                                                                  pass_id::instantiation,
+                                                                  pass_id::factorizer,
+                                                                  pass_id::vivifier};
 
         static constexpr std::array<std::string_view, 14> pass_names {
             "transitive_reducer", "decomposition", "probing", "forward_subsumer", "blocked",  "covered", "bounded", "fast",
@@ -113,6 +125,56 @@ namespace kmx::sat::simplify::scheduler
             }
         }
 
+        /// @brief Returns the bit representing one pass in an enabled-pass bitmask.
+        static constexpr std::uint64_t pass_bit(const pass_id id) noexcept
+        {
+            return std::uint64_t {1u} << static_cast<std::uint8_t>(id);
+        }
+
+        /// @brief Returns the bitmask of the default pass set.
+        static constexpr std::uint64_t baseline_pass_mask() noexcept
+        {
+            std::uint64_t mask {};
+            for (const auto id: baseline_passes)
+                mask |= pass_bit(id);
+            return mask;
+        }
+
+        /// @brief Returns the default pass set plus bounded variable elimination.
+        /// @details Only sound for a caller that states the whole problem before solving and never adds a clause
+        /// afterwards; see the note on `baseline_passes`.
+        static constexpr std::uint64_t baseline_pass_mask_with_variable_elimination() noexcept
+        {
+            return baseline_pass_mask() | pass_bit(pass_id::bounded);
+        }
+
+        /// @brief Replaces the enabled-pass set with an explicit bitmask, one bit per `pass_id`.
+        /// @details Backs `solve_request::enabled_pass_mask`, so a caller can state exactly which simplification
+        /// it wants -- including none. Tests of the search machinery need that: preprocessing is strong enough to
+        /// close a small formula outright, and a test that means to exercise propagation should say so rather than
+        /// depend on which passes happen to be in the default set.
+        /// @param mask Bitmask of enabled passes; zero disables every pass.
+        /// @throws None (noexcept).
+        void set_enabled_pass_mask(const std::uint64_t mask) noexcept
+        {
+            enabled_pass_mask_ = mask;
+            enabled_pass_count_ = 0u;
+            for (std::uint8_t value {}; value < pass_count; ++value)
+                if ((enabled_pass_mask_ & (std::uint64_t {1u} << value)) != 0u)
+                    ++enabled_pass_count_;
+        }
+
+        /// @brief Returns the current enabled-pass bitmask.
+        [[nodiscard]] std::uint64_t enabled_pass_mask() const noexcept { return enabled_pass_mask_; }
+
+        /// @brief Marks variables that eliminating passes must leave alone.
+        /// @param variables Variables the caller can still refer to after simplification.
+        /// @throws None (noexcept).
+        void set_frozen_variables(const std::span<const kmx::sat::variable> variables) noexcept
+        {
+            bounded_.set_frozen_variables(variables);
+        }
+
         /// @brief Attaches the clause database consumed by preprocess passes.
         /// @param database Clause database to simplify in place.
         /// @throws None (noexcept).
@@ -128,16 +190,19 @@ namespace kmx::sat::simplify::scheduler
             congruence_.attach_clause_database(database);
             profile_selector_.attach_clause_database(database);
             bounded_.attach_clause_database(database);
+            factorizer_.attach_clause_database(database);
         }
 
-        /// @brief Attaches the extension stack that bounded variable elimination records eliminations on.
+        /// @brief Attaches the extension stack that variable elimination and factoring record their changes on.
         /// @details Without this the eliminator cannot record what it removed, and a model of the reduced formula
-        /// could not be repaired into a model of the original, so the pass stays inert until it is attached.
+        /// could not be repaired into a model of the original, so the pass stays inert until it is attached; the
+        /// factorizer records the variables it introduces there so they are dropped from external models.
         /// @param extension_stack Journal receiving one record per eliminated variable.
         /// @throws None (noexcept).
         void attach_extension_stack(cdcl::stack::extension& extension_stack) noexcept
         {
             bounded_.attach_extension_stack(extension_stack);
+            factorizer_.attach_extension_stack(extension_stack);
         }
 
         void attach_clause_sink(extractor::backbone::clause_sink_t sink) noexcept
@@ -194,6 +259,7 @@ namespace kmx::sat::simplify::scheduler
             forward_subsumer_.attach_proof_manager(proof_manager);
             backbone_.attach_proof_manager(proof_manager);
             bounded_.attach_proof_manager(proof_manager);
+            factorizer_.attach_proof_manager(proof_manager);
         }
 
         /// @brief Requests that the current or next pipeline run abort before further passes.

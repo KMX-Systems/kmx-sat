@@ -1,11 +1,13 @@
 /// @file inc/kmx/sat/simplify/engine/probing.hpp
-/// @brief Failed literal probing and its useful implications.
+/// @brief Root-level unit propagation with clause strengthening, feeding backbone candidates.
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <algorithm>
+    #include <array>
     #include <cstddef>
     #include <cstdint>
-    #include <unordered_map>
+    #include <span>
     #include <vector>
 #endif
 #include <kmx/sat/cdcl/clause/database.hpp>
@@ -14,112 +16,54 @@
 
 namespace kmx::sat::simplify::engine
 {
-    /// @brief Failed literal probing and its useful implications.
+    /// @brief Root-level unit propagation with clause strengthening, feeding backbone candidates.
     /// @details
-    /// Failed-literal probing tentatively assumes one literal, propagates it, and observes the consequences without
-    /// committing to a real search decision: if propagating a literal leads to a conflict, its negation is a unit
-    /// fact (the literal is "failed"); if propagating it forces another literal true regardless of which polarity
-    /// was tried, a hyper-binary implication or backbone candidate has been found. `probe_literal` runs one such
-    /// trial propagation; `run_failed_literal_probing` sweeps candidate literals under a budget;
-    /// `learn_hyper_binary` records a shortcut binary implication discovered during probing (reducing future
-    /// propagation chain length); `record_backbone_candidate` forwards a literal implied identically under both
-    /// polarities to `backbone_extractor` for confirmation.
-    /// @note Every unit fact or hyper-binary clause this pass derives must be reported to `proof::proof_manager` like
-    /// any other derived clause.
+    /// `run_failed_literal_probing` closes the formula under its unit clauses: every clause that becomes unit once
+    /// the known units falsify all its other literals is shrunk to that literal in place, the literal joins the
+    /// units, and the closure continues until no clause changes. Each derived literal is reported as a backbone
+    /// candidate for `extractor::backbone` to confirm and emit.
+    ///
+    /// The closure runs in time linear in the formula: literals are propagated through occurrence lists and each
+    /// clause carries a count of its still-unassigned literals, exactly as the search's own propagation would do
+    /// it. The previous formulation rescanned every clause per derived unit through a hash map, which was
+    /// quadratic and dominated the preprocessing of bounded-model-checking instances with thousands of units.
+    /// A clause whose literals are all falsified is left alone: the search refutes the formula at its root.
     class probing final
     {
     public:
-        /// @brief Constructs a probing engine with no in-progress probe.
-        /// @throws None (noexcept).
         probing() noexcept = default;
 
-        /// @brief Attaches the clause database consumed by probing.
-        /// @param database Clause database to scan and potentially strengthen.
         void attach_database(cdcl::clause::database& database) noexcept { database_ = &database; }
 
-        /// @brief Attaches the proof manager used to report derived structural changes.
-        /// @param proof_manager Proof manager to notify about clause shrinking.
         void attach_proof_manager(kmx::sat::proof_manager& proof_manager) noexcept { proof_manager_ = &proof_manager; }
 
-        /// @brief Tentatively assumes and propagates one literal to observe its consequences.
-        /// @param lit Literal to probe.
-        /// @throws None (noexcept).
         void probe_literal(const literal lit) noexcept
         {
             (void) lit;
             ++probe_count_;
         }
 
-        /// @brief Sweeps candidate literals for failed-literal probing under the current pass budget.
-        /// @throws None (noexcept).
         void run_failed_literal_probing() noexcept
         {
             backbone_candidates_.clear();
+            std::fill(candidate_marks_.begin(), candidate_marks_.end(), 0u);
             if (database_ != nullptr)
-            {
-                bool changed {true};
-                while (changed)
-                {
-                    changed = false;
-                    auto assignments = collect_unit_assignments();
-                    auto& storage = database_->storage_of();
-                    for (const auto ref: active_refs())
-                    {
-                        if (!ref.valid() || database_->is_garbage(ref) || !storage.is_alive(ref))
-                            continue;
-
-                        const auto clause = storage.view_literals(ref);
-                        if (clause.size() <= 1u)
-                            continue;
-
-                        bool satisfied {};
-                        std::vector<literal> survivors {};
-                        survivors.reserve(clause.size());
-                        for (const auto lit: clause)
-                        {
-                            const auto it = assignments.find(lit.variable_of().index());
-                            if (it == assignments.end())
-                            {
-                                survivors.push_back(lit);
-                                continue;
-                            }
-
-                            if (literal_is_satisfied(lit, it->second))
-                            {
-                                satisfied = true;
-                                break;
-                            }
-                        }
-
-                        if (satisfied || survivors.size() != 1u || survivors.size() >= clause.size())
-                            continue;
-
-                        storage.rewrite_clause_literals(ref, survivors);
-                        storage.shrink_clause(ref, 1u);
-                        if (proof_manager_ != nullptr)
-                            proof_manager_->on_shrink_clause(ref, survivors);
-
-                        assignments[survivors[0].variable_of().index()] = !survivors[0].is_negated();
-                        ++hyper_binary_count_;
-                        record_backbone_candidate(survivors[0]);
-                        changed = true;
-                    }
-                }
-            }
+                propagate_units_to_fixpoint();
             probing_completed_ = true;
         }
 
-        /// @brief Records a hyper-binary implication shortcut discovered while probing.
-        /// @throws None (noexcept).
         void learn_hyper_binary() noexcept { ++hyper_binary_count_; }
 
-        /// @brief Forwards a literal implied identically under both polarities as a backbone candidate.
-        /// @param lit Candidate backbone literal.
-        /// @throws None (noexcept).
         void record_backbone_candidate(const literal lit) noexcept
         {
-            if (std::find(backbone_candidates_.begin(), backbone_candidates_.end(), lit) == backbone_candidates_.end())
+            const auto slot = static_cast<std::size_t>(lit.raw());
+            if (slot >= candidate_marks_.size())
+                candidate_marks_.resize(slot + 1u, 0u);
+            if (candidate_marks_[slot] == 0u)
+            {
+                candidate_marks_[slot] = 1u;
                 backbone_candidates_.push_back(lit);
+            }
             ++backbone_candidate_count_;
         }
 
@@ -134,46 +78,113 @@ namespace kmx::sat::simplify::engine
         bool probing_completed() const noexcept { return probing_completed_; }
 
     private:
-        using assignment_map = std::unordered_map<std::uint32_t, bool>;
-
-        std::vector<cdcl::clause::ref_t> active_refs() const noexcept
+        void propagate_units_to_fixpoint() noexcept
         {
-            std::vector<cdcl::clause::ref_t> refs {};
-            if (database_ == nullptr)
-                return refs;
-
-            const auto stats = database_->stats_snapshot();
-            refs.reserve(stats.irredundant_count + stats.redundant_count);
-            database_->iterate_irredundant([&](const cdcl::clause::ref_t ref) noexcept { refs.push_back(ref); });
-            database_->iterate_redundant([&](const cdcl::clause::ref_t ref) noexcept { refs.push_back(ref); });
-            return refs;
-        }
-
-        assignment_map collect_unit_assignments() const noexcept
-        {
-            assignment_map assignments {};
-            if (database_ == nullptr)
-                return assignments;
-
-            for (const auto ref: active_refs())
+            auto& storage = database_->storage_of();
+            refs_.clear();
+            literal::raw_t highest_raw {};
+            const auto collect = [&](const cdcl::clause::ref_t ref) noexcept
             {
-                if (!ref.valid() || database_->is_garbage(ref))
-                    continue;
+                if (!ref.valid() || !storage.is_alive(ref))
+                    return;
+                for (const auto lit: storage.view_literals(ref))
+                    highest_raw = std::max(highest_raw, lit.raw());
+                refs_.push_back(ref);
+            };
+            database_->iterate_irredundant(collect);
+            database_->iterate_redundant(collect);
+            if (refs_.empty())
+                return;
 
-                const auto clause = database_->storage_of().view_literals(ref);
-                if (clause.size() != 1u)
-                    continue;
+            const auto literal_slots = static_cast<std::size_t>(highest_raw) + 2u;
+            values_.assign(literal_slots, 0);
+            queue_.clear();
 
-                const auto unit = clause.front();
-                assignments[unit.variable_of().index()] = !unit.is_negated();
+            // Units first: they seed the propagation. Contradicting units are left for the search to refute.
+            for (const auto ref: refs_)
+            {
+                const auto literals = storage.view_literals(ref);
+                if (literals.size() == 1u)
+                    assign_if_unassigned(literals.front());
             }
 
-            return assignments;
+            // Occurrence index over the non-unit clauses, built with a counting pass.
+            occurrence_starts_.assign(literal_slots + 1u, 0u);
+            for (const auto ref: refs_)
+            {
+                const auto literals = storage.view_literals(ref);
+                if (literals.size() < 2u)
+                    continue;
+                for (const auto lit: literals)
+                    ++occurrence_starts_[lit.raw() + 1u];
+            }
+            for (std::size_t index = 1u; index < occurrence_starts_.size(); ++index)
+                occurrence_starts_[index] += occurrence_starts_[index - 1u];
+            occurrences_.assign(occurrence_starts_.back(), 0u);
+            occurrence_fill_.assign(occurrence_starts_.begin(), occurrence_starts_.end() - 1);
+            // Every clause starts with all its literals counted as unassigned; the seed units are then applied by
+            // the closure below like any derived literal, so each assignment is accounted for exactly once.
+            unassigned_counts_.assign(refs_.size(), 0u);
+            satisfied_.assign(refs_.size(), 0u);
+            for (std::uint32_t index = 0u; index < refs_.size(); ++index)
+            {
+                const auto literals = storage.view_literals(refs_[index]);
+                if (literals.size() < 2u)
+                    continue;
+                for (const auto lit: literals)
+                    occurrences_[occurrence_fill_[lit.raw()]++] = index;
+                unassigned_counts_[index] = static_cast<std::uint32_t>(literals.size());
+            }
+
+            // Closure: a literal made true satisfies the clauses holding it and falsifies its negation elsewhere.
+            for (std::size_t head = 0u; head < queue_.size(); ++head)
+            {
+                const auto lit = queue_[head];
+                for (auto position = occurrence_starts_[lit.raw()]; position < occurrence_starts_[lit.raw() + 1u]; ++position)
+                    satisfied_[occurrences_[position]] = 1u;
+                const auto falsified = lit.negated().raw();
+                for (auto position = occurrence_starts_[falsified]; position < occurrence_starts_[falsified + 1u]; ++position)
+                {
+                    const auto index = occurrences_[position];
+                    if (satisfied_[index] != 0u || unassigned_counts_[index] == 0u)
+                        continue;
+                    if (--unassigned_counts_[index] == 1u)
+                        strengthen_to_unit(index);
+                }
+            }
         }
 
-        static bool literal_is_satisfied(const literal lit, const bool assigned_true) noexcept
+        /// @brief Shrinks a clause with exactly one unassigned literal to that literal and propagates it.
+        void strengthen_to_unit(const std::uint32_t index) noexcept
         {
-            return lit.is_negated() ? !assigned_true : assigned_true;
+            auto& storage = database_->storage_of();
+            const auto ref = refs_[index];
+            const auto literals = storage.view_literals(ref);
+            literal survivor {};
+            for (const auto lit: literals)
+                if (values_[lit.raw()] == 0)
+                    survivor = lit;
+            if (survivor.raw() == 0u)
+                return;
+
+            const std::array<literal, 1> unit {survivor};
+            storage.rewrite_clause_literals(ref, unit);
+            storage.shrink_clause(ref, 1u);
+            if (proof_manager_ != nullptr)
+                proof_manager_->on_shrink_clause(ref, unit);
+            satisfied_[index] = 1u;
+            ++hyper_binary_count_;
+            record_backbone_candidate(survivor);
+            assign_if_unassigned(survivor);
+        }
+
+        void assign_if_unassigned(const literal lit) noexcept
+        {
+            if (values_[lit.raw()] != 0 || values_[lit.negated().raw()] != 0)
+                return;
+            values_[lit.raw()] = 1;
+            values_[lit.negated().raw()] = -1;
+            queue_.push_back(lit);
         }
 
         cdcl::clause::database* database_ {};
@@ -182,6 +193,15 @@ namespace kmx::sat::simplify::engine
         std::size_t hyper_binary_count_ {};
         std::size_t backbone_candidate_count_ {};
         std::vector<literal> backbone_candidates_ {};
+        std::vector<std::uint8_t> candidate_marks_ {};
+        std::vector<cdcl::clause::ref_t> refs_ {};
+        std::vector<std::int8_t> values_ {};
+        std::vector<literal> queue_ {};
+        std::vector<std::uint32_t> occurrence_starts_ {};
+        std::vector<std::uint32_t> occurrence_fill_ {};
+        std::vector<std::uint32_t> occurrences_ {};
+        std::vector<std::uint32_t> unassigned_counts_ {};
+        std::vector<std::uint8_t> satisfied_ {};
         bool probing_completed_ {};
     };
 }

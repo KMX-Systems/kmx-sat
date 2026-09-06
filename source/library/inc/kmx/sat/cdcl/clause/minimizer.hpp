@@ -84,49 +84,60 @@ namespace kmx::sat::cdcl::clause
             if (literals.size() <= 1u)
                 return;
 
-            std::unordered_set<literal::raw_t> exact_literals {};
-            exact_literals.reserve(literals.size());
+            begin_minimization_scan();
             for (const auto lit: literals)
-                exact_literals.insert(lit.raw());
+                mark_exact_literal(lit.raw());
 
-            std::unordered_set<std::uint32_t> removable_variables {};
-            std::unordered_set<std::uint32_t> visiting_variables {};
+            reason_stack_.clear();
             const auto can_remove = [&](const auto& self, const variable var) noexcept -> bool
             {
                 const auto variable_index = var.index();
-                if (removable_variables.contains(variable_index))
+                if (is_known_removable(variable_index))
                     return true;
-                if (!visiting_variables.insert(variable_index).second)
+                if (!begin_visit(variable_index))
                     return false;
 
                 const auto reason_view = reason_of(context, var);
                 if (reason_view.empty())
                 {
-                    visiting_variables.erase(variable_index);
+                    end_visit(variable_index);
                     return false;
                 }
 
-                const std::vector<literal> reason {reason_view.begin(), reason_view.end()};
-                for (const auto reason_literal: reason)
+                // `reason_of` hands back a span into one shared scratch buffer that the next recursive call
+                // overwrites, so this level's literals must be held somewhere the recursion owns. They go on a
+                // single stack that is truncated on the way out, rather than into a per-level vector: this
+                // recursion runs on every learned clause, and a heap allocation per level made the allocator one
+                // of the largest single costs in the profile.
+                const auto base = reason_stack_.size();
+                reason_stack_.insert(reason_stack_.end(), reason_view.begin(), reason_view.end());
+                const auto count = reason_stack_.size() - base;
+
+                bool removable = true;
+                for (std::size_t offset = 0u; offset < count; ++offset)
                 {
+                    // Re-indexed rather than held by reference: a deeper call can grow the stack and move it.
+                    const auto reason_literal = reason_stack_[base + offset];
                     if (reason_literal.variable_of().index() == variable_index || level_of(context, reason_literal.variable_of()) == 0u ||
-                        exact_literals.contains(reason_literal.raw()))
+                        is_exact_literal(reason_literal.raw()))
                         continue;
 
                     if (!self(self, reason_literal.variable_of()))
                     {
-                        visiting_variables.erase(variable_index);
-                        return false;
+                        removable = false;
+                        break;
                     }
                 }
 
-                visiting_variables.erase(variable_index);
-                removable_variables.insert(variable_index);
-                return true;
+                reason_stack_.resize(base);
+                end_visit(variable_index);
+                if (removable)
+                    mark_removable(variable_index);
+                return removable;
             };
 
-            std::vector<literal> minimized_literals {};
-            minimized_literals.reserve(literals.size());
+            auto& minimized_literals = minimized_literals_scratch_;
+            minimized_literals.clear();
             minimized_literals.push_back(literals.front());
             for (std::size_t index = 1u; index < literals.size(); ++index)
             {
@@ -232,6 +243,75 @@ namespace kmx::sat::cdcl::clause
         std::vector<std::uint32_t> distinct_scratch_ {};
         storage* storage_ {};
         database* database_ {};
+        /// @brief Opens a fresh minimization scan, invalidating every mark from the previous one.
+        /// @details The three membership sets this pass needs -- the clause's own literals, variables proved
+        /// removable, and variables currently on the recursion stack -- were `std::unordered_set`s rebuilt per
+        /// learned clause. Stamped arrays give the same answers without hashing or allocating, which matters
+        /// because this runs once per conflict.
+        void begin_minimization_scan() noexcept
+        {
+            if (++minimization_stamp_ == 0u)
+            {
+                std::fill(exact_literal_stamps_.begin(), exact_literal_stamps_.end(), 0u);
+                std::fill(removable_stamps_.begin(), removable_stamps_.end(), 0u);
+                std::fill(visiting_stamps_.begin(), visiting_stamps_.end(), 0u);
+                minimization_stamp_ = 1u;
+            }
+        }
+
+        static void stamp_at(std::vector<std::uint32_t>& stamps, const std::size_t index, const std::uint32_t stamp) noexcept
+        {
+            if (index >= stamps.size())
+                stamps.resize(index + 1u, 0u);
+            stamps[index] = stamp;
+        }
+
+        static bool has_stamp(const std::vector<std::uint32_t>& stamps, const std::size_t index, const std::uint32_t stamp) noexcept
+        {
+            return index < stamps.size() && stamps[index] == stamp;
+        }
+
+        void mark_exact_literal(const literal::raw_t raw) noexcept
+        {
+            stamp_at(exact_literal_stamps_, static_cast<std::size_t>(raw), minimization_stamp_);
+        }
+
+        [[nodiscard]] bool is_exact_literal(const literal::raw_t raw) const noexcept
+        {
+            return has_stamp(exact_literal_stamps_, static_cast<std::size_t>(raw), minimization_stamp_);
+        }
+
+        void mark_removable(const std::uint32_t variable_index) noexcept
+        {
+            stamp_at(removable_stamps_, static_cast<std::size_t>(variable_index), minimization_stamp_);
+        }
+
+        [[nodiscard]] bool is_known_removable(const std::uint32_t variable_index) const noexcept
+        {
+            return has_stamp(removable_stamps_, static_cast<std::size_t>(variable_index), minimization_stamp_);
+        }
+
+        /// @brief Marks a variable as being expanded, reporting false if it already was (a cycle in the reasons).
+        [[nodiscard]] bool begin_visit(const std::uint32_t variable_index) noexcept
+        {
+            if (has_stamp(visiting_stamps_, static_cast<std::size_t>(variable_index), minimization_stamp_))
+                return false;
+            stamp_at(visiting_stamps_, static_cast<std::size_t>(variable_index), minimization_stamp_);
+            return true;
+        }
+
+        void end_visit(const std::uint32_t variable_index) noexcept
+        {
+            if (static_cast<std::size_t>(variable_index) < visiting_stamps_.size())
+                visiting_stamps_[variable_index] = 0u;
+        }
+
+        std::vector<literal> reason_stack_ {};
+        std::vector<literal> minimized_literals_scratch_ {};
+        std::vector<std::uint32_t> exact_literal_stamps_ {};
+        std::vector<std::uint32_t> removable_stamps_ {};
+        std::vector<std::uint32_t> visiting_stamps_ {};
+        std::uint32_t minimization_stamp_ {};
         std::unordered_map<ref_t::offset_t, std::uint32_t> glue_ {};
         std::unordered_map<ref_t::offset_t, std::uint32_t> target_sizes_ {};
         std::unordered_set<ref_t::offset_t> minimized_ {};

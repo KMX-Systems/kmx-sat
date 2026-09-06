@@ -21,7 +21,14 @@ CppApplication {
         // noise). -march=native is likewise omitted so a release build stays portable and reproducible, which is
         // what the clean-checkout gates claim; pass it explicitly when tuning for one machine.
         cpp.commonCompilerFlags: ["-O3", "-flto=auto"]
-        cpp.driverLinkerFlags: ["-flto=auto"]
+        // Statically linked. Every instance in the corpus that finishes in a few milliseconds is dominated by
+        // process startup rather than by search, and resolving libstdc++/libgcc/libm through the dynamic loader
+        // is most of that: measured over 300 runs, sat_unit.cnf takes 0.90 ms dynamically linked and 0.44 ms
+        // statically, against 0.97 ms for CaDiCaL. It costs binary size (0.3 MB -> 3.0 MB) and nothing else here:
+        // the CLI reads a file and computes, with no dlopen and no NSS lookups to be caught by static glibc. It
+        // also removes the libstdc++ version dependency from the shipped binary, which is the same portability
+        // goal that keeps -march=native out of this build.
+        cpp.driverLinkerFlags: ["-flto=auto", "-static"]
     }
     Group {
         fileTagsFilter: product.type

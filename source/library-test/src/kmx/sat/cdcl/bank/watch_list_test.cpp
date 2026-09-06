@@ -19,9 +19,11 @@ namespace kmx::sat::cdcl
 
         const literal lit_a {variable {1}, false};
         const literal lit_b {variable {2}, false};
-        const cdcl::clause::ref_t ref_1 {1};
-        const cdcl::clause::ref_t ref_2 {2};
-        const cdcl::clause::ref_t ref_3 {3};
+        // Watch entries fold the binary flag into the low bit of the reference, so clause offsets are the
+        // four-byte-aligned values the arena hands out.
+        const cdcl::clause::ref_t ref_1 {4};
+        const cdcl::clause::ref_t ref_2 {8};
+        const cdcl::clause::ref_t ref_3 {12};
 
         watches.watch_literal(lit_a, watch {lit_b, ref_1});
         watches.watch_literal(lit_a, watch {lit_b, ref_2, true});
@@ -103,8 +105,10 @@ namespace kmx::sat::cdcl
         const literal second_blocking {variable {54u}, false};
         const literal first_binary {variable {55u}, true};
         const literal second_binary {variable {56u}, true};
-        const clause::ref_t shared_ref {201u};
+        const clause::ref_t shared_ref {200u};
 
+        // For a binary clause the blocking literal is the other literal of the clause, so the two names refer to
+        // the same field; setting one sets both.
         watch canonical {first_blocking, shared_ref, true};
         canonical.set_binary_literal(first_binary);
         watch duplicate {second_blocking, shared_ref, true};
@@ -120,7 +124,7 @@ namespace kmx::sat::cdcl
         REQUIRE(merged_entries.size() == 1u);
         REQUIRE(merged_entries.front().clause_ref() == shared_ref);
         REQUIRE(merged_entries.front().is_binary());
-        REQUIRE(merged_entries.front().blocking_literal() == first_blocking);
+        REQUIRE(merged_entries.front().blocking_literal() == first_binary);
         REQUIRE(merged_entries.front().binary_literal() == first_binary);
     }
 

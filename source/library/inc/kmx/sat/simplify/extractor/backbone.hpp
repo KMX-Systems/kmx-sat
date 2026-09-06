@@ -1,10 +1,12 @@
 /// @file inc/kmx/sat/simplify/extractor/backbone.hpp
-/// @brief Binary or sweep-discovered backbone extraction.
+/// @brief Confirms backbone candidates produced by probing and emits them as unit facts.
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
     #include <algorithm>
     #include <array>
+    #include <cstddef>
+    #include <cstdint>
     #include <functional>
     #include <vector>
 #endif
@@ -16,90 +18,95 @@
 
 namespace kmx::sat::simplify::extractor
 {
-    /// @brief Binary or sweep-discovered backbone extraction.
+    /// @brief Confirms backbone candidates produced by probing and emits them as unit facts.
     /// @details
-    /// A backbone literal is true in every model of the formula; knowing one lets the solver fix it as a permanent
-    /// unit fact instead of re-deriving it repeatedly. `extractor::backbone` consolidates candidates from two
-    /// sources: `engine::probing::record_backbone_candidate` (a literal implied identically under both polarities
-    /// during failed-literal probing) and `engine::sweep::extract_backbone` (confirmed exhaustively by the embedded
-    /// micro-solver over a small variable cluster). `record_candidate` stages a candidate from either source;
-    /// `confirm_candidate` re-validates it against the full clause set before committing; `emit_unit_fact` registers
-    /// the confirmed backbone literal as a permanent unit clause, reporting it to `proof::proof_manager` like any
-    /// other derived fact.
+    /// `record_candidate` collects literals that root-level propagation derived, `confirm_candidate` keeps those
+    /// that no unit clause contradicts, and `emit_unit_fact` adds a unit clause for each confirmed literal the
+    /// database does not already state. Membership in the three sets and the presence of unit clauses are
+    /// answered from per-literal mark tables: the unit table is rebuilt once per `reset` from the database and
+    /// kept current as units are emitted, so a run with thousands of candidates costs one pass over the
+    /// formula rather than one per candidate.
     class backbone final
     {
     public:
         using clause_sink_t = std::function<void(cdcl::clause::ref_t)>;
 
-        /// @brief Constructs a backbone extractor with embedded probing and sweep engines.
-        /// @throws None (noexcept).
         backbone() noexcept = default;
 
-        void attach_database(cdcl::clause::database& database) noexcept { database_ = &database; }
+        void attach_database(cdcl::clause::database& database) noexcept
+        {
+            database_ = &database;
+            unit_index_valid_ = false;
+        }
 
         void attach_proof_manager(kmx::sat::proof_manager& proof_manager) noexcept { proof_manager_ = &proof_manager; }
 
         void attach_clause_sink(clause_sink_t sink) noexcept { clause_sink_ = std::move(sink); }
 
-        /// @brief Clears episode-local candidates, confirmations, and emitted-fact history.
         void reset() noexcept
         {
             candidates_.clear();
             confirmed_.clear();
             emitted_.clear();
+            std::fill(candidate_marks_.begin(), candidate_marks_.end(), 0u);
+            std::fill(confirmed_marks_.begin(), confirmed_marks_.end(), 0u);
+            std::fill(emitted_marks_.begin(), emitted_marks_.end(), 0u);
+            unit_index_valid_ = false;
         }
 
-        /// @brief Stages a candidate backbone literal discovered by probing or sweeping.
-        /// @param lit Candidate literal.
-        /// @throws None (noexcept).
         void record_candidate(const literal lit) noexcept
         {
             if (lit.raw() == 0u)
                 return;
-            if (std::find(candidates_.begin(), candidates_.end(), lit.negated()) != candidates_.end())
+            if (marked(candidate_marks_, lit.negated()))
                 return;
-            if (std::find(candidates_.begin(), candidates_.end(), lit) == candidates_.end())
+            if (!marked(candidate_marks_, lit))
+            {
+                mark(candidate_marks_, lit);
                 candidates_.push_back(lit);
+            }
         }
 
-        /// @brief Re-validates a staged candidate against the full clause set before committing it.
-        /// @param lit Candidate literal to confirm.
-        /// @throws None (noexcept).
         void confirm_candidate(const literal lit) noexcept
         {
-            if (std::find(candidates_.begin(), candidates_.end(), lit) == candidates_.end())
+            if (!marked(candidate_marks_, lit))
                 return;
 
             if (database_ != nullptr && has_unit_clause(lit.negated()))
                 return;
 
-            if (std::find(confirmed_.begin(), confirmed_.end(), lit.negated()) != confirmed_.end())
+            if (marked(confirmed_marks_, lit.negated()))
                 return;
 
-            if (std::find(confirmed_.begin(), confirmed_.end(), lit) == confirmed_.end())
+            if (!marked(confirmed_marks_, lit))
+            {
+                mark(confirmed_marks_, lit);
                 confirmed_.push_back(lit);
+            }
         }
 
-        /// @brief Registers a confirmed backbone literal as a permanent unit fact.
-        /// @param lit Confirmed backbone literal.
-        /// @throws None (noexcept).
         void emit_unit_fact(const literal lit) noexcept
         {
-            if (std::find(confirmed_.begin(), confirmed_.end(), lit) == confirmed_.end())
+            if (!marked(confirmed_marks_, lit))
                 return;
 
-            if (std::find(emitted_.begin(), emitted_.end(), lit) != emitted_.end())
+            if (marked(emitted_marks_, lit))
                 return;
 
             if (database_ != nullptr && !has_unit_clause(lit))
             {
                 const auto ref = database_->add_clause(std::array<literal, 1> {lit}, true);
-                if (ref.valid() && clause_sink_)
-                    clause_sink_(ref);
-                if (ref.valid() && proof_manager_ != nullptr)
-                    proof_manager_->on_add_derived(ref, std::array<literal, 1> {lit});
+                if (ref.valid())
+                {
+                    mark(unit_marks_, lit);
+                    if (clause_sink_)
+                        clause_sink_(ref);
+                    if (proof_manager_ != nullptr)
+                        proof_manager_->on_add_derived(ref, std::array<literal, 1> {lit});
+                }
             }
 
+            mark(emitted_marks_, lit);
             emitted_.push_back(lit);
         }
 
@@ -112,26 +119,41 @@ namespace kmx::sat::simplify::extractor
         literal last_emitted_literal() const noexcept { return emitted_.empty() ? literal {} : emitted_.back(); }
 
     private:
-        bool has_unit_clause(const literal lit) const noexcept
+        static bool marked(const std::vector<std::uint8_t>& marks, const literal lit) noexcept
+        {
+            const auto slot = static_cast<std::size_t>(lit.raw());
+            return slot < marks.size() && marks[slot] != 0u;
+        }
+
+        static void mark(std::vector<std::uint8_t>& marks, const literal lit) noexcept
+        {
+            const auto slot = static_cast<std::size_t>(lit.raw());
+            if (slot >= marks.size())
+                marks.resize(slot + 1u, 0u);
+            marks[slot] = 1u;
+        }
+
+        /// @brief Answers whether the database currently states `lit` as a unit clause, from an index built once
+        /// per reset and kept current as units are emitted.
+        bool has_unit_clause(const literal lit) noexcept
         {
             if (database_ == nullptr)
                 return false;
-
-            bool found = false;
-            const auto& storage = database_->storage_of();
-            const auto search_ref = [&found, &storage, lit](const cdcl::clause::ref_t ref) noexcept
+            if (!unit_index_valid_)
             {
-                const auto literals = storage.view_literals(ref);
-                 if (literals.size() == 1u && literals.front() == lit)
-                        found = true;
-            };
-
-            database_->iterate_irredundant(search_ref);
-            if (found)
-                return true;
-
-            database_->iterate_redundant(search_ref);
-            return found;
+                std::fill(unit_marks_.begin(), unit_marks_.end(), 0u);
+                const auto& storage = database_->storage_of();
+                const auto index_unit = [&](const cdcl::clause::ref_t ref) noexcept
+                {
+                    const auto literals = storage.view_literals(ref);
+                    if (literals.size() == 1u)
+                        mark(unit_marks_, literals.front());
+                };
+                database_->iterate_irredundant(index_unit);
+                database_->iterate_redundant(index_unit);
+                unit_index_valid_ = true;
+            }
+            return marked(unit_marks_, lit);
         }
 
         cdcl::clause::database* database_ {};
@@ -140,6 +162,11 @@ namespace kmx::sat::simplify::extractor
         std::vector<literal> candidates_ {};
         std::vector<literal> confirmed_ {};
         std::vector<literal> emitted_ {};
+        std::vector<std::uint8_t> candidate_marks_ {};
+        std::vector<std::uint8_t> confirmed_marks_ {};
+        std::vector<std::uint8_t> emitted_marks_ {};
+        std::vector<std::uint8_t> unit_marks_ {};
+        bool unit_index_valid_ {};
         engine::probing probing_ {};
         engine::sweep sweep_ {};
     };

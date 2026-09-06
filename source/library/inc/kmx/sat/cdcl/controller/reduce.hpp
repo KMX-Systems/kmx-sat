@@ -45,6 +45,7 @@ namespace kmx::sat::cdcl::controller
         {
             reduce_pending_ = false;
             conflict_count_ = 0u;
+            next_reduction_at_ = reduction_interval_;
             select_call_count_ = 0u;
             reduce_call_count_ = 0u;
             flush_call_count_ = 0u;
@@ -73,12 +74,30 @@ namespace kmx::sat::cdcl::controller
         {
             ++select_call_count_;
             last_candidates_.clear();
+            ranked_scratch_.clear();
 
-            database.iterate_redundant([&](const clause::ref_t candidate) noexcept { evaluate_candidate(database, candidate); });
+            // Rank on a key computed once per clause rather than on a comparator that re-reads two clause
+            // headers per comparison: with tens of thousands of candidates the sort was most of a reduction.
+            database.iterate_redundant(
+                [&](const clause::ref_t candidate) noexcept
+                {
+                    if (!candidate.valid() || database.is_reason_clause(candidate))
+                        return;
+                    const auto quality = database.quality_of(candidate);
+                    // A clause that served as a reason since the last pass is not a candidate: usage since the
+                    // last reduction is the one signal that separates the clauses a structured formula keeps
+                    // coming back to from the ones it never touches again, and without it the pass threw away
+                    // what `hole9` and `bmc-ibm-12` had to relearn a thousand times over.
+                    if (quality.tier >= clause::database::default_tier && !retained_by_activity(quality) && quality.used_count == 0u)
+                        ranked_scratch_.push_back(ranked_candidate {rank_key(quality), candidate.offset()});
+                });
 
-            std::sort(last_candidates_.begin(), last_candidates_.end(), [&database](const auto left, const auto right) noexcept {
-                return compare_candidates(database, left, right);
+            std::sort(ranked_scratch_.begin(), ranked_scratch_.end(), [](const ranked_candidate& left, const ranked_candidate& right) noexcept {
+                return left.key != right.key ? left.key > right.key : left.offset < right.offset;
             });
+            last_candidates_.reserve(ranked_scratch_.size());
+            for (const auto& ranked: ranked_scratch_)
+                last_candidates_.push_back(ranked.offset);
 
             last_selected_candidate_count_ = last_candidates_.size();
             trim_to_reduction_quota();
@@ -172,6 +191,43 @@ namespace kmx::sat::cdcl::controller
             reduce_pending_ = false;
         }
 
+        /// @brief Recomputes tier membership for the redundant set from each clause's current glue.
+        /// @details The no-argument overload only closes out the pass; tiers themselves were never recomputed, so
+        /// every learned clause kept the tier it was born with. That had two consequences: the glue a clause was
+        /// eventually measured at never influenced whether it was kept, and anything the minimizer promoted was
+        /// pushed below `default_tier` permanently, which excluded it from candidate selection for the rest of the
+        /// solve. Classifying from glue on each pass is the standard three-tier policy: very low glue is the core
+        /// worth keeping, mid glue is kept while it stays useful, and the rest is what reduction is for.
+        /// @param database Clause database whose redundant clauses should be reclassified.
+        void update_tiers(clause::database& database) noexcept
+        {
+            ++update_tiers_call_count_;
+            if (reduce_pending_)
+                ++reduction_pass_count_;
+            reduce_pending_ = false;
+
+            tier_scratch_.clear();
+            database.iterate_redundant([this](const clause::ref_t ref) noexcept { tier_scratch_.push_back(ref); });
+            for (const auto ref: tier_scratch_)
+            {
+                const auto quality = database.quality_of(ref);
+                const auto tier = quality.glue <= core_glue_limit_       ? clause::database::tier_t {0}
+                                  : quality.glue <= retained_glue_limit_ ? clause::database::default_tier
+                                                                         : clause::database::lowest_tier;
+                database.set_tier(ref, tier);
+                // Usage is "since the last pass": a mid-glue clause that was used keeps one pass of grace, a
+                // high-glue one must earn its place again before the next pass.
+                const auto grace = quality.used_count != 0u && tier == clause::database::default_tier ? std::uint8_t {1} : std::uint8_t {0};
+                database.set_used_count(ref, grace);
+            }
+        }
+
+        /// @brief Sets the glue at or below which a learned clause is treated as core and never reduced.
+        void set_core_glue_limit(const std::uint32_t glue) noexcept { core_glue_limit_ = glue; }
+
+        /// @brief Sets the glue at or below which a learned clause is retained while it stays useful.
+        void set_retained_glue_limit(const std::uint32_t glue) noexcept { retained_glue_limit_ = glue; }
+
         /// @brief Returns the number of candidates selected by the most recent reduction pass.
         /// @return Selected candidate count.
         /// @throws None (noexcept).
@@ -218,14 +274,27 @@ namespace kmx::sat::cdcl::controller
         /// @throws None (noexcept).
         void request_reduce() noexcept { reduce_pending_ = true; }
 
+        /// @brief Counts a conflict and schedules a reduction pass when the interval has elapsed.
+        /// @details The interval stays fixed. Growing schedules (CaDiCaL's arithmetic, a square-root variant) were
+        /// measured against it on the same binary: they cut `hole9` and the IBM instances by half but cost the
+        /// random held-out set 9-20%, because a random formula wants its learned set small and fresh. What the
+        /// structured formulas actually needed was not fewer passes but protection of the clauses they keep using
+        /// (`select_reduction_candidates`), which gave them the same gain at no cost on the random set.
         void tick_conflict() noexcept
         {
             ++conflict_count_;
-            if (reduction_interval_ != 0u && (conflict_count_ % reduction_interval_) == 0u)
+            if (reduction_interval_ != 0u && conflict_count_ >= next_reduction_at_)
+            {
                 reduce_pending_ = true;
+                next_reduction_at_ = conflict_count_ + reduction_interval_;
+            }
         }
 
-        void set_reduction_interval(const counter_t interval) noexcept { reduction_interval_ = interval; }
+        void set_reduction_interval(const counter_t interval) noexcept
+        {
+            reduction_interval_ = interval;
+            next_reduction_at_ = interval;
+        }
 
         /// @brief Returns how many completed reduction passes have run.
         /// @return Number of completed reduction passes.
@@ -233,6 +302,27 @@ namespace kmx::sat::cdcl::controller
         counter_t reduction_pass_count() const noexcept { return reduction_pass_count_; }
 
     private:
+        struct ranked_candidate final
+        {
+            std::uint64_t key {};
+            clause::ref_t::offset_t offset {};
+        };
+
+        /// @brief Packs the retention ranking into one integer: higher sorts first, i.e. is reduced first.
+        /// @details Field order matches `compare_candidates`: lower tier quality, then higher glue, then fewer
+        /// uses, then lower activity, then larger size. Activity is bucketed to sixteen bits, which keeps its role
+        /// as a tie-breaker while letting the whole key fit one word.
+        static std::uint64_t rank_key(const clause::database::quality& quality) noexcept
+        {
+            const auto tier = static_cast<std::uint64_t>(std::min<std::uint32_t>(quality.tier, 3u));
+            const auto glue = static_cast<std::uint64_t>(std::min<std::uint32_t>(quality.glue, 4095u));
+            const auto unused = static_cast<std::uint64_t>(255u - std::min<std::uint32_t>(quality.used_count, 255u));
+            const auto activity = quality.activity <= 0.0 ? 0.0 : std::min(quality.activity, 65535.0);
+            const auto inactivity = static_cast<std::uint64_t>(65535u - static_cast<std::uint32_t>(activity));
+            const auto size = static_cast<std::uint64_t>(std::min<std::uint32_t>(quality.size, 65535u));
+            return (tier << 60u) | (glue << 48u) | (unused << 40u) | (inactivity << 24u) | (size << 8u);
+        }
+
         static bool compare_subset_candidates(const clause::database& database, const std::uint64_t left_offset,
                                               const std::uint64_t right_offset) noexcept
         {
@@ -302,8 +392,13 @@ namespace kmx::sat::cdcl::controller
         counter_t reduced_candidates_ {};
         counter_t flushed_candidates_ {};
         std::vector<std::uint64_t> last_candidates_ {};
-        std::uint32_t reduction_fraction_percent_ {50u};
+        std::vector<ranked_candidate> ranked_scratch_ {};
+        std::vector<clause::ref_t> tier_scratch_ {};
+        std::uint32_t core_glue_limit_ {2u};
+        std::uint32_t retained_glue_limit_ {6u};
+        std::uint32_t reduction_fraction_percent_ {75u};
         double activity_retention_threshold_ {2.0};
         counter_t reduction_interval_ {};
+        counter_t next_reduction_at_ {};
     };
 }

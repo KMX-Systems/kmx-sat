@@ -35,12 +35,24 @@ namespace kmx::sat
         }
 
         /// @brief Conflicts between clause-database reduction passes when the caller sets no interval.
-        /// @details Re-tuned after the decision heuristic was fixed to consult activity scores; the optimum moved
-        /// with it. Measured over random 3-SAT (n=130..200), pigeonhole and uf/uuf250: 50 -> 28.2 s, 100 -> 15.3 s,
-        /// 200 -> 11.0 s, 300 -> 9.7 s, 400 -> 9.7 s, 1000 -> 10.5 s, 2000 -> 13.9 s, 3000 -> 17.3 s. Without
-        /// reduction at all the learned database grows unbounded and every watch-list scan pays for it. Restarts
-        /// remain off by default: they still cost conflicts rather than saving them on this set.
-        static constexpr counter_t default_reduction_interval {400u};
+        /// @details The earlier value of 400 held the learned database near a thousand clauses, so the solver
+        /// discarded almost everything it learned and re-derived the same conflicts: uuf250_01 needed 217k
+        /// conflicts at 400 and 105k at 4000. A larger database was previously unaffordable only because
+        /// `scheduler::inprocess` re-swept it every 32 conflicts; with that window widened the retention pays for
+        /// itself. Measured over the uf250/uuf250 set at the restart interval below, total wall clock: 4000 ->
+        /// 7.5 s, 8000 -> 9.0 s, 16000 -> 11.2 s, and the old 400 -> 16.0 s.
+        static constexpr counter_t default_reduction_interval {1000u};
+        static constexpr std::uint32_t default_reduction_fraction_percent {75u};
+
+        /// @brief Base conflict interval for Luby-scheduled restarts when the caller sets no interval.
+        /// @details Restarts were previously disabled outright, on the measurement that they cost conflicts rather
+        /// than saving them. That measurement was real but its cause was elsewhere: every restart triggered a
+        /// full inprocessing sweep (`default_restart_trigger_window` was 1), and the thousand-clause database left
+        /// nothing to re-derive the trail from after unwinding. With both fixed, restarts are what they should be
+        /// -- on satlib_uf250_01 they take the solve from 49,235 conflicts and 1.37 s to 4,989 conflicts and
+        /// 0.09 s. Base intervals measured over the uf250/uuf250 set: 1024 -> 10.8 s, 2048 -> 8.6 s, 4096 ->
+        /// 7.5 s, 8192 -> 7.7 s.
+        static constexpr counter_t default_restart_interval {4096u};
         static constexpr std::uint32_t default_decision_conflict_maintenance_interval {16u};
         static constexpr std::uint32_t default_decision_chb_decay_interval {8u};
         static constexpr std::uint32_t default_decision_restart_decay_interval {4u};
@@ -84,7 +96,10 @@ namespace kmx::sat
         counter_t configured_restart_interval_ {};
         counter_t configured_decision_restart_interval_ {};
         counter_t configured_reduction_interval_ {};
-        std::uint32_t configured_reduction_fraction_percent_ {50u};
+        counter_t configured_inprocess_conflict_window_ {};
+        std::int64_t configured_local_search_flips_per_variable_ {-1};
+        std::int64_t configured_local_search_effort_percent_ {-1};
+        std::uint32_t configured_reduction_fraction_percent_ {default_reduction_fraction_percent};
         double configured_activity_retention_threshold_ {2.0};
         bool configured_chb_enabled_ {};
         std::uint32_t configured_glue_restart_threshold_percent_ {};
@@ -99,6 +114,7 @@ namespace kmx::sat
         bool has_configured_restart_interval_ {};
         bool has_configured_decision_restart_interval_ {};
         bool has_configured_reduction_interval_ {};
+        bool has_configured_inprocess_conflict_window_ {};
         bool has_configured_reduction_fraction_percent_ {};
         bool has_configured_activity_retention_threshold_ {};
         bool has_configured_chb_enabled_ {};
@@ -156,7 +172,8 @@ namespace kmx::sat
                    has_configured_decision_conflict_maintenance_interval_ || has_configured_decision_chb_decay_interval_ ||
                    has_configured_decision_restart_decay_interval_ || has_configured_restart_interval_ ||
                    has_configured_decision_restart_interval_ || has_configured_reduction_fraction_percent_ || has_configured_chb_enabled_ ||
-                   has_configured_reduction_interval_ || has_configured_glue_restart_threshold_percent_ ||
+                   has_configured_reduction_interval_ || has_configured_inprocess_conflict_window_ ||
+                   has_configured_glue_restart_threshold_percent_ ||
                    has_configured_cold_storage_enabled_ || has_configured_activity_retention_threshold_ || has_configured_strict_mode_ ||
                    !active_configuration_profile_.empty();
         }
@@ -172,7 +189,10 @@ namespace kmx::sat
             configured_restart_interval_ = 0u;
             configured_decision_restart_interval_ = 0u;
             configured_reduction_interval_ = 0u;
-            configured_reduction_fraction_percent_ = 50u;
+            configured_inprocess_conflict_window_ = 0u;
+            configured_local_search_flips_per_variable_ = -1;
+            configured_local_search_effort_percent_ = -1;
+            configured_reduction_fraction_percent_ = default_reduction_fraction_percent;
             configured_activity_retention_threshold_ = 2.0;
             configured_chb_enabled_ = false;
             configured_glue_restart_threshold_percent_ = 0u;
@@ -187,6 +207,7 @@ namespace kmx::sat
             has_configured_restart_interval_ = false;
             has_configured_decision_restart_interval_ = false;
             has_configured_reduction_interval_ = false;
+            has_configured_inprocess_conflict_window_ = false;
             has_configured_reduction_fraction_percent_ = false;
             has_configured_activity_retention_threshold_ = false;
             has_configured_chb_enabled_ = false;
@@ -208,12 +229,20 @@ namespace kmx::sat
                                                     default_decision_restart_decay_interval;
 
             core_.set_decision_maintenance_intervals(conflict_maintenance_interval, chb_decay_interval, restart_decay_interval);
-            core_.set_restart_interval(has_configured_restart_interval_ ? configured_restart_interval_ : 0u);
+            core_.set_restart_interval(has_configured_restart_interval_ ? configured_restart_interval_
+                                                                        : default_restart_interval);
             core_.set_decision_restart_interval(has_configured_decision_restart_interval_ ? configured_decision_restart_interval_ : 0u);
             core_.set_reduction_interval(has_configured_reduction_interval_ ? configured_reduction_interval_
                                                                              : default_reduction_interval);
+            if (has_configured_inprocess_conflict_window_)
+                core_.set_inprocess_trigger_windows(configured_inprocess_conflict_window_, 0u);
+            if (configured_local_search_flips_per_variable_ >= 0)
+                core_.set_local_search_flips_per_variable(static_cast<std::size_t>(configured_local_search_flips_per_variable_));
+            if (configured_local_search_effort_percent_ >= 0)
+                core_.set_local_search_effort_percent(static_cast<std::size_t>(configured_local_search_effort_percent_));
             core_.set_chb_enabled(configured_chb_enabled_);
-            core_.set_reduction_fraction_percent(has_configured_reduction_fraction_percent_ ? configured_reduction_fraction_percent_ : 50u);
+            core_.set_reduction_fraction_percent(has_configured_reduction_fraction_percent_ ? configured_reduction_fraction_percent_
+                                                                                            : default_reduction_fraction_percent);
             core_.set_activity_retention_threshold(has_configured_activity_retention_threshold_ ? configured_activity_retention_threshold_ :
                                                                                                   2.0);
             core_.set_glue_restart_threshold_percent(
@@ -520,6 +549,22 @@ namespace kmx::sat
             recognized_option = true;
             impl_->has_configured_reduction_interval_ = value >= 0;
             impl_->configured_reduction_interval_ = value >= 0 ? static_cast<counter_t>(value) : 0u;
+        }
+        else if (name == "local_search_flips_per_variable")
+        {
+            recognized_option = true;
+            impl_->configured_local_search_flips_per_variable_ = value >= 0 ? value : -1;
+        }
+        else if (name == "local_search_effort_percent")
+        {
+            recognized_option = true;
+            impl_->configured_local_search_effort_percent_ = value >= 0 ? value : -1;
+        }
+        else if (name == "inprocess_conflict_window")
+        {
+            recognized_option = true;
+            impl_->has_configured_inprocess_conflict_window_ = value > 0;
+            impl_->configured_inprocess_conflict_window_ = value > 0 ? static_cast<counter_t>(value) : 0u;
         }
         else if (name == "chb_enabled")
         {

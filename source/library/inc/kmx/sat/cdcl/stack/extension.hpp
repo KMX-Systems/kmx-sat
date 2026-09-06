@@ -80,6 +80,13 @@ namespace kmx::sat::cdcl::stack
             records_.push_back(extension_record {bce_blocking {blocking_literal, mark, witness_mark()}});
         }
 
+        /// @brief Appends a factoring record for `introduced_variable`, whose defining literals were appended as one
+        /// witness clause since `mark`.
+        void push_factor_transformation(const variable introduced_variable, const std::uint32_t mark) noexcept
+        {
+            records_.push_back(extension_record {factor_transformation {introduced_variable, mark, witness_mark()}});
+        }
+
         /// @brief Returns the flat witness buffer the records index into.
         /// @return Read-only view of every stored witness literal.
         /// @throws None (noexcept).

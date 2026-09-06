@@ -10,6 +10,7 @@
 #include <kmx/sat/proof_manager.hpp>
 #include <kmx/sat/simplify/eliminator/variable/bounded.hpp>
 #include <kmx/sat/simplify/eliminator/variable/fast.hpp>
+#include <kmx/sat/cdcl/stack/extension.hpp>
 #include <kmx/sat/simplify/factorizer.hpp>
 #include <kmx/sat/simplify/scheduler/inprocess.hpp>
 #include <kmx/sat/variable.hpp>
@@ -23,6 +24,11 @@ namespace kmx::sat::simplify
         using namespace kmx::sat::simplify;
 
         scheduler::inprocess scheduler;
+        // These scenarios exercise all three known passes; `congruence` is opt-in in the shipped default set.
+        scheduler.enable_pass("congruence");
+        // These cases drive the scheduler at an explicit short cadence; the shipped default is far wider,
+        // since a production epoch sweeps the whole clause database and has to be amortized over search.
+        scheduler.set_trigger_windows(32u, 1u);
         cdcl::memory_governor governor;
         governor.register_budget(10u, 20u);
         scheduler.attach_memory_governor(governor);
@@ -84,14 +90,25 @@ namespace kmx::sat::simplify
         REQUIRE(fast.fast_round_count() == 1u);
         REQUIRE(fast.elimination_count() == 1u);
 
+        // A 3x3 rectangle (a_i v b_j) is nine clauses that one fresh variable turns into six: (~x v a_i), (x v b_j).
+        cdcl::clause::database factor_database;
+        cdcl::stack::extension factor_extension;
+        for (std::uint32_t left {4u}; left <= 6u; ++left)
+            for (std::uint32_t right {7u}; right <= 9u; ++right)
+            {
+                const std::array<literal, 2> pair {literal {variable {left}, false}, literal {variable {right}, false}};
+                factor_database.add_clause(pair, false);
+            }
         factorizer factorizer;
-        std::vector<std::vector<literal>> factor_clauses {{literal {variable {4u}, false}, literal {variable {5u}, false}},
-                                                          {literal {variable {4u}, false}, literal {variable {6u}, true}}};
-        factorizer.set_clauses(factor_clauses);
+        factorizer.attach_clause_database(factor_database);
+        factorizer.attach_extension_stack(factor_extension);
         factorizer.run();
         REQUIRE(factorizer.introduced_variable_count() == 1u);
-        const auto pattern_literal = factorizer.last_pattern_literal();
-        REQUIRE((pattern_literal.raw() == literal {variable {4u}, false}.raw()));
+        REQUIRE(factorizer.last_introduced_variable().index() == 10u);
+        REQUIRE(factorizer.removed_clause_count() == 9u);
+        REQUIRE(factorizer.added_clause_count() == 6u);
+        REQUIRE(factor_database.stats_snapshot().irredundant_count == 6u);
+        REQUIRE(factor_extension.size() == 1u);
 
         scheduler.request_abort();
         REQUIRE(!scheduler.should_run());
@@ -117,6 +134,9 @@ namespace kmx::sat::simplify
         using namespace kmx::sat::simplify;
 
         scheduler::inprocess scheduler;
+        // These cases drive the scheduler at an explicit short cadence; the shipped default is far wider,
+        // since a production epoch sweeps the whole clause database and has to be amortized over search.
+        scheduler.set_trigger_windows(32u, 1u);
         cdcl::memory_governor governor;
         governor.register_budget(10u, 20u);
         scheduler.attach_memory_governor(governor);
@@ -151,6 +171,11 @@ namespace kmx::sat::simplify
         using namespace kmx::sat::simplify;
 
         scheduler::inprocess scheduler;
+        // These scenarios exercise all three known passes; `congruence` is opt-in in the shipped default set.
+        scheduler.enable_pass("congruence");
+        // These cases drive the scheduler at an explicit short cadence; the shipped default is far wider,
+        // since a production epoch sweeps the whole clause database and has to be amortized over search.
+        scheduler.set_trigger_windows(32u, 1u);
         cdcl::memory_governor governor;
         governor.register_budget(10u, 20u);
         scheduler.attach_memory_governor(governor);
@@ -190,6 +215,9 @@ namespace kmx::sat::simplify
         using namespace kmx::sat::simplify;
 
         scheduler::inprocess scheduler;
+        // These cases drive the scheduler at an explicit short cadence; the shipped default is far wider,
+        // since a production epoch sweeps the whole clause database and has to be amortized over search.
+        scheduler.set_trigger_windows(32u, 1u);
         cdcl::memory_governor governor;
         governor.register_budget(10u, 20u);
         scheduler.attach_memory_governor(governor);
@@ -233,6 +261,9 @@ namespace kmx::sat::simplify
         using namespace kmx::sat::simplify;
 
         scheduler::inprocess scheduler;
+        // These cases drive the scheduler at an explicit short cadence; the shipped default is far wider,
+        // since a production epoch sweeps the whole clause database and has to be amortized over search.
+        scheduler.set_trigger_windows(32u, 1u);
         cdcl::memory_governor governor;
         governor.register_budget(10u, 20u);
         scheduler.attach_memory_governor(governor);
@@ -277,6 +308,11 @@ namespace kmx::sat::simplify
         using namespace kmx::sat::simplify;
 
         scheduler::inprocess scheduler;
+        // These scenarios exercise all three known passes; `congruence` is opt-in in the shipped default set.
+        scheduler.enable_pass("congruence");
+        // These cases drive the scheduler at an explicit short cadence; the shipped default is far wider,
+        // since a production epoch sweeps the whole clause database and has to be amortized over search.
+        scheduler.set_trigger_windows(32u, 1u);
         cdcl::memory_governor governor;
         governor.register_budget(10u, 20u);
         scheduler.attach_memory_governor(governor);
@@ -328,6 +364,9 @@ namespace kmx::sat::simplify
         using namespace kmx::sat::simplify;
 
         scheduler::inprocess scheduler;
+        // These cases drive the scheduler at an explicit short cadence; the shipped default is far wider,
+        // since a production epoch sweeps the whole clause database and has to be amortized over search.
+        scheduler.set_trigger_windows(32u, 1u);
         cdcl::memory_governor governor;
         governor.register_budget(10u, 20u);
         scheduler.attach_memory_governor(governor);
@@ -373,6 +412,9 @@ namespace kmx::sat::simplify
         using namespace kmx::sat::simplify;
 
         scheduler::inprocess scheduler;
+        // These cases drive the scheduler at an explicit short cadence; the shipped default is far wider,
+        // since a production epoch sweeps the whole clause database and has to be amortized over search.
+        scheduler.set_trigger_windows(32u, 1u);
         cdcl::memory_governor governor;
         governor.register_budget(10u, 20u);
         scheduler.attach_memory_governor(governor);
@@ -411,6 +453,9 @@ namespace kmx::sat::simplify
         using namespace kmx::sat::simplify;
 
         scheduler::inprocess scheduler;
+        // These cases drive the scheduler at an explicit short cadence; the shipped default is far wider,
+        // since a production epoch sweeps the whole clause database and has to be amortized over search.
+        scheduler.set_trigger_windows(32u, 1u);
         cdcl::memory_governor governor;
         governor.register_budget(10u, 20u);
         scheduler.attach_memory_governor(governor);
@@ -451,6 +496,9 @@ namespace kmx::sat::simplify
         using namespace kmx::sat::simplify;
 
         scheduler::inprocess scheduler;
+        // These cases drive the scheduler at an explicit short cadence; the shipped default is far wider,
+        // since a production epoch sweeps the whole clause database and has to be amortized over search.
+        scheduler.set_trigger_windows(32u, 1u);
         cdcl::memory_governor governor;
         governor.register_budget(10u, 20u);
         scheduler.attach_memory_governor(governor);

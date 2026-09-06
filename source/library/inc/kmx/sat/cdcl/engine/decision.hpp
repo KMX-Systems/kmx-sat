@@ -79,9 +79,12 @@ namespace kmx::sat::cdcl::engine
                 // 3-SAT n=100..160, putting activity first cut a 20-instance sweep from 36.4 s to 1.0 s, and
                 // r3_200 from 344,408 conflicts to 27,106.
                 //
-                // EVSIDS pops are destructive, so anything popped and rejected here is re-inserted before
-                // returning; `notify_unassigned_variable` restores the rest as backtracking frees them.
-                evsids_rejected_scratch_.clear();
+                // EVSIDS pops are destructive. A variable popped and rejected here was rejected because it is
+                // already assigned, and re-inserting it only guarantees popping it again on the next decision --
+                // an O(log n) round trip per assigned variable per decision, repeated until something unassigns
+                // it. `notify_unassigned_variable` is what puts a variable back, and backtracking calls it for
+                // every entry it retracts, so the heap is repopulated exactly when the variable becomes a
+                // candidate again. Activity survives in `retained_activity_`, so re-entry costs it no ranking.
                 std::optional<variable> evsids_selected {};
                 for (;;)
                 {
@@ -93,10 +96,7 @@ namespace kmx::sat::cdcl::engine
                         evsids_selected = evsids_candidate;
                         break;
                     }
-                    evsids_rejected_scratch_.push_back(*evsids_candidate);
                 }
-                for (const auto rejected: evsids_rejected_scratch_)
-                    evsids_.insert(rejected);
                 if (evsids_selected.has_value())
                 {
                     last_decision_variable_ = *evsids_selected;
@@ -127,6 +127,12 @@ namespace kmx::sat::cdcl::engine
                 return phase_.saved_phase(last_decision_variable_);
             return phase_bias_;
         }
+
+        /// @brief Seeds saved branching polarities from a local-search assignment.
+        void seed_saved_phases(const std::span<const std::uint8_t> assignment) noexcept { phase_.seed_saved_phases(assignment); }
+
+        /// @brief Returns the saved branching polarities, indexed by variable.
+        [[nodiscard]] std::span<const std::uint8_t> saved_phases_view() const noexcept { return phase_.saved_phases_view(); }
 
         /// @brief Notifies the decision heuristics that a conflict just occurred.
         /// @throws None (noexcept).
@@ -175,16 +181,12 @@ namespace kmx::sat::cdcl::engine
                 return;
 
             selected_blend_ = 1u;
-            std::vector<variable> seen_variables {};
-            seen_variables.reserve(variables.size());
+            begin_unique_scan();
 
             for (auto it = variables.rbegin(); it != variables.rend(); ++it)
             {
-                const auto seen_it = std::find_if(seen_variables.begin(), seen_variables.end(),
-                                                  [it](const variable existing) noexcept { return existing.index() == it->index(); });
-                if (seen_it != seen_variables.end())
+                if (!mark_first_occurrence(*it))
                     continue;
-                seen_variables.push_back(*it);
 
                 evsids_.increase_score(*it);
                 chb_.update_on_conflict(*it);
@@ -202,18 +204,21 @@ namespace kmx::sat::cdcl::engine
                 return;
 
             selected_blend_ = 1u;
-            std::vector<variable> seen_variables {};
-            seen_variables.reserve(conflict_clause.size());
+            begin_unique_scan();
 
             for (auto it = conflict_clause.rbegin(); it != conflict_clause.rend(); ++it)
             {
                 const auto var = it->variable_of();
-                const auto seen_it = std::find_if(seen_variables.begin(), seen_variables.end(),
-                                                  [var](const variable existing) noexcept { return existing.index() == var.index(); });
-                if (seen_it != seen_variables.end())
+                if (!mark_first_occurrence(var))
                     continue;
-                seen_variables.push_back(var);
 
+                // Note: every literal of a conflicting clause is false under the current assignment, so this
+                // writes the polarity *opposite* to the one the variable holds -- it inverts the saved phase of
+                // each variable in the clause on every conflict, which reads as contradicting the phase-saving
+                // rationale in `notify_conflict`. Removing it was measured and is a net loss (36-instance random
+                // 3-SAT set: 24.0 s -> 26.4 s, reproducible), because it is currently the solver's only
+                // diversification mechanism: `controller::rephase` is unimplemented scaffolding and is not wired
+                // into the search. It should be removed together with real rephasing, not before it.
                 phase_.set_saved_phase(var, !it->is_negated());
                 evsids_.increase_score(var);
                 chb_.update_on_conflict(var);
@@ -231,16 +236,12 @@ namespace kmx::sat::cdcl::engine
                 return;
 
             selected_blend_ = 1u;
-            std::vector<variable> seen_variables {};
-            seen_variables.reserve(variables.size());
+            begin_unique_scan();
 
             for (auto it = variables.rbegin(); it != variables.rend(); ++it)
             {
-                const auto seen_it = std::find_if(seen_variables.begin(), seen_variables.end(),
-                                                  [it](const variable existing) noexcept { return existing.index() == it->index(); });
-                if (seen_it != seen_variables.end())
+                if (!mark_first_occurrence(*it))
                     continue;
-                seen_variables.push_back(*it);
 
                 // Propagation is not evidence of importance: every implied literal would otherwise be scored as
                 // highly as a variable the conflict actually turned on, flattening both rankings. CHB is the one
@@ -280,20 +281,18 @@ namespace kmx::sat::cdcl::engine
             const auto asserting_variable = asserting_literal.variable_of();
             phase_.set_saved_phase(asserting_variable, !asserting_literal.is_negated());
 
-            std::vector<variable> unique_variables {};
-            unique_variables.reserve(learned_clause.size());
+            begin_unique_scan();
+            unique_variables_scratch_.clear();
             for (auto it = learned_clause.rbegin(); it != learned_clause.rend(); ++it)
             {
                 const auto var = it->variable_of();
-                const auto seen_it = std::find_if(unique_variables.begin(), unique_variables.end(),
-                                                  [var](const variable existing) noexcept { return existing.index() == var.index(); });
-                if (seen_it == unique_variables.end())
-                    unique_variables.push_back(var);
+                if (mark_first_occurrence(var))
+                    unique_variables_scratch_.push_back(var);
             }
 
             for (std::uint32_t round = 0; round < bump_rounds; ++round)
             {
-                for (const auto var: unique_variables)
+                for (const auto var: unique_variables_scratch_)
                 {
                     evsids_.increase_score(var);
                     chb_.update_on_conflict(var);
@@ -453,6 +452,35 @@ namespace kmx::sat::cdcl::engine
             return 1u;
         }
 
+        /// @brief Opens a fresh duplicate-detection scan over a batch of variables.
+        /// @details These notification paths run once per propagation batch and once per conflict, so the
+        /// duplicate check they need is on the solver's hottest path. The previous formulation allocated a vector
+        /// per call and searched it linearly per element, which is quadratic in the batch size and made the
+        /// allocator alone about twelve percent of total runtime. A monotonically increasing stamp per variable
+        /// gives the same answer in constant time per element with no allocation.
+        void begin_unique_scan() noexcept
+        {
+            if (++unique_scan_stamp_ == 0u)
+            {
+                // The stamp wrapped, so every recorded value is indistinguishable from the new scan's; clearing
+                // is the only way to keep "seen" meaningful, and at one clear per four billion scans it is free.
+                std::fill(unique_scan_stamps_.begin(), unique_scan_stamps_.end(), 0u);
+                unique_scan_stamp_ = 1u;
+            }
+        }
+
+        /// @brief Records a variable in the current scan, reporting whether this is its first occurrence.
+        [[nodiscard]] bool mark_first_occurrence(const variable var) noexcept
+        {
+            const auto index = static_cast<std::size_t>(var.index());
+            if (index >= unique_scan_stamps_.size())
+                unique_scan_stamps_.resize(index + 1u, 0u);
+            if (unique_scan_stamps_[index] == unique_scan_stamp_)
+                return false;
+            unique_scan_stamps_[index] = unique_scan_stamp_;
+            return true;
+        }
+
         bool has_saved_phase(const variable var) const noexcept
         {
             return static_cast<std::size_t>(var.index()) < phase_.saved_phase_count();
@@ -482,7 +510,9 @@ namespace kmx::sat::cdcl::engine
         std::uint32_t chb_decay_count_ {};
         bool phase_bias_ {true};
         variable last_decision_variable_ {};
-        std::vector<variable> evsids_rejected_scratch_ {};
+        std::vector<variable> unique_variables_scratch_ {};
+        std::vector<std::uint32_t> unique_scan_stamps_ {};
+        std::uint32_t unique_scan_stamp_ {};
         selectable_predicate_t selectable_predicate_ {};
         const void* selectable_context_ {};
     };
