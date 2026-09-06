@@ -215,9 +215,10 @@ namespace kmx::sat::cdcl::controller
                                   : quality.glue <= retained_glue_limit_ ? clause::database::default_tier
                                                                          : clause::database::lowest_tier;
                 database.set_tier(ref, tier);
-                // Usage is "since the last pass": a mid-glue clause that was used keeps one pass of grace, a
-                // high-glue one must earn its place again before the next pass.
-                const auto grace = quality.used_count != 0u && tier == clause::database::default_tier ? std::uint8_t {1} : std::uint8_t {0};
+                // A use counts two (`bump_clause`); the pass leaves one behind as a pass of grace for a mid-glue
+                // clause and clears it for a high-glue one, so a clause not used again becomes a candidate after
+                // one pass (high glue) or two (mid glue) instead of staying protected forever.
+                const auto grace = quality.used_count >= 2u && tier == clause::database::default_tier ? std::uint8_t {1} : std::uint8_t {0};
                 database.set_used_count(ref, grace);
             }
         }

@@ -54,6 +54,13 @@ namespace kmx::sat::simplify
 
         void attach_proof_manager(kmx::sat::proof_manager& proof_manager) noexcept { proof_manager_ = &proof_manager; }
 
+        /// @brief Declares the variables the problem owns, so fresh variables are numbered above them.
+        /// @details The database alone cannot say: a problem variable that occurs in no clause (declared in the
+        /// header, mentioned only in assumptions, or freed by an earlier pass) is invisible there, and a fresh
+        /// variable numbered from the database's highest occurrence would capture it. The model would then drop it
+        /// as internal, and an assumption on it would constrain the definition instead of the problem.
+        void set_problem_variable_count(const variable::index_t count) noexcept { problem_variable_count_ = count; }
+
         /// @brief Largest clause considered as a rectangle member; long clauses rarely pair up and cost the most to match.
         void set_maximum_clause_size(const std::size_t size) noexcept { maximum_clause_size_ = size; }
 
@@ -102,7 +109,7 @@ namespace kmx::sat::simplify
     private:
         static constexpr clause_id_t invalid_clause {std::numeric_limits<clause_id_t>::max()};
         static constexpr std::size_t maximum_rounds {2u};
-        static constexpr std::size_t minimum_effort {std::size_t {1u} << 20u};
+        static constexpr std::size_t minimum_effort {std::size_t {1u} << 16u};
         static constexpr std::size_t default_maximum_clause_size {5u};
         static constexpr std::size_t default_effort_per_clause {4u};
 
@@ -132,8 +139,8 @@ namespace kmx::sat::simplify
                         return;
                     register_clause(ref, literals);
                 });
-            highest_variable_ = highest;
-            ensure_literal_capacity(literal {variable {highest}, true}.raw());
+            highest_variable_ = std::max(highest, problem_variable_count_);
+            ensure_literal_capacity(literal {variable {highest_variable_}, true}.raw());
             effort_ = refs_.size() * effort_per_clause_ + minimum_effort;
             return refs_.size() >= 3u;
         }
@@ -432,6 +439,7 @@ namespace kmx::sat::simplify
         std::size_t effort_per_clause_ {default_effort_per_clause};
         std::size_t effort_ {};
         variable::index_t highest_variable_ {};
+        variable::index_t problem_variable_count_ {};
 
         std::vector<cdcl::clause::ref_t> refs_ {};
         std::vector<std::uint8_t> alive_ {};

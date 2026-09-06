@@ -205,6 +205,9 @@ namespace kmx::sat::simplify::scheduler
             factorizer_.attach_extension_stack(extension_stack);
         }
 
+        /// @brief Declares how many variables the problem owns, for passes that introduce fresh ones.
+        void set_problem_variable_count(const variable::index_t count) noexcept { factorizer_.set_problem_variable_count(count); }
+
         void attach_clause_sink(extractor::backbone::clause_sink_t sink) noexcept
         {
             backbone_.attach_clause_sink(sink);

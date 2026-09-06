@@ -47,6 +47,9 @@ namespace kmx::sat::telemetry
             counter_t reduction_passes {};
             counter_t reduced_clauses {};
             counter_t deleted_clauses {};
+            counter_t probes {};
+            counter_t probe_units {};
+            counter_t walk_flips {};
             /// @brief Total number of terminate-callback polls executed so far.
             counter_t terminate_callback_calls {};
             /// @brief Total number of learned-clause callback invocations executed so far.
@@ -76,9 +79,21 @@ namespace kmx::sat::telemetry
         {
             switch (counter_name.size())
             {
+                case 6u:
+                    if (counter_name == "probes")
+                        snapshot_.probes += amount;
+                    break;
                 case 8u:
                     if (counter_name == "restarts")
                         snapshot_.restarts += amount;
+                    break;
+                case 10u:
+                    if (counter_name == "walk_flips")
+                        snapshot_.walk_flips += amount;
+                    break;
+                case 11u:
+                    if (counter_name == "probe_units")
+                        snapshot_.probe_units += amount;
                     break;
                 case 9u:
                     if (counter_name == "conflicts")

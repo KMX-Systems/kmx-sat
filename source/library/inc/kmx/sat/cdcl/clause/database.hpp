@@ -110,6 +110,16 @@ namespace kmx::sat::cdcl::clause
                 ++used;
         }
 
+        /// @brief Records a use of a clause in conflict analysis: two counts, so that the reduction pass can tell a
+        /// use since the last pass (two or more) from the one pass of grace it leaves behind (one).
+        void note_clause_used(const ref_t ref) noexcept
+        {
+            if (!storage_.is_alive(ref))
+                return;
+            auto& used = storage_.header_at(ref).used;
+            used = static_cast<std::uint8_t>(std::min<unsigned>(255u, static_cast<unsigned>(used) + 2u));
+        }
+
         /// @brief Overwrites a clause's use counter; the reduction pass uses it to grant a pass of grace.
         void set_used_count(const ref_t ref, const std::uint8_t used) noexcept
         {

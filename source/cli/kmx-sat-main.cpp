@@ -347,7 +347,8 @@ int main(int argc, char* argv[])
               << " learned_clauses=" << statistics.learned_clauses << " learned_clause_glue_total=" << statistics.learned_clause_glue_total
               << " learned_clause_glue_samples=" << statistics.learned_clause_glue_samples
               << " reduction_passes=" << statistics.reduction_passes << " reduced_clauses=" << statistics.reduced_clauses
-              << " deleted_clauses=" << statistics.deleted_clauses << " proof_events=" << solver.proof_buffered_event_count()
+              << " deleted_clauses=" << statistics.deleted_clauses << " probes=" << statistics.probes
+              << " probe_units=" << statistics.probe_units << " walk_flips=" << statistics.walk_flips << " proof_events=" << solver.proof_buffered_event_count()
               << " proof_buffered_payload_bytes=" << solver.proof_buffered_payload_bytes() << "\n";
 
     switch (result.status_of())

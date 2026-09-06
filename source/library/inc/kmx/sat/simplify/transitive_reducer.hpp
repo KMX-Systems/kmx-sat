@@ -234,7 +234,7 @@ namespace kmx::sat::simplify
         /// @brief Search steps allowed per implication edge of the graph.
         static constexpr std::size_t effort_per_edge {2u};
         /// @brief Search steps every pass gets regardless of graph size, so small formulas are reduced completely.
-        static constexpr std::size_t minimum_effort {1u << 18u};
+        static constexpr std::size_t minimum_effort {1u << 16u};
 
         cdcl::clause::database* database_ {};
         kmx::sat::proof_manager* proof_manager_ {};

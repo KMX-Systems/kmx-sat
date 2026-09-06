@@ -390,6 +390,9 @@ namespace kmx::sat
         impl_->statistics_.add("learned_clause_glue_total", impl_->core_.learned_clause_glue_total());
         impl_->statistics_.add("learned_clause_glue_samples", impl_->core_.learned_clause_glue_sample_count());
         impl_->statistics_.add("reduction_passes", impl_->core_.reduction_pass_count());
+        impl_->statistics_.add("probes", impl_->core_.probe_count());
+        impl_->statistics_.add("probe_units", impl_->core_.probe_unit_count());
+        impl_->statistics_.add("walk_flips", impl_->core_.walk_flip_count());
         impl_->statistics_.add("reduced_clauses", impl_->core_.reduced_clause_count());
         impl_->statistics_.add("deleted_clauses", impl_->core_.deleted_clause_count());
 

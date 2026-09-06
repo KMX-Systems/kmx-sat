@@ -147,6 +147,7 @@ namespace kmx::sat::cdcl
             for (const auto assumption: request.assumptions)
                 frozen_variables_scratch_.push_back(assumption.variable_of());
             preprocess_scheduler_.set_frozen_variables(frozen_variables_scratch_);
+            preprocess_scheduler_.set_problem_variable_count(find_max_variable(request.assumptions));
 
             // The walker takes the formula as stated, before preprocessing rewrites it. Factoring replaces the
             // at-most-one clauses of a colouring instance with definitions of fresh variables, and on that formula
@@ -175,13 +176,17 @@ namespace kmx::sat::cdcl
             opening_walk_pending_ = prepare_opening_walk();
             opening_walk_due_at_ = search_coordinator_.conflict_event_count() + local_search_opening_probe_conflicts;
             rebuild_propagation_state();
+            root_refuted_ = false;
+            probe_failed_literals();
 
             search_coordinator_.apply_assumptions(request);
             propagator_.reset_episode_state();
             propagator_.set_pending_assumption_count(request.assumptions.size());
             (void) propagator_.propagate_assumptions();
 
-            status_ = try_lucky_assignments(request) ? status::satisfiable : run_search(request);
+            // A conflict found by root propagation before the search is consumed by the propagator (the trail
+            // literal that exposed it counts as propagated), so it is reported here rather than rediscovered.
+            status_ = root_refuted_ ? root_conflict() : try_lucky_assignments(request) ? status::satisfiable : run_search(request);
 
             if (status_ == status::satisfiable)
                 build_internal_model();
@@ -347,6 +352,11 @@ namespace kmx::sat::cdcl
 
         counter_t reduction_pass_count() const noexcept { return search_coordinator_.reduction_pass_count(); }
 
+        std::uint64_t probe_count() const noexcept { return probe_count_; }
+        std::uint64_t walk_flip_count() const noexcept { return local_search_.flip_count(); }
+
+        std::uint64_t probe_unit_count() const noexcept { return probe_unit_count_ + probe_lifted_count_; }
+
         counter_t reduced_clause_count() const noexcept { return search_coordinator_.reduced_clause_count(); }
 
         counter_t deleted_clause_count() const noexcept { return search_coordinator_.deleted_clause_count(); }
@@ -393,7 +403,11 @@ namespace kmx::sat::cdcl
                                                                    restart_decay_interval);
         }
 
-        void set_restart_interval(const counter_t interval) noexcept { search_coordinator_.set_restart_interval(interval); }
+        void set_restart_interval(const counter_t interval) noexcept
+        {
+            stable_restart_interval_ = interval;
+            search_coordinator_.set_restart_interval(interval);
+        }
 
         /// @brief Sets the flip budget per variable of the opening walk; zero disables local search entirely.
         void set_local_search_flips_per_variable(const std::size_t flips) noexcept { local_search_flips_per_variable_ = flips; }
@@ -581,6 +595,18 @@ namespace kmx::sat::cdcl
         static constexpr counter_t local_search_opening_probe_conflicts {2000u};
         /// @brief Largest learned clause whose reason-side variables are bumped along with the analyzed ones.
         static constexpr std::size_t reason_bump_size_limit {32u};
+        /// @brief Trail growth allowed to failed-literal probing, per irredundant clause, plus a minimum.
+        static constexpr std::size_t probe_effort_per_clause {4u};
+        static constexpr std::size_t probe_minimum_effort {std::size_t {1u} << 14u};
+        static constexpr std::size_t probe_rounds {3u};
+        /// @brief Restart interval of the focused mode; the stable mode uses the configured interval.
+        static constexpr counter_t focused_restart_interval {64u};
+        /// @brief Conflicts of the first mode period; each period is twice the previous one.
+        static constexpr counter_t mode_initial_period {2000u};
+        static constexpr counter_t stable_period_factor {1u};
+        static constexpr bool mode_switching_enabled {true};
+        static constexpr bool mode_start_focused {true};
+        static constexpr std::size_t probe_round_growth {4u};
         /// @brief Absolute cap on the re-walk floor: the per-variable floor is meant for small random formulas,
         /// and uncapped it alone made every re-walk on a 40,000-variable formula a ten-million-flip walk.
         static constexpr std::size_t local_search_rewalk_floor_cap {200'000u};
@@ -591,6 +617,8 @@ namespace kmx::sat::cdcl
         static constexpr double local_search_scale_ceiling {4.0};
         /// @brief Rounds an opening strategy is split into; a strategy stops after two rounds without a new best.
         static constexpr std::size_t local_search_opening_rounds {10u};
+        /// @brief Unsatisfied-clause count at or below which a walk is treated as a near miss worth more effort.
+        static constexpr std::size_t local_search_near_miss_limit {2u};
         /// @brief Fixed seed: the probe feeds branching, so it must be reproducible across repeats.
         static constexpr std::uint64_t local_search_seed {0x5851f42d4c957f2dull};
         /// @brief The walk portfolio, cycled through by successive walks.
@@ -721,6 +749,13 @@ namespace kmx::sat::cdcl
                 heap_.push(index);
             local_search_enabled_ = false;
             opening_walk_pending_ = false;
+            // Focused first: frequent restarts while the search has no history worth keeping, then the
+            // configured (stable) schedule, the periods doubling so both modes get equal time in the long run.
+            focused_mode_ = mode_switching_enabled && mode_start_focused;
+            mode_period_ = mode_initial_period;
+            mode_switch_at_ = mode_switching_enabled ? search_coordinator_.conflict_event_count() + mode_period_
+                                                     : std::numeric_limits<counter_t>::max();
+            search_coordinator_.set_restart_interval(focused_mode_ ? focused_restart_interval : stable_restart_interval_);
             next_local_search_at_ = local_search_initial_interval;
             visits_at_last_walk_ = 0u;
             best_walk_unsatisfied_ = std::numeric_limits<std::size_t>::max();
@@ -756,7 +791,12 @@ namespace kmx::sat::cdcl
                 phase_scratch_[index] = saved_phase_[index] > 0 ? 1u : 0u;
             const auto solved = local_search_.walk(config, max_flips, phase_scratch_);
             const auto unsatisfied = local_search_.best_unsatisfied_count();
-            if (!force && !solved && unsatisfied >= best_walk_unsatisfied_)
+            // Improvement means a near miss or a quarter fewer unsatisfied clauses: creeping down by one clause
+            // per walk on a formula the walk cannot solve kept doubling the re-walk budget and reseeding the
+            // phases of a search that was doing fine on its own.
+            const bool improved = unsatisfied < best_walk_unsatisfied_ &&
+                                  (unsatisfied <= local_search_near_miss_limit || unsatisfied * 4u <= best_walk_unsatisfied_ * 3u);
+            if (!force && !solved && !improved)
                 return false;
             best_walk_unsatisfied_ = unsatisfied;
             best_walk_config_ = config_index;
@@ -825,9 +865,167 @@ namespace kmx::sat::cdcl
                 stalled = best_walk_unsatisfied_ < before ? 0u : stalled + 1u;
                 if (stalled >= 2u)
                     break;
+                // Walk-friendly formulas are within two unsatisfied clauses after a few rounds (`lran_f2000`
+                // after one, `gcp125_17` from the start); the ones that creep from seven to one over ten rounds
+                // never finish, and on a formula the search solves in a few thousand conflicts those rounds were
+                // most of the run (`hanoi4`: 79% of its instructions). Past the third round only a near miss
+                // earns the rest of the budget.
+                if (round >= 1u && best_walk_unsatisfied_ > local_search_near_miss_limit)
+                    break;
             }
             local_search_round_ = config_index + 1u;
             return false;
+        }
+
+        /// @brief Failed-literal probing with the search's own propagator, plus lifting.
+        /// @details Every unassigned variable with a binary occurrence is probed in both polarities at level 1. A
+        /// conflict makes the probe's negation a root unit, learned as a unit clause (a RUP step for the proof)
+        /// and propagated at the root; a literal implied by both polarities of a variable is a unit too
+        /// (lifting). Kissat's probing phase derives units for 40% of the variables of `hanoi4` and `par16` and a
+        /// quarter of `bmc-ibm-13`, and its ablation put that phase at 3x on `bmc-ibm-13`; the preprocessing
+        /// pipeline's own `probing` pass only closes the formula under the units it already has. Effort is
+        /// bounded by trail growth so the pass stays a small share of the formula.
+        void probe_failed_literals() noexcept
+        {
+            // A probed unit is a RUP step without antecedents; the LRAT consumers need chains, so with a proof
+            // consumer attached the search derives its units with the analysis that produces them.
+            if (variable_count_ == 0u || level_ != 0u || proof_manager_.has_active_consumers())
+                return;
+            if (!assign_root_units())
+                return;
+            if (propagate().valid())
+            {
+                root_refuted_ = true;
+                return;
+            }
+            const auto has_binary = [this](const literal lit) noexcept
+            {
+                for (const auto& entry: watch_list_.list_at(lit.raw()))
+                    if (entry.is_binary())
+                        return true;
+                return false;
+            };
+            // The first round is cheap; each round after a productive one gets four times the budget, so a formula
+            // where probing yields nothing (random 3-SAT, the scheduling instances) pays a few thousand
+            // assignments and one where it pays (`bmc-ibm-13`: 131 units) gets the full pass.
+            const auto base_effort = static_cast<std::size_t>(clause_database_.stats_snapshot().irredundant_count) * probe_effort_per_clause +
+                                     probe_minimum_effort;
+            std::size_t effort = base_effort;
+            probe_marks_.assign(static_cast<std::size_t>(variable_count_) * 2u + 2u, 0u);
+            const auto clear_probe_marks = [this]() noexcept
+            {
+                for (const auto marked: marked_scratch_)
+                    probe_marks_[marked.raw()] = 0u;
+                marked_scratch_.clear();
+            };
+            const auto learn_root_unit = [this](const literal unit) noexcept
+            {
+                const std::array<literal, 1> unit_clause {unit};
+                const auto ref = clause_database_.add_clause(unit_clause, true);
+                if (!ref.valid())
+                    return false;
+                unit_clause_refs_.push_back(ref);
+                if (proof_manager_.has_active_consumers())
+                    proof_manager_.on_add_derived(ref, unit_clause);
+                // A probed unit is a learned clause in every sense, including the episode's retention accounting.
+                search_coordinator_.note_learned_clause();
+                incremental_context_.retain_learned_clause();
+                assign(unit, ref);
+                ++probe_unit_count_;
+                if (propagate().valid())
+                {
+                    root_refuted_ = true;
+                    return false;
+                }
+                return true;
+            };
+            // Rounds: a unit derived in one round falsifies further probes in the next; three rounds cover what
+            // the effort bound leaves.
+            for (std::size_t round = 0u; round < probe_rounds; ++round)
+            {
+            if (round != 0u)
+                effort = base_effort * probe_round_growth;
+            const auto units_before = probe_unit_count_ + probe_lifted_count_;
+            for (std::uint32_t var = 1u; var <= variable_count_ && effort != 0u; ++var)
+            {
+                if (is_assigned(var))
+                    continue;
+                const literal positive {variable {var}, false};
+                if (!has_binary(positive) && !has_binary(positive.negated()))
+                    continue;
+                // First polarity: remember what it implies for lifting against the second.
+                lifted_scratch_.clear();
+                clear_probe_marks();
+                bool positive_failed = false;
+                {
+                    ++probe_count_;
+                    const auto trail_before = trail_.size();
+                    new_level(positive);
+                    assign(positive, clause::ref_t {});
+                    const auto conflict = propagate();
+                    const auto grown = trail_.size() - trail_before;
+                    effort = grown >= effort ? 0u : effort - grown;
+                    if (conflict.valid())
+                        positive_failed = true;
+                    else
+                        for (auto index = trail_before + 1u; index < trail_.size(); ++index)
+                        {
+                            probe_marks_[trail_[index].raw()] = 1u;
+                            marked_scratch_.push_back(trail_[index]);
+                        }
+                    backtrack(0u);
+                }
+                if (positive_failed)
+                {
+                    clear_probe_marks();
+                    if (!learn_root_unit(positive.negated()))
+                        return;
+                    continue;
+                }
+                if (effort == 0u)
+                {
+                    // Leaving with the positive probe's marks set would let a later variable's negative probe
+                    // lift a literal only this probe implied: a wrong unit, and a wrong UNSAT verdict on
+                    // `bmc-ibm-1/12/13` before this was caught.
+                    clear_probe_marks();
+                    break;
+                }
+                // Second polarity: a conflict makes the first a unit; otherwise the intersection of the two
+                // implied sets lifts to units.
+                {
+                    ++probe_count_;
+                    const literal negative = positive.negated();
+                    const auto trail_before = trail_.size();
+                    new_level(negative);
+                    assign(negative, clause::ref_t {});
+                    const auto conflict = propagate();
+                    const auto grown = trail_.size() - trail_before;
+                    effort = grown >= effort ? 0u : effort - grown;
+                    if (!conflict.valid())
+                        for (auto index = trail_before + 1u; index < trail_.size(); ++index)
+                            if (probe_marks_[trail_[index].raw()] != 0u)
+                                lifted_scratch_.push_back(trail_[index]);
+                    backtrack(0u);
+                    clear_probe_marks();
+                    if (conflict.valid())
+                    {
+                        if (!learn_root_unit(positive))
+                            return;
+                        continue;
+                    }
+                }
+                for (const auto lifted: lifted_scratch_)
+                {
+                    if (is_assigned(var_of(lifted)))
+                        continue;
+                    ++probe_lifted_count_;
+                    if (!learn_root_unit(lifted))
+                        return;
+                }
+            }
+            if (probe_unit_count_ + probe_lifted_count_ == units_before)
+                break;
+            }
         }
 
         /// @brief Tries the trivial assignments before any search: each polarity in forward and backward variable
@@ -839,12 +1037,17 @@ namespace kmx::sat::cdcl
         /// @return True if an attempt assigned every variable without a conflict; the trail then holds the model.
         [[nodiscard]] bool try_lucky_assignments(const solve_request& request) noexcept
         {
-            if (!request.assumptions.empty() || variable_count_ == 0u || level_ != 0u)
+            if (!request.assumptions.empty() || variable_count_ == 0u || level_ != 0u || root_refuted_)
                 return false;
             // Unit clauses live outside the watch lists; without them assigned first an attempt can satisfy
             // every watched clause and still contradict a unit, which is what the model verifier caught.
-            if (!assign_root_units() || propagate().valid())
+            if (!assign_root_units())
                 return false;
+            if (propagate().valid())
+            {
+                root_refuted_ = true;
+                return false;
+            }
             const auto root_trail = trail_.size();
             for (std::uint32_t strategy = 0u; strategy < 4u; ++strategy)
             {
@@ -921,17 +1124,30 @@ namespace kmx::sat::cdcl
         /// @return True if a walk found a model, in which case the phases are that model.
         [[nodiscard]] bool run_opening_walk() noexcept
         {
+            // The probe's phase-saved assignment is kept aside: a walk that ends far from a model has nothing
+            // better to offer than what the search already learned (`ais12`: 12,004 conflicts after adopting
+            // such a walk, 7,580 without), so only a near miss replaces it.
+            probe_phase_scratch_.assign(saved_phase_.begin(), saved_phase_.end());
             std::copy(opening_phase_snapshot_.begin(), opening_phase_snapshot_.end(), saved_phase_.begin());
             const auto budget = static_cast<std::size_t>(local_search_variable_count_) * local_search_flips_per_variable_;
             if (walk_in_rounds(budget / 2u, true))
                 return true;
-            // The second opening walk always tries the other rule, whatever the first one achieved.
+            // The second rule gets its turn only after a near miss: every formula the opening walk has solved fell
+            // to the first rule, and on the ones it cannot solve the second rule doubled the cost (`hanoi4`,
+            // `ais12`: 50-60 ms of walking against a search that finishes in under 10 ms).
+            if (best_walk_unsatisfied_ > local_search_near_miss_limit)
+            {
+                std::copy(probe_phase_scratch_.begin(), probe_phase_scratch_.end(), saved_phase_.begin());
+                return false;
+            }
             const auto first_best = best_walk_config_;
             best_walk_config_ = local_search_portfolio.size();
             const auto second_best_before = best_walk_unsatisfied_;
             const auto solved = walk_in_rounds(budget / 2u, false);
             if (!solved && best_walk_unsatisfied_ >= second_best_before)
                 best_walk_config_ = first_best;
+            if (!solved && best_walk_unsatisfied_ > local_search_near_miss_limit)
+                std::copy(probe_phase_scratch_.begin(), probe_phase_scratch_.end(), saved_phase_.begin());
             return solved;
         }
 
@@ -1173,8 +1389,9 @@ namespace kmx::sat::cdcl
         void bump_clause(const clause::ref_t ref) noexcept
         {
             auto& header = clause_database_.storage_of().header_at(ref);
-            if (header.used != std::numeric_limits<std::uint8_t>::max())
-                ++header.used;
+            // Two counts per use: the reduction pass treats two or more as "used since the last pass" and leaves
+            // one behind as a pass of grace for mid-glue clauses, which it then clears.
+            header.used = static_cast<std::uint8_t>(std::min<unsigned>(255u, static_cast<unsigned>(header.used) + 2u));
             header.activity += 1.0f;
         }
 
@@ -1716,6 +1933,20 @@ namespace kmx::sat::cdcl
                     continue;
                 }
 
+                if (search_coordinator_.conflict_event_count() >= mode_switch_at_)
+                {
+                    // Stable/focused alternation, as CaDiCaL and Kissat do it: a satisfiable structured formula
+                    // (`hanoi5`: 30k conflicts at a 50-conflict interval, 109k at 4,096) wants frequent restarts
+                    // while random 3-SAT wants rare ones, and neither can be told apart in advance.
+                    focused_mode_ = !focused_mode_;
+                    if (focused_mode_)
+                        mode_period_ *= 2u;
+                    // Stable periods are four times the focused ones: random 3-SAT wants the stable schedule for
+                    // most of the run, and the structured formulas need only a few focused periods.
+                    mode_switch_at_ = search_coordinator_.conflict_event_count() + (focused_mode_ ? mode_period_ : mode_period_ * stable_period_factor);
+                    search_coordinator_.set_restart_interval(focused_mode_ ? focused_restart_interval : stable_restart_interval_);
+                }
+
                 if (search_coordinator_.should_restart())
                 {
                     if (search_coordinator_.has_progress_since_restart())
@@ -1846,6 +2077,18 @@ namespace kmx::sat::cdcl
         bool local_search_prepared_ {};
         std::uint32_t local_search_variable_count_ {};
         std::uint64_t lucky_success_count_ {};
+        std::uint64_t probe_count_ {};
+        std::uint64_t probe_unit_count_ {};
+        std::uint64_t probe_lifted_count_ {};
+        bool root_refuted_ {};
+        bool focused_mode_ {};
+        counter_t mode_period_ {};
+        counter_t mode_switch_at_ {};
+        counter_t stable_restart_interval_ {4096u};
+        std::vector<std::uint8_t> probe_marks_ {};
+        std::vector<literal> lifted_scratch_ {};
+        std::vector<literal> marked_scratch_ {};
+        std::vector<std::int8_t> probe_phase_scratch_ {};
         std::vector<std::int8_t> opening_phase_snapshot_ {};
         std::size_t best_walk_unsatisfied_ {};
         std::size_t best_walk_config_ {};
