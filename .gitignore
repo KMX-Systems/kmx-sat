@@ -46,7 +46,8 @@ tsan/
 source/build/
 tmp/
 .tmp/
-doc/
+doc/internal
+doc/performance
 reference/
 __pycache__/
 clean-checkout-gates/
