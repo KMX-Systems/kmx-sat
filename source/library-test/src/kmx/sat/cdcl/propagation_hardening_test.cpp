@@ -21,7 +21,7 @@ namespace kmx::sat::cdcl
         }
     };
 
-    static bool brute_force_sat(const std::vector<std::vector<literal>>& clauses, const std::uint32_t variable_count) noexcept
+    static bool brute_force_sat(const clause_list_t& clauses, const std::uint32_t variable_count) noexcept
     {
         const auto assignment_count = std::uint32_t {1u} << variable_count;
         for (std::uint32_t assignment {}; assignment < assignment_count; ++assignment)
@@ -29,7 +29,7 @@ namespace kmx::sat::cdcl
             bool formula_satisfied = true;
             for (const auto& clause: clauses)
             {
-                bool clause_satisfied = false;
+                bool clause_satisfied {};
                 for (const auto lit: clause)
                 {
                     const auto variable_bit = std::uint32_t {1u} << (lit.variable_of().index() - 1u);
@@ -57,7 +57,7 @@ namespace kmx::sat::cdcl
         for (std::uint32_t formula_index {}; formula_index < 32u; ++formula_index)
         {
             solver_core solver;
-            std::vector<std::vector<literal>> clauses {};
+            clause_list_t clauses {};
             const auto clause_count = 5u + (rng.next() % 8u);
 
             for (std::uint32_t clause_index {}; clause_index < clause_count; ++clause_index)

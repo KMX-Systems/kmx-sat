@@ -38,11 +38,11 @@ namespace kmx::sat::cdcl
 
         const literal watched_literal {variable {1u}, false};
         const literal blocking_literal {variable {2u}, false};
-        const auto live_ref = database.add_clause(std::array<literal, 2> {watched_literal, blocking_literal}, true);
+        const auto live_ref = database.add_clause(std::array<literal, 2u> {watched_literal, blocking_literal}, true);
         database.set_glue(live_ref, 3u);
         database.increment_used_count(live_ref);
         database.increment_activity(live_ref, 5.0);
-        const auto garbage_ref = database.add_clause(std::array<literal, 1> {blocking_literal}, true);
+        const auto garbage_ref = database.add_clause(std::array<literal, 1u> {blocking_literal}, true);
         database.mark_garbage(garbage_ref);
         proof_manager proof_manager;
         proof_manager.on_add_original(live_ref, database.storage_of().literals_of(live_ref));

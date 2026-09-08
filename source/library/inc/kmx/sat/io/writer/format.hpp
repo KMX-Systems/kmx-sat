@@ -38,20 +38,7 @@ namespace kmx::sat::io::writer
         /// @brief Serializes a clause's literals in the target output encoding.
         /// @param clause Read-only span of literals to serialize.
         /// @throws None (noexcept).
-        void write_clause(const std::span<const literal> clause) noexcept
-        {
-            std::array<char, 32u> number {};
-            for (const auto lit: clause)
-            {
-                const auto variable_index = static_cast<std::int64_t>(lit.variable_of().index());
-                const auto signed_value = lit.is_negated() ? -variable_index : variable_index;
-                number.fill('\0');
-                const auto result = std::to_chars(number.data(), number.data() + number.size(), signed_value);
-                buffer_.append(number.data(), static_cast<std::size_t>(result.ptr - number.data()));
-                buffer_.push_back(' ');
-            }
-            buffer_.append("0\n");
-        }
+        void write_clause(const std::span<const literal> clause) noexcept;
 
         /// @brief Serializes a statistics snapshot to the output target.
         /// @throws None (noexcept).
@@ -62,36 +49,17 @@ namespace kmx::sat::io::writer
         /// @param detail Controls compact vs verbose rendering.
         /// @throws None (noexcept).
         void write_statistics(const telemetry::solver_statistics::snapshot& snapshot,
-                              const statistics_detail detail = statistics_detail::compact) noexcept
-        {
-            const telemetry::report_formatter formatter {};
-            if (detail == statistics_detail::verbose)
-            {
-                write_report_line(formatter.format_statistics_line_verbose(snapshot));
-                return;
-            }
-            write_report_line(formatter.format_statistics_line(snapshot));
-        }
+                              const statistics_detail detail = statistics_detail::compact) noexcept;
 
         /// @brief Writes one formatted diagnostic/progress report line.
         /// @param line Line content to write.
         /// @throws None (noexcept).
-        void write_report_line(const std::string_view line) noexcept
-        {
-            buffer_.append(line.begin(), line.end());
-            if (buffer_.empty() || buffer_.back() != '\n')
-                buffer_.push_back('\n');
-        }
+        void write_report_line(const std::string_view line) noexcept;
 
         /// @brief Writes one single-character diagnostic/progress report line.
         /// @param line Character to write.
         /// @throws None (noexcept).
-        void write_report_line(const char line) noexcept
-        {
-            buffer_.push_back(line);
-            if (line != '\n')
-                buffer_.push_back('\n');
-        }
+        void write_report_line(const char line) noexcept;
 
         /// @brief Writes one already-assembled proof record (add/delete/shrink) to the output target.
         /// @throws None (noexcept).

@@ -4,12 +4,9 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
-    #include <algorithm>
     #include <cstddef>
     #include <cstdint>
     #include <span>
-    #include <string>
-    #include <string_view>
     #include <utility>
     #include <vector>
 #endif
@@ -19,6 +16,7 @@
 #include <kmx/sat/proof/checker/online.hpp>
 #include <kmx/sat/proof/clause/id_allocator.hpp>
 #include <kmx/sat/proof/event_stream.hpp>
+#include <kmx/sat/proof/format.hpp>
 #include <kmx/sat/proof/tracer/view.hpp>
 
 namespace kmx::sat
@@ -38,42 +36,22 @@ namespace kmx::sat
         /// @throws None (noexcept).
         proof_manager() noexcept = default;
 
-        /// @brief Enables a named proof format's tracer.
-        /// @param format_name Identifier of the proof format to enable (for example "drat", "lrat", "frat").
+        /// @brief Enables one proof format's tracer.
+        /// @param id Proof format to enable.
         /// @throws None (noexcept).
-        void enable_format(const std::string_view format_name) noexcept
-        {
-            const std::string name {format_name};
-            if (std::find(enabled_formats_.begin(), enabled_formats_.end(), name) != enabled_formats_.end())
-                return;
-
-            enabled_formats_.push_back(name);
-            event_buffering_enabled_ = true;
-            if (name == "drat")
-                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::drat {}});
-            else if (name == "lrat")
-                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::lrat {}});
-            else if (name == "frat")
-                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::frat {}});
-            else if (name == "idrup")
-                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::idrup {}});
-            else if (name == "lidrup")
-                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::lidrup {}});
-            else if (name == "veripb")
-                enabled_tracers_.emplace_back(proof::tracer::view {proof::tracer::veripb {}});
-        }
+        void enable_format(const proof::format_id id) noexcept;
 
         /// @brief Disables every currently enabled proof format.
         /// @throws None (noexcept).
         void disable_all() noexcept
         {
-            enabled_formats_.clear();
+            enabled_format_mask_ = 0u;
             enabled_tracers_.clear();
         }
 
         /// @brief Returns whether any proof format is currently enabled.
         /// @return True if at least one proof format is active.
-        [[nodiscard]] bool has_enabled_formats() const noexcept { return !enabled_formats_.empty(); }
+        [[nodiscard]] bool has_enabled_formats() const noexcept { return enabled_format_mask_ != 0u; }
 
         /// @brief Returns whether anything would observe an emitted proof event.
         /// @details Lets a caller skip assembling event payloads -- notably per-conflict antecedent chains, which
@@ -87,11 +65,11 @@ namespace kmx::sat
         }
 
         /// @brief Returns whether a specific proof format is currently enabled.
-        /// @param format_name Identifier of the proof format to query.
-        /// @return True if `format_name` is active.
-        [[nodiscard]] bool has_enabled_format(const std::string_view format_name) const noexcept
+        /// @param id Proof format to query.
+        /// @return True if @p id is active.
+        [[nodiscard]] bool has_enabled_format(const proof::format_id id) const noexcept
         {
-            return std::find(enabled_formats_.begin(), enabled_formats_.end(), format_name) != enabled_formats_.end();
+            return (enabled_format_mask_ & format_bit(id)) != 0u;
         }
 
         /// @brief Registers an external sink that receives buffered proof events from the event stream.
@@ -110,31 +88,15 @@ namespace kmx::sat
         /// @throws None (noexcept).
         void set_event_buffering(const bool enabled) noexcept { event_buffering_enabled_ = enabled; }
 
-        /// @brief Enables an internal proof checker ("online" or "lrat") to run alongside the enabled tracers.
-        /// @param checker_name Identifier of the internal checker to enable.
+        /// @brief Enables an internal proof checker to run alongside the enabled tracers.
+        /// @param id Internal checker to enable.
         /// @throws None (noexcept).
-        void enable_checker(const std::string_view checker_name) noexcept
-        {
-            if (checker_name == "online")
-                online_checker_enabled_ = true;
-            else if (checker_name == "lrat")
-                lrat_checker_enabled_ = true;
-            else
-                return;
-            event_buffering_enabled_ = true;
-        }
+        void enable_checker(const proof::checker_id id) noexcept;
 
         /// @brief Registers an external tracer sink to receive proof events alongside internally enabled formats.
         /// @param sink Tracer sink to register.
         /// @throws None (noexcept).
-        void register_tracer(const proof::tracer::view& sink) noexcept
-        {
-            const auto format_name = sink.format_name();
-            if (!format_name.empty() && !has_enabled_format(format_name))
-                enabled_formats_.emplace_back(format_name);
-            registered_tracers_.push_back(sink);
-            event_buffering_enabled_ = true;
-        }
+        void register_tracer(const proof::tracer::view& sink) noexcept;
 
         /// @brief Reports that an original (non-redundant) problem clause was added.
         /// @param ref Reference to the newly added clause.
@@ -151,16 +113,11 @@ namespace kmx::sat
         /// @param antecedents Ordered antecedent clause ids justifying the derivation, if already known.
         /// @throws None (noexcept).
         void on_add_derived(const cdcl::clause::ref_t ref, const std::span<const literal> literals = {},
-                            const std::span<const proof::clause::id> antecedents = {}) noexcept
-        {
-            dispatch_event(proof::event_kind::add_derived, ref, literals, antecedents);
-            if (!antecedents.empty())
-                record_checker_antecedents(stable_id_for_clause(ref), antecedents);
-        }
+                            const std::span<const proof::clause::id> antecedents = {}) noexcept;
 
         /// @brief Gives a clause that predates the first consumer a proof id, so later deletions and antecedent
         /// references can name it; a clause that already has an id keeps it.
-        void adopt_clause(const cdcl::clause::ref_t ref) noexcept { (void) id_allocator_.allocate_for_new_clause(ref); }
+        void adopt_clause(const cdcl::clause::ref_t ref) noexcept { (void)id_allocator_.allocate_for_new_clause(ref); }
 
         /// @brief Reports that a clause was deleted.
         /// @param ref Reference to the deleted clause.
@@ -180,12 +137,7 @@ namespace kmx::sat
         /// @param old_ref Clause reference before relocation.
         /// @param new_ref Clause reference after relocation.
         /// @throws None (noexcept).
-        void on_clause_relocated(const cdcl::clause::ref_t old_ref, const cdcl::clause::ref_t new_ref) noexcept
-        {
-            id_allocator_.preserve_on_relocation(old_ref, new_ref);
-            if (online_checker_enabled_)
-                online_checker_.on_relocate(old_ref, new_ref);
-        }
+        void on_clause_relocated(const cdcl::clause::ref_t old_ref, const cdcl::clause::ref_t new_ref) noexcept;
 
         /// @brief Finalizes the proof with the episode's SAT/UNSAT conclusion.
         /// @throws None (noexcept).
@@ -250,110 +202,29 @@ namespace kmx::sat
         /// @return True if the online checker (when enabled) saw no structural error and the LRAT checker (when
         /// enabled and fed at least one antecedent chain) confirms every recorded chain resolves to its clause.
         /// @throws None (noexcept).
-        [[nodiscard]] bool validate_checkers() const noexcept
-        {
-            if (online_checker_enabled_ && !online_checker_.validate_conclusion())
-                return false;
-            if (lrat_checker_enabled_ && lrat_checker_.has_recorded() && !lrat_checker_.check_chain())
-                return false;
-            return true;
-        }
+        [[nodiscard]] bool validate_checkers() const noexcept;
 
     private:
-        proof::clause::id resolve_clause_id(const proof::event_kind kind, const cdcl::clause::ref_t ref) noexcept
+        /// @brief Returns the enabled-format mask bit representing one proof format.
+        static constexpr std::uint32_t format_bit(const proof::format_id id) noexcept
         {
-            switch (kind)
-            {
-                case proof::event_kind::add_original:
-                case proof::event_kind::add_derived:
-                    return id_allocator_.allocate_for_new_clause(ref);
-                case proof::event_kind::delete_clause:
-                case proof::event_kind::shrink_clause:
-                    return id_allocator_.id_for_clause_ref(ref);
-                case proof::event_kind::conclusion:
-                    return {};
-            }
-
-            return {};
+            return std::uint32_t {1u} << static_cast<std::uint8_t>(id);
         }
 
-        static int32_t to_dimacs_int(const literal lit) noexcept
+        proof::clause::id resolve_clause_id(const proof::event_kind kind, const cdcl::clause::ref_t ref) noexcept;
+
+        static std::int32_t to_dimacs_int(const literal lit) noexcept
         {
-            const auto index = static_cast<int32_t>(lit.variable_of().index());
+            const auto index = static_cast<std::int32_t>(lit.variable_of().index());
             return lit.is_negated() ? -index : index;
         }
 
         void dispatch_event(const proof::event_kind kind, const cdcl::clause::ref_t ref, const std::span<const literal> literals = {},
-                            const std::span<const proof::clause::id> antecedents = {}) noexcept
-        {
-            // With nothing attached there is nothing to record: the clause-id table alone was a third of the
-            // instructions a proof-free run spent on reading and preprocessing a 114k-clause formula. A consumer
-            // attached later receives ids for every clause alive at that point through `adopt_clause`.
-            if (!has_active_consumers())
-                return;
-            // Reuse `last_event_`'s buffers so a solve with no proof consumer performs no per-event allocation.
-            auto& event = last_event_;
-            event.kind = kind;
-            event.clause_ref = ref;
-            event.clause_id = resolve_clause_id(kind, ref);
-            event.finalized = kind == proof::event_kind::conclusion;
-            event.literals.clear();
-            event.antecedent_ids.clear();
-            const auto is_add_or_shrink = kind == proof::event_kind::add_original || kind == proof::event_kind::add_derived ||
-                                          kind == proof::event_kind::shrink_clause;
-            if (is_add_or_shrink)
-            {
-                event.literals.reserve(literals.size());
-                for (const auto lit: literals)
-                    event.literals.push_back(to_dimacs_int(lit));
-                if (lrat_checker_enabled_)
-                    lrat_checker_.record_clause(event.clause_id, literals);
-            }
-            if (kind == proof::event_kind::add_derived && !antecedents.empty())
-            {
-                event.antecedent_ids.reserve(antecedents.size());
-                for (const auto& antecedent: antecedents)
-                    event.antecedent_ids.push_back(antecedent);
-            }
-            // With buffering disabled nothing can ever read the buffer, so events are not retained; otherwise a
-            // proof-free solve pays for building and later freeing one buffered event per clause action.
-            if (event_buffering_enabled_)
-                event_stream_.push_event(event);
-            if (online_checker_enabled_)
-            {
-                switch (kind)
-                {
-                    case proof::event_kind::add_original:
-                    case proof::event_kind::add_derived:
-                        online_checker_.on_add(ref);
-                        break;
-                    case proof::event_kind::delete_clause:
-                        online_checker_.on_delete(ref);
-                        break;
-                    case proof::event_kind::shrink_clause:
-                        online_checker_.on_shrink(ref);
-                        break;
-                    case proof::event_kind::conclusion:
-                        break;
-                }
-            }
-
-            if (kind == proof::event_kind::delete_clause)
-            {
-                if (lrat_checker_enabled_)
-                    lrat_checker_.forget_clause(event.clause_id);
-                id_allocator_.retire_on_delete(ref);
-            }
-
-            for (auto& tracer: enabled_tracers_)
-                tracer.on_event(last_event_);
-            for (auto& tracer: registered_tracers_)
-                tracer.on_event(last_event_);
-        }
+                            const std::span<const proof::clause::id> antecedents = {}) noexcept;
 
         proof::clause::id_allocator id_allocator_ {};
         proof::event_stream event_stream_ {};
-        std::vector<std::string> enabled_formats_ {};
+        std::uint32_t enabled_format_mask_ {};
         std::vector<proof::tracer::view> enabled_tracers_ {};
         std::vector<proof::tracer::view> registered_tracers_ {};
         proof::proof_event last_event_ {};

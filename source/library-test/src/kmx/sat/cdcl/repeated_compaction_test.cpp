@@ -25,18 +25,18 @@ namespace kmx::sat::cdcl
         mapper.mark_eliminated(internal_b);
 
         clause::database database;
-        const std::array<literal, 2> original_literals {literal {internal_a, false}, literal {internal_c, true}};
+        const std::array<literal, 2u> original_literals {literal {internal_a, false}, literal {internal_c, true}};
         auto clause_ref = database.add_clause(original_literals, true);
         database.set_glue(clause_ref, 2u);
         database.increment_used_count(clause_ref);
         database.increment_activity(clause_ref, 4.0);
 
         bank::watch_list watches;
-        watches.watch_literal(original_literals[0], watch {original_literals[1], clause_ref});
+        watches.watch_literal(original_literals[0u], watch {original_literals[1u], clause_ref});
         store::assignment assignment;
         assignment.set_current_level(1u);
         assignment.set_current_trail_position(0u);
-        assignment.assign(original_literals[0], clause_ref);
+        assignment.assign(original_literals[0u], clause_ref);
 
         proof_manager proof_manager;
         proof_manager.on_add_original(clause_ref, original_literals);
@@ -66,7 +66,7 @@ namespace kmx::sat::cdcl
             REQUIRE(clause_ref.valid());
             REQUIRE(database.storage_of().proof_id_of(clause_ref).valid());
             REQUIRE(proof_manager.stable_id_for_clause(clause_ref).equals(stable_id));
-            REQUIRE(assignment.reason_of(original_literals[0].variable_of()) == clause_ref);
+            REQUIRE(assignment.reason_of(original_literals[0u].variable_of()) == clause_ref);
             REQUIRE(cold_store.is_cold(clause_ref));
             REQUIRE(cold_store.decode_literals(clause_ref).size() == 2u);
 

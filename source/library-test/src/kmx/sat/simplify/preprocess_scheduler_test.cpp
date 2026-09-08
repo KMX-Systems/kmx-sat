@@ -18,26 +18,14 @@ namespace kmx::sat::simplify
     TEST_CASE("preprocess scheduler runs opt-in sweep pass", "[sat]")
     {
         scheduler::preprocess scheduler;
-        for (const auto pass_name: scheduler::preprocess::baseline_passes)
-            scheduler.disable_pass(pass_name);
-        scheduler.enable_pass("sweep");
+        for (const auto id: scheduler::preprocess::baseline_passes)
+            scheduler.disable_pass(id);
+        scheduler.enable_pass(pass_id::sweep);
 
         scheduler.run_initial_pipeline();
 
         REQUIRE(scheduler.enabled_pass_count() == 1u);
         REQUIRE(scheduler.executed_pass_count() == 1u);
-    }
-
-    TEST_CASE("preprocess pass ids have stable text projections", "[sat]")
-    {
-        for (std::uint8_t value {}; value <= static_cast<std::uint8_t>(scheduler::preprocess::pass_id::sweep); ++value)
-        {
-            const auto id = static_cast<scheduler::preprocess::pass_id>(value);
-            REQUIRE(!scheduler::preprocess::pass_name(id).empty());
-            REQUIRE(parse_pass(scheduler::preprocess::pass_name(id)).has_value());
-            REQUIRE(parse_pass(scheduler::preprocess::pass_name(id)).value() == id);
-        }
-        REQUIRE_FALSE(parse_pass("not_a_pass").has_value());
     }
 
     TEST_CASE("preprocess scheduler runs enabled passes and reports summaries", "[sat]")
@@ -52,7 +40,7 @@ namespace kmx::sat::simplify
         REQUIRE(!scheduler.should_abort_pipeline());
         REQUIRE(scheduler.enabled_pass_count() > 0u);
 
-        scheduler.disable_pass("vivifier");
+        scheduler.disable_pass(pass_id::vivifier);
         const auto enabled_after_disable = scheduler.enabled_pass_count();
         REQUIRE(enabled_after_disable > 0u);
 
@@ -66,9 +54,9 @@ namespace kmx::sat::simplify
         REQUIRE(std::all_of(scheduler.last_reported_summaries().begin(), scheduler.last_reported_summaries().end(),
                             [](const scheduler::preprocess::pass_summary& summary) noexcept
                             { return summary.executed && !summary.skipped_by_selector; }));
-        REQUIRE(scheduler::preprocess::pass_name_of(scheduler.last_reported_summaries().front()) == "transitive_reducer");
+        REQUIRE(scheduler.last_reported_summaries().front().id == pass_id::transitive_reducer);
 
-        scheduler.enable_pass("vivifier");
+        scheduler.enable_pass(pass_id::vivifier);
         REQUIRE(scheduler.enabled_pass_count() == enabled_after_disable + 1u);
 
         scheduler.request_abort();
@@ -99,9 +87,9 @@ namespace kmx::sat::simplify
         scheduler.attach_watch_list(watch_list);
         scheduler.attach_variable_mapper(mapper);
 
-        for (const auto pass_name: scheduler::preprocess::baseline_passes)
-            scheduler.disable_pass(pass_name);
-        scheduler.enable_pass("decomposition");
+        for (const auto id: scheduler::preprocess::baseline_passes)
+            scheduler.disable_pass(id);
+        scheduler.enable_pass(pass_id::decomposition);
 
         const variable var_three {3u};
         const variable var_five {5u};
@@ -110,7 +98,7 @@ namespace kmx::sat::simplify
         const literal lit_five_pos {var_five, false};
         const literal lit_five_neg {var_five, true};
 
-        const std::array<literal, 2> clause_literals {lit_five_pos, lit_three_neg};
+        const std::array<literal, 2u> clause_literals {lit_five_pos, lit_three_neg};
         const auto clause_ref = clause_database.add_clause(clause_literals, false);
 
         // A binary watch carries the clause's other literal as its blocking literal; there is no second field.
@@ -131,8 +119,8 @@ namespace kmx::sat::simplify
 
         const auto rewritten_clause = clause_database.storage_of().literals_of(clause_ref);
         REQUIRE(rewritten_clause.size() == 2u);
-        REQUIRE(rewritten_clause[0] == lit_three_pos);
-        REQUIRE(rewritten_clause[1] == lit_three_neg);
+        REQUIRE(rewritten_clause[0u] == lit_three_pos);
+        REQUIRE(rewritten_clause[1u] == lit_three_neg);
 
         REQUIRE(watch_list.size_of(lit_five_pos) == 0u);
         REQUIRE(watch_list.size_of(lit_three_pos) == 1u);
@@ -140,8 +128,8 @@ namespace kmx::sat::simplify
         std::vector<cdcl::watch> remapped_entries {};
         watch_list.iterate(lit_three_pos, [&](const cdcl::watch& watch_entry) noexcept { remapped_entries.push_back(watch_entry); });
         REQUIRE(remapped_entries.size() == 1u);
-        REQUIRE(remapped_entries[0].blocking_literal() == lit_three_neg);
-        REQUIRE(remapped_entries[0].binary_literal() == lit_three_neg);
+        REQUIRE(remapped_entries[0u].blocking_literal() == lit_three_neg);
+        REQUIRE(remapped_entries[0u].binary_literal() == lit_three_neg);
 
         const auto remapped_internal = mapper.to_internal_literal(literal {external_var, false});
         REQUIRE(remapped_internal.variable_of().index() == var_three.index());
@@ -160,10 +148,10 @@ namespace kmx::sat::simplify
         scheduler.attach_watch_list(watch_list);
         scheduler.attach_variable_mapper(mapper);
 
-        for (const auto pass_name: scheduler::preprocess::baseline_passes)
-            scheduler.disable_pass(pass_name);
-        scheduler.enable_pass("gate");
-        scheduler.enable_pass("congruence");
+        for (const auto id: scheduler::preprocess::baseline_passes)
+            scheduler.disable_pass(id);
+        scheduler.enable_pass(pass_id::gate);
+        scheduler.enable_pass(pass_id::congruence);
 
         const variable external_a {41u};
         const variable external_output {43u};
@@ -175,9 +163,9 @@ namespace kmx::sat::simplify
         const literal lit_a_neg {internal_a, true};
         const literal lit_o_neg {internal_output, true};
 
-        const std::array<literal, 3> and_guard_clause {lit_a_neg, lit_a_neg, lit_o_pos};
-        const std::array<literal, 2> and_left_clause {lit_a_pos, lit_o_neg};
-        const std::array<literal, 2> rewrite_target_clause {lit_o_pos, lit_a_neg};
+        const std::array<literal, 3u> and_guard_clause {lit_a_neg, lit_a_neg, lit_o_pos};
+        const std::array<literal, 2u> and_left_clause {lit_a_pos, lit_o_neg};
+        const std::array<literal, 2u> rewrite_target_clause {lit_o_pos, lit_a_neg};
 
         clause_database.add_clause(and_guard_clause, false);
         clause_database.add_clause(and_left_clause, false);
@@ -193,8 +181,8 @@ namespace kmx::sat::simplify
 
         const auto rewritten_clause = clause_database.storage_of().literals_of(rewrite_ref);
         REQUIRE(rewritten_clause.size() == 2u);
-        REQUIRE(rewritten_clause[0].variable_of().index() == internal_a.index());
-        REQUIRE(rewritten_clause[1].variable_of().index() == internal_a.index());
+        REQUIRE(rewritten_clause[0u].variable_of().index() == internal_a.index());
+        REQUIRE(rewritten_clause[1u].variable_of().index() == internal_a.index());
 
         REQUIRE(watch_list.size_of(lit_o_pos) == 0u);
         REQUIRE(watch_list.size_of(lit_a_pos) == 1u);
@@ -202,8 +190,8 @@ namespace kmx::sat::simplify
         std::vector<cdcl::watch> remapped_watches {};
         watch_list.iterate(lit_a_pos, [&](const cdcl::watch& entry) noexcept { remapped_watches.push_back(entry); });
         REQUIRE(remapped_watches.size() == 1u);
-        REQUIRE(remapped_watches[0].blocking_literal() == lit_a_neg);
-        REQUIRE(remapped_watches[0].binary_literal() == lit_a_neg);
+        REQUIRE(remapped_watches[0u].blocking_literal() == lit_a_neg);
+        REQUIRE(remapped_watches[0u].binary_literal() == lit_a_neg);
 
         const auto remapped_output = mapper.to_internal_literal(literal {external_output, false});
         REQUIRE(remapped_output.variable_of().index() == internal_a.index());
@@ -220,7 +208,7 @@ namespace kmx::sat::simplify
 
         governor.set_current_usage(11u);
         // Congruence left the default pipeline; it is enabled here so both memory-heavy passes are under test.
-        scheduler.enable_pass("congruence");
+        scheduler.enable_pass(pass_id::congruence);
         scheduler.run_initial_pipeline();
         scheduler.report_pass_summary();
 
@@ -236,14 +224,14 @@ namespace kmx::sat::simplify
         REQUIRE(first_summaries.size() == scheduler::preprocess::baseline_passes.size() + 1u);
         const auto vivifier_summary =
             std::find_if(first_summaries.begin(), first_summaries.end(), [](const scheduler::preprocess::pass_summary& summary) noexcept
-                         { return summary.id == scheduler::preprocess::pass_id::vivifier; });
+                         { return summary.id == scheduler::preprocess::pass_id_t::vivifier; });
         REQUIRE(vivifier_summary != first_summaries.end());
         REQUIRE_FALSE(vivifier_summary->executed);
         REQUIRE(vivifier_summary->skipped_by_selector);
 
         const auto congruence_summary =
             std::find_if(first_summaries.begin(), first_summaries.end(), [](const scheduler::preprocess::pass_summary& summary) noexcept
-                         { return summary.id == scheduler::preprocess::pass_id::congruence; });
+                         { return summary.id == scheduler::preprocess::pass_id_t::congruence; });
         REQUIRE(congruence_summary != first_summaries.end());
         REQUIRE_FALSE(congruence_summary->executed);
         REQUIRE(congruence_summary->skipped_by_selector);
@@ -269,17 +257,17 @@ namespace kmx::sat::simplify
         cdcl::clause::database clause_database;
         scheduler.attach_clause_database(clause_database);
 
-        for (const auto pass_name: scheduler::preprocess::baseline_passes)
-            scheduler.disable_pass(pass_name);
-        scheduler.enable_pass("probing");
-        scheduler.enable_pass("factorizer");
-        scheduler.enable_pass("transitive_reducer");
+        for (const auto id: scheduler::preprocess::baseline_passes)
+            scheduler.disable_pass(id);
+        scheduler.enable_pass(pass_id::probing);
+        scheduler.enable_pass(pass_id::factorizer);
+        scheduler.enable_pass(pass_id::transitive_reducer);
 
         for (std::uint32_t index {1u}; index <= 16u; ++index)
         {
             const variable left {index};
             const variable right {index + 100u};
-            const std::array<literal, 2> binary_clause {literal {left, false}, literal {right, true}};
+            const std::array<literal, 2u> binary_clause {literal {left, false}, literal {right, true}};
             clause_database.add_clause(binary_clause, false);
         }
 
@@ -301,13 +289,13 @@ namespace kmx::sat::simplify
 
         scheduler::preprocess scheduler;
         proof_manager proof_manager;
-        proof_manager.enable_format("drat");
+        proof_manager.enable_format(proof::format_id::drat);
         scheduler.attach_proof_manager(proof_manager);
 
-        for (const auto pass_name: scheduler::preprocess::baseline_passes)
-            scheduler.disable_pass(pass_name);
-        scheduler.enable_pass("gate");
-        scheduler.enable_pass("congruence");
+        for (const auto id: scheduler::preprocess::baseline_passes)
+            scheduler.disable_pass(id);
+        scheduler.enable_pass(pass_id::gate);
+        scheduler.enable_pass(pass_id::congruence);
 
         scheduler.run_initial_pipeline();
         scheduler.report_pass_summary();
@@ -319,7 +307,7 @@ namespace kmx::sat::simplify
                             { return !summary.executed && summary.skipped_by_proof_format; }));
 
         proof_manager.disable_all();
-        proof_manager.enable_format("veripb");
+        proof_manager.enable_format(proof::format_id::veripb);
         scheduler.run_initial_pipeline();
         scheduler.report_pass_summary();
 
@@ -337,16 +325,16 @@ namespace kmx::sat::simplify
         cdcl::clause::database clause_database;
         scheduler.attach_clause_database(clause_database);
 
-        for (const auto pass_name: scheduler::preprocess::baseline_passes)
-            scheduler.disable_pass(pass_name);
-        scheduler.enable_pass("transitive_reducer");
+        for (const auto id: scheduler::preprocess::baseline_passes)
+            scheduler.disable_pass(id);
+        scheduler.enable_pass(pass_id::transitive_reducer);
 
         const auto implication_ab =
-            clause_database.add_clause(std::array<literal, 2> {literal {variable {1u}, true}, literal {variable {2u}, false}}, false);
+            clause_database.add_clause(std::array<literal, 2u> {literal {variable {1u}, true}, literal {variable {2u}, false}}, false);
         const auto implication_bc =
-            clause_database.add_clause(std::array<literal, 2> {literal {variable {2u}, true}, literal {variable {3u}, false}}, false);
+            clause_database.add_clause(std::array<literal, 2u> {literal {variable {2u}, true}, literal {variable {3u}, false}}, false);
         const auto implication_ac =
-            clause_database.add_clause(std::array<literal, 2> {literal {variable {1u}, true}, literal {variable {3u}, false}}, false);
+            clause_database.add_clause(std::array<literal, 2u> {literal {variable {1u}, true}, literal {variable {3u}, false}}, false);
 
         scheduler.run_initial_pipeline();
 
@@ -365,15 +353,15 @@ namespace kmx::sat::simplify
         cdcl::clause::database clause_database;
         scheduler.attach_clause_database(clause_database);
 
-        for (const auto pass_name: scheduler::preprocess::baseline_passes)
-            scheduler.disable_pass(pass_name);
-        scheduler.enable_pass("probing");
-        scheduler.enable_pass("factorizer");
-        scheduler.enable_pass("transitive_reducer");
+        for (const auto id: scheduler::preprocess::baseline_passes)
+            scheduler.disable_pass(id);
+        scheduler.enable_pass(pass_id::probing);
+        scheduler.enable_pass(pass_id::factorizer);
+        scheduler.enable_pass(pass_id::transitive_reducer);
 
         for (std::uint32_t index {1u}; index <= 16u; ++index)
         {
-            const std::array<literal, 5> long_clause {literal {variable {index}, false}, literal {variable {index + 100u}, false},
+            const std::array<literal, 5u> long_clause {literal {variable {index}, false}, literal {variable {index + 100u}, false},
                                                       literal {variable {index + 200u}, false}, literal {variable {index + 300u}, false},
                                                       literal {variable {index + 400u}, false}};
             clause_database.add_clause(long_clause, false);
@@ -401,7 +389,7 @@ namespace kmx::sat::simplify
         scheduler.attach_memory_governor(governor);
 
         governor.set_current_usage(0u);
-        scheduler.enable_pass("congruence");
+        scheduler.enable_pass(pass_id::congruence);
         scheduler.set_inprocess_telemetry_snapshot(0.30, 0.01, 0.04, 0.04, 0.10);
         scheduler.run_initial_pipeline();
         scheduler.report_pass_summary();
@@ -414,14 +402,14 @@ namespace kmx::sat::simplify
         const auto& summaries = scheduler.last_reported_summaries();
         const auto vivifier_summary =
             std::find_if(summaries.begin(), summaries.end(), [](const scheduler::preprocess::pass_summary& summary) noexcept
-                         { return summary.id == scheduler::preprocess::pass_id::vivifier; });
+                         { return summary.id == scheduler::preprocess::pass_id_t::vivifier; });
         REQUIRE(vivifier_summary != summaries.end());
         REQUIRE_FALSE(vivifier_summary->executed);
         REQUIRE(vivifier_summary->skipped_by_selector);
 
         const auto congruence_summary =
             std::find_if(summaries.begin(), summaries.end(), [](const scheduler::preprocess::pass_summary& summary) noexcept
-                         { return summary.id == scheduler::preprocess::pass_id::congruence; });
+                         { return summary.id == scheduler::preprocess::pass_id_t::congruence; });
         REQUIRE(congruence_summary != summaries.end());
         REQUIRE_FALSE(congruence_summary->executed);
         REQUIRE(congruence_summary->skipped_by_selector);
@@ -449,7 +437,7 @@ namespace kmx::sat::simplify
         const auto& summaries = scheduler.last_reported_summaries();
         const auto vivifier_summary =
             std::find_if(summaries.begin(), summaries.end(), [](const scheduler::preprocess::pass_summary& summary) noexcept
-                         { return summary.id == scheduler::preprocess::pass_id::vivifier; });
+                         { return summary.id == scheduler::preprocess::pass_id_t::vivifier; });
         REQUIRE(vivifier_summary != summaries.end());
         REQUIRE_FALSE(vivifier_summary->executed);
         REQUIRE(vivifier_summary->skipped_by_selector);
@@ -465,7 +453,7 @@ namespace kmx::sat::simplify
         scheduler.attach_memory_governor(governor);
 
         governor.set_current_usage(0u);
-        scheduler.enable_pass("congruence");
+        scheduler.enable_pass(pass_id::congruence);
         scheduler.set_inprocess_telemetry_snapshot(0.01, 0.50, 0.00, 0.00, 0.80);
         scheduler.run_initial_pipeline();
         scheduler.report_pass_summary();
@@ -478,14 +466,14 @@ namespace kmx::sat::simplify
         const auto& summaries = scheduler.last_reported_summaries();
         const auto vivifier_summary =
             std::find_if(summaries.begin(), summaries.end(), [](const scheduler::preprocess::pass_summary& summary) noexcept
-                         { return summary.id == scheduler::preprocess::pass_id::vivifier; });
+                         { return summary.id == scheduler::preprocess::pass_id_t::vivifier; });
         REQUIRE(vivifier_summary != summaries.end());
         REQUIRE(vivifier_summary->executed);
         REQUIRE_FALSE(vivifier_summary->skipped_by_selector);
 
         const auto congruence_summary =
             std::find_if(summaries.begin(), summaries.end(), [](const scheduler::preprocess::pass_summary& summary) noexcept
-                         { return summary.id == scheduler::preprocess::pass_id::congruence; });
+                         { return summary.id == scheduler::preprocess::pass_id_t::congruence; });
         REQUIRE(congruence_summary != summaries.end());
         REQUIRE(congruence_summary->executed);
         REQUIRE_FALSE(congruence_summary->skipped_by_selector);
@@ -498,25 +486,25 @@ namespace kmx::sat::simplify
         scheduler::preprocess scheduler;
         cdcl::clause::database clause_database;
         proof_manager proof_manager;
-        proof_manager.enable_format("drat");
+        proof_manager.enable_format(proof::format_id::drat);
 
         scheduler.attach_clause_database(clause_database);
         scheduler.attach_proof_manager(proof_manager);
 
-        for (const auto pass_name: scheduler::preprocess::baseline_passes)
-            scheduler.disable_pass(pass_name);
-        scheduler.enable_pass("probing");
+        for (const auto id: scheduler::preprocess::baseline_passes)
+            scheduler.disable_pass(id);
+        scheduler.enable_pass(pass_id::probing);
 
         const literal unit_lit {variable {61u}, false};
         const literal implied_lit {variable {62u}, false};
-        const auto unit_ref = clause_database.add_clause(std::array<literal, 1> {unit_lit}, false);
-        const auto binary_ref = clause_database.add_clause(std::array<literal, 2> {unit_lit.negated(), implied_lit}, false);
+        const auto unit_ref = clause_database.add_clause(std::array<literal, 1u> {unit_lit}, false);
+        const auto binary_ref = clause_database.add_clause(std::array<literal, 2u> {unit_lit.negated(), implied_lit}, false);
 
         scheduler.run_initial_pipeline();
 
         REQUIRE(scheduler.executed_pass_count() == 1u);
         REQUIRE(clause_database.storage_of().literals_of(binary_ref).size() == 1u);
-        REQUIRE(clause_database.storage_of().literals_of(binary_ref)[0] == implied_lit);
+        REQUIRE(clause_database.storage_of().literals_of(binary_ref)[0u] == implied_lit);
         REQUIRE(clause_database.stats_snapshot().redundant_count == 0u);
         REQUIRE(clause_database.storage_of().literals_of(unit_ref).size() == 1u);
         bool attached_backbone_unit {};
@@ -524,7 +512,7 @@ namespace kmx::sat::simplify
             [&](const cdcl::clause::ref_t ref) noexcept
             {
                 const auto clause = clause_database.storage_of().literals_of(ref);
-                if (clause.size() == 1u && clause.front() == implied_lit)
+                if ((clause.size() == 1u) && (clause.front() == implied_lit))
                     attached_backbone_unit = true;
             });
         REQUIRE_FALSE(attached_backbone_unit);

@@ -71,56 +71,7 @@ namespace kmx::sat::cdcl
         /// @param variable_count Highest variable index in use.
         /// @return False if the formula is empty, in which case no walk can run.
         /// @throws None (noexcept).
-        bool prepare(const clause::database& database, const std::uint32_t variable_count) noexcept
-        {
-            variable_count_ = variable_count;
-            clause_literals_.clear();
-            clause_offsets_.clear();
-            best_unsatisfied_count_ = npos;
-            best_assignment_.clear();
-            maximum_clause_size_ = 0u;
-
-            if (variable_count == 0u)
-                return false;
-
-            const auto& storage = database.storage_of();
-            database.iterate_irredundant(
-                [&](const clause::ref_t ref) noexcept
-                {
-                    const auto literals = storage.view_literals(ref);
-                    if (literals.empty())
-                        return;
-                    clause_offsets_.push_back(static_cast<std::uint32_t>(clause_literals_.size()));
-                    for (const auto lit: literals)
-                        clause_literals_.push_back(lit.raw());
-                    maximum_clause_size_ = std::max<std::uint32_t>(maximum_clause_size_, static_cast<std::uint32_t>(literals.size()));
-                });
-            if (clause_offsets_.empty())
-                return false;
-            clause_offsets_.push_back(static_cast<std::uint32_t>(clause_literals_.size()));
-
-            // Occurrence lists indexed by literal, built with a counting pass so the whole index is two contiguous
-            // allocations rather than one vector per literal.
-            const auto clause_count = clause_offsets_.size() - 1u;
-            const auto literal_slots = (static_cast<std::size_t>(variable_count_) + 1u) * 2u;
-            occurrence_starts_.assign(literal_slots + 1u, 0u);
-            for (const auto raw: clause_literals_)
-                ++occurrence_starts_[raw + 1u];
-            for (std::size_t index = 1u; index < occurrence_starts_.size(); ++index)
-                occurrence_starts_[index] += occurrence_starts_[index - 1u];
-            occurrences_.assign(clause_literals_.size(), 0u);
-            occurrence_cursor_.assign(occurrence_starts_.begin(), occurrence_starts_.end() - 1);
-            for (std::uint32_t index = 0u; index < clause_count; ++index)
-                for (auto position = clause_offsets_[index]; position < clause_offsets_[index + 1u]; ++position)
-                    occurrences_[occurrence_cursor_[clause_literals_[position]]++] = index;
-
-            true_counts_.assign(clause_count, 0u);
-            critical_variables_.assign(clause_count, 0u);
-            unsatisfied_position_.assign(clause_count, npos32);
-            break_counts_.assign(static_cast<std::size_t>(variable_count_) + 1u, 0u);
-            assignment_.assign(static_cast<std::size_t>(variable_count_) + 1u, 0u);
-            return true;
-        }
+        bool prepare(const clause::database& database, const std::uint32_t variable_count) noexcept;
 
         /// @brief Runs one walk over the prepared formula and records the best assignment seen.
         /// @param config Flip rule and its parameters.
@@ -132,40 +83,11 @@ namespace kmx::sat::cdcl
         /// rest of the program looks like. Left to link-time optimisation, one build ran it 8% slower than another
         /// on the same flips.
         [[gnu::noinline]] bool walk(const configuration& config, const std::size_t max_flips,
-                                    const std::span<const std::uint8_t> initial_phase = {}) noexcept
-        {
-            if (clause_offsets_.size() < 2u)
-                return false;
-
-            initialize_assignment(initial_phase);
-            recompute_state();
-            if (unsatisfied_.size() < best_unsatisfied_count_)
-                record_best();
-            if (config.kind == strategy::probsat)
-                prepare_probabilities(config);
-
-            std::size_t flips {};
-            while (!unsatisfied_.empty() && flips < max_flips)
-            {
-                const auto clause_index = unsatisfied_[next_random() % unsatisfied_.size()];
-                const auto flipped = config.kind == strategy::probsat ? select_probsat(clause_index) : select_walksat(clause_index, config);
-                flip_variable(flipped);
-                ++flips;
-                if (unsatisfied_.size() < best_unsatisfied_count_)
-                    record_best();
-            }
-            flip_count_ += flips;
-            return unsatisfied_.empty();
-        }
+                                    const std::span<const std::uint8_t> initial_phase = {}) noexcept;
 
         /// @brief Prepares the formula and runs a single probSAT walk; the one-call form of the walk.
         bool run(const clause::database& database, const std::uint32_t variable_count, const std::size_t max_flips,
-                 const std::span<const std::uint8_t> initial_phase = {}) noexcept
-        {
-            if (!prepare(database, variable_count))
-                return false;
-            return walk(configuration {}, max_flips, initial_phase);
-        }
+                 const std::span<const std::uint8_t> initial_phase = {}) noexcept;
 
         /// @brief Returns the best assignment found, indexed by variable (index zero unused).
         /// @return Per-variable polarity of the best assignment, empty if no walk has run.
@@ -192,16 +114,7 @@ namespace kmx::sat::cdcl
         /// @brief Break counts at or above this share the last probability-table entry.
         static constexpr std::size_t probability_table_size {64u};
 
-        void initialize_assignment(const std::span<const std::uint8_t> initial_phase) noexcept
-        {
-            for (std::uint32_t index = 1u; index <= variable_count_; ++index)
-            {
-                if (index < initial_phase.size())
-                    assignment_[index] = initial_phase[index] != 0u ? 1u : 0u;
-                else
-                    assignment_[index] = static_cast<std::uint8_t>(next_random() & 1u);
-            }
-        }
+        void initialize_assignment(const std::span<const std::uint8_t> initial_phase) noexcept;
 
         [[nodiscard]] [[gnu::always_inline]] inline bool is_true(const std::uint32_t raw) const noexcept
         {
@@ -209,37 +122,7 @@ namespace kmx::sat::cdcl
         }
 
         /// @brief Recomputes every clause's true-literal count, critical variable, break counts and the unsatisfied list.
-        void recompute_state() noexcept
-        {
-            const auto clause_count = clause_offsets_.size() - 1u;
-            unsatisfied_.clear();
-            std::fill(break_counts_.begin(), break_counts_.end(), 0u);
-            for (std::uint32_t index = 0u; index < clause_count; ++index)
-            {
-                std::uint32_t satisfied {};
-                std::uint32_t critical {};
-                for (auto position = clause_offsets_[index]; position < clause_offsets_[index + 1u]; ++position)
-                {
-                    const auto raw = clause_literals_[position];
-                    if (is_true(raw))
-                    {
-                        ++satisfied;
-                        critical = raw >> 1u;
-                    }
-                }
-                true_counts_[index] = satisfied;
-                critical_variables_[index] = critical;
-                if (satisfied == 1u)
-                    ++break_counts_[critical];
-                if (satisfied == 0u)
-                {
-                    unsatisfied_position_[index] = static_cast<std::uint32_t>(unsatisfied_.size());
-                    unsatisfied_.push_back(index);
-                }
-                else
-                    unsatisfied_position_[index] = npos32;
-            }
-        }
+        void recompute_state() noexcept;
 
         [[gnu::noinline]] void record_best() noexcept
         {
@@ -247,12 +130,7 @@ namespace kmx::sat::cdcl
             best_unsatisfied_count_ = unsatisfied_.size();
         }
 
-        void prepare_probabilities(const configuration& config) noexcept
-        {
-            probabilities_.resize(probability_table_size);
-            for (std::size_t break_count = 0u; break_count < probability_table_size; ++break_count)
-                probabilities_[break_count] = std::pow(config.break_epsilon + static_cast<double>(break_count), -config.break_exponent);
-        }
+        void prepare_probabilities(const configuration& config) noexcept;
 
         [[nodiscard]] [[gnu::always_inline]] inline std::uint32_t select_probsat(const std::uint32_t clause_index) noexcept
         {
@@ -263,7 +141,7 @@ namespace kmx::sat::cdcl
             for (auto position = begin; position < end; ++position)
             {
                 const auto breaks = static_cast<std::size_t>(break_counts_[clause_literals_[position] >> 1u]);
-                const auto weight = probabilities_[breaks < probability_table_size ? breaks : probability_table_size - 1u];
+                const auto weight = probabilities_[(breaks < probability_table_size) ? breaks : probability_table_size - 1u];
                 candidate_weights_.push_back(weight);
                 total += weight;
             }
@@ -279,7 +157,8 @@ namespace kmx::sat::cdcl
             return clause_literals_[position] >> 1u;
         }
 
-        [[nodiscard]] [[gnu::always_inline]] inline std::uint32_t select_walksat(const std::uint32_t clause_index, const configuration& config) noexcept
+        [[nodiscard]] [[gnu::always_inline]] inline std::uint32_t select_walksat(const std::uint32_t clause_index,
+                                                                                 const configuration& config) noexcept
         {
             const auto begin = clause_offsets_[clause_index];
             const auto end = clause_offsets_[clause_index + 1u];
@@ -296,12 +175,12 @@ namespace kmx::sat::cdcl
                     best_variable = candidate;
                     ties = 1u;
                 }
-                else if (breaks == best_breaks && (next_random() % ++ties) == 0u)
+                else if ((breaks == best_breaks) && ((next_random() % ++ties) == 0u))
                     best_variable = candidate;
             }
             // A zero-break flip is free progress and is always taken; otherwise the noise probability decides
             // between the greedy choice and a random one, which is what lets the walk escape local minima.
-            if (best_breaks != 0u && (next_random() % 100u) < config.noise_percent)
+            if ((best_breaks != 0u) && ((next_random() % 100u) < config.noise_percent))
                 return clause_literals_[begin + next_random() % (end - begin)] >> 1u;
             return best_variable;
         }
@@ -310,7 +189,7 @@ namespace kmx::sat::cdcl
         {
             const auto was_true = assignment_[variable_index];
             assignment_[variable_index] = static_cast<std::uint8_t>(was_true ^ 1u);
-            const auto losing = (variable_index << 1u) | (was_true != 0u ? 0u : 1u);
+            const auto losing = (variable_index << 1u) | ((was_true != 0u) ? 0u : 1u);
             const auto gaining = losing ^ 1u;
 
             for (auto position = occurrence_starts_[losing]; position < occurrence_starts_[losing + 1u]; ++position)
@@ -366,10 +245,7 @@ namespace kmx::sat::cdcl
             return value ^ (value >> 31u);
         }
 
-        [[nodiscard]] double uniform_unit() noexcept
-        {
-            return static_cast<double>(next_random() >> 11u) * (1.0 / 9007199254740992.0);
-        }
+        [[nodiscard]] double uniform_unit() noexcept { return static_cast<double>(next_random() >> 11u) * (1.0 / 9007199254740992.0); }
 
         std::uint32_t variable_count_ {};
         std::uint32_t maximum_clause_size_ {};

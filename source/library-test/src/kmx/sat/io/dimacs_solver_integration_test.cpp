@@ -31,8 +31,8 @@ namespace kmx::sat::io
 
         dimacs_parser sat_parser;
         REQUIRE(sat_parser.parse(sat_source));
-        REQUIRE(sat_parser.declared_variable_count() == 2);
-        REQUIRE(sat_parser.declared_clause_count() == 2);
+        REQUIRE(sat_parser.declared_variable_count() == 2u);
+        REQUIRE(sat_parser.declared_clause_count() == 2u);
 
         solver sat_solver;
         for (const auto& clause: sat_parser.clauses())

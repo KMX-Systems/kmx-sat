@@ -29,15 +29,15 @@ namespace kmx::sat::cdcl
         mapper.mark_eliminated(internal_b);
 
         clause::database database;
-        const std::array<literal, 2> original_literals {literal {internal_a, false}, literal {internal_c, true}};
+        const std::array<literal, 2u> original_literals {literal {internal_a, false}, literal {internal_c, true}};
         auto clause_ref = database.add_clause(original_literals, true);
         database.set_glue(clause_ref, 2u);
         database.increment_used_count(clause_ref);
         database.increment_activity(clause_ref, 9.0);
 
         bank::watch_list watch_list;
-        const auto watched_literal = original_literals[0];
-        const auto blocking_literal = original_literals[1];
+        const auto watched_literal = original_literals[0u];
+        const auto blocking_literal = original_literals[1u];
         watch_list.watch_literal(watched_literal, watch {blocking_literal, clause_ref});
 
         store::assignment assignment;
@@ -71,7 +71,7 @@ namespace kmx::sat::cdcl
         for (std::uint32_t cycle {}; cycle < 64u; ++cycle)
         {
             const auto garbage_ref =
-                database.add_clause(std::array<literal, 1> {literal {variable {static_cast<std::uint32_t>(1300u + cycle)}, false}}, true);
+                database.add_clause(std::array<literal, 1u> {literal {variable {static_cast<std::uint32_t>(1300u + cycle)}, false}}, true);
             database.mark_garbage(garbage_ref);
 
             collector.collect();

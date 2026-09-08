@@ -47,63 +47,18 @@ namespace kmx::sat::cdcl::controller
 
         /// @brief Resets all restart scheduler counters and pending state for a fresh solve episode.
         /// @throws None (noexcept).
-        void reset() noexcept
-        {
-            conflict_count_ = 0u;
-            decision_count_ = 0u;
-            restart_count_ = 0u;
-            restart_sequence_index_ = 0u;
-            decision_restart_sequence_index_ = 0u;
-            conflicts_at_last_restart_ = 0u;
-            next_scheduled_restart_at_ = restart_interval_;
-            next_scheduled_decision_restart_at_ = decision_restart_interval_;
-            restart_pending_ = false;
-            fast_glue_ema_ = 0.0;
-            slow_glue_ema_ = 0.0;
-            glue_observation_count_ = 0u;
-        }
+        void reset() noexcept;
 
         /// @brief Advances restart bookkeeping by one conflict.
         /// @throws None (noexcept).
-        void tick_conflict() noexcept
-        {
-            ++conflict_count_;
-
-            if (restart_interval_ == 0)
-                return;
-
-            if (conflict_count_ >= next_scheduled_restart_at_)
-            {
-                restart_pending_ = true;
-                next_scheduled_restart_at_ = conflict_count_ + next_restart_budget();
-            }
-        }
+        void tick_conflict() noexcept;
 
         /// @brief Records a learned-clause glue value for the optional EMA restart policy.
-        void observe_glue(const std::uint32_t glue) noexcept
-        {
-            const auto value = static_cast<double>(glue);
-            if (glue_observation_count_ == 0u)
-            {
-                fast_glue_ema_ = value;
-                slow_glue_ema_ = value;
-            }
-            else
-            {
-                fast_glue_ema_ = fast_glue_ema_ * fast_glue_alpha_ + value * (1.0 - fast_glue_alpha_);
-                slow_glue_ema_ = slow_glue_ema_ * slow_glue_alpha_ + value * (1.0 - slow_glue_alpha_);
-            }
-            ++glue_observation_count_;
-            if (glue_restart_threshold_ != 0.0 && glue_observation_count_ >= glue_restart_warmup_ &&
-                fast_glue_ema_ > slow_glue_ema_ * glue_restart_threshold_)
-            {
-                restart_pending_ = true;
-            }
-        }
+        void observe_glue(const std::uint32_t glue) noexcept;
 
         /// @brief Configures the optional fast/slow glue ratio that requests a restart.
         /// @param ratio Ratio above one; zero disables the EMA trigger.
-        void set_glue_restart_threshold(const double ratio) noexcept { glue_restart_threshold_ = ratio > 1.0 ? ratio : 0.0; }
+        void set_glue_restart_threshold(const double ratio) noexcept { glue_restart_threshold_ = (ratio > 1.0) ? ratio : 0.0; }
 
         std::uint32_t glue_restart_threshold_percent() const noexcept
         {
@@ -116,31 +71,11 @@ namespace kmx::sat::cdcl::controller
 
         /// @brief Advances restart bookkeeping by one decision.
         /// @throws None (noexcept).
-        void tick_decision() noexcept
-        {
-            ++decision_count_;
-
-            if (decision_restart_interval_ == 0)
-                return;
-
-            if (decision_count_ >= next_scheduled_decision_restart_at_)
-            {
-                restart_pending_ = true;
-                next_scheduled_decision_restart_at_ = decision_count_ + next_decision_restart_budget();
-            }
-        }
+        void tick_decision() noexcept;
 
         /// @brief Resynchronizes restart counters after an inprocessing epoch changes the clause set.
         /// @throws None (noexcept).
-        void reset_after_inprocess() noexcept
-        {
-            if (restart_pending_)
-                ++restart_count_;
-            restart_pending_ = false;
-            conflicts_at_last_restart_ = conflict_count_;
-
-            rebase_schedule();
-        }
+        void reset_after_inprocess() noexcept;
 
         /// @brief Resynchronizes decision-scheduled restarts after an inprocessing epoch.
         /// @details Deliberately leaves the *conflict* schedule alone. Inprocessing epochs complete roughly every
@@ -151,26 +86,14 @@ namespace kmx::sat::cdcl::controller
         /// @throws None (noexcept).
         void resynchronize_after_inprocess() noexcept
         {
-            if (decision_restart_interval_ != 0)
+            if (decision_restart_interval_ != 0u)
                 next_scheduled_decision_restart_at_ = decision_count_ + next_decision_restart_budget();
         }
 
         /// @brief Returns the remaining conflict budget before the next scheduled restart.
         /// @return Remaining conflict budget.
         /// @throws None (noexcept).
-        counter_t current_restart_budget() const noexcept
-        {
-            if (restart_interval_ == 0)
-                return 0;
-
-            if (restart_pending_)
-                return 0;
-
-            if (conflict_count_ >= next_scheduled_restart_at_)
-                return 0;
-
-            return next_scheduled_restart_at_ - conflict_count_;
-        }
+        counter_t current_restart_budget() const noexcept;
 
         /// @brief Forces `should_restart` to fire until the next `reset_after_inprocess`.
         /// @throws None (noexcept).
@@ -179,39 +102,17 @@ namespace kmx::sat::cdcl::controller
         /// @brief Sets the periodic conflict interval used for scheduled restart triggers.
         /// @param interval Number of conflicts between scheduled restart opportunities (zero disables schedule).
         /// @throws None (noexcept).
-        void set_restart_interval(const counter_t interval) noexcept
-        {
-            restart_interval_ = interval;
-            restart_sequence_index_ = 0u;
-            next_scheduled_restart_at_ = conflict_count_ + restart_interval_;
-        }
+        void set_restart_interval(const counter_t interval) noexcept;
 
         /// @brief Sets a periodic decision interval used for scheduled restart triggers.
         /// @param interval Number of decisions between restart opportunities (zero disables decision schedule).
         /// @throws None (noexcept).
-        void set_decision_restart_interval(const counter_t interval) noexcept
-        {
-            decision_restart_interval_ = interval;
-            decision_restart_sequence_index_ = 0u;
-            next_scheduled_decision_restart_at_ = decision_count_ + decision_restart_interval_;
-        }
+        void set_decision_restart_interval(const counter_t interval) noexcept;
 
         /// @brief Returns the remaining decision budget before the next scheduled restart.
         /// @return Remaining decision budget.
         /// @throws None (noexcept).
-        counter_t current_decision_restart_budget() const noexcept
-        {
-            if (decision_restart_interval_ == 0)
-                return 0;
-
-            if (restart_pending_)
-                return 0;
-
-            if (decision_count_ >= next_scheduled_decision_restart_at_)
-                return 0;
-
-            return next_scheduled_decision_restart_at_ - decision_count_;
-        }
+        counter_t current_decision_restart_budget() const noexcept;
 
         /// @brief Returns how many conflicts have been observed by this controller.
         /// @return Total conflict count.
@@ -237,25 +138,7 @@ namespace kmx::sat::cdcl::controller
         /// @param index Zero-based position in the sequence.
         /// @return Multiplier applied to the configured base interval.
         /// @throws None (noexcept).
-        static counter_t luby_multiplier(counter_t index) noexcept
-        {
-            static constexpr counter_t max_sequence_exponent {24u};
-
-            counter_t size = 1u;
-            counter_t sequence = 0u;
-            while (size < index + 1u && sequence < max_sequence_exponent)
-            {
-                ++sequence;
-                size = 2u * size + 1u;
-            }
-            while (size - 1u != index && size > 1u)
-            {
-                size = (size - 1u) >> 1u;
-                --sequence;
-                index = index % size;
-            }
-            return counter_t {1} << sequence;
-        }
+        static counter_t luby_multiplier(counter_t index) noexcept;
 
         /// @brief Returns the conflict budget for the next restart, growing along the Luby sequence.
         /// @throws None (noexcept).
@@ -273,14 +156,7 @@ namespace kmx::sat::cdcl::controller
 
         /// @brief Re-anchors both scheduled triggers to the current counters.
         /// @throws None (noexcept).
-        void rebase_schedule() noexcept
-        {
-            if (restart_interval_ != 0)
-                next_scheduled_restart_at_ = conflict_count_ + next_restart_budget();
-            if (decision_restart_interval_ != 0)
-                next_scheduled_decision_restart_at_ = decision_count_ + decision_restart_interval_;
-        }
-
+        void rebase_schedule() noexcept;
 
         static constexpr double fast_glue_alpha_ {0.5};
         static constexpr double slow_glue_alpha_ {0.95};

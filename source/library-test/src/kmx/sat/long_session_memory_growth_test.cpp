@@ -28,17 +28,17 @@ namespace kmx::sat
 
     TEST_CASE("long incremental session keeps memory and telemetry bounded", "[sat]")
     {
-        const std::array<literal, 1> unit_clause {literal {variable {1u}, false}};
+        const std::array<literal, 1u> unit_clause {literal {variable {1u}, false}};
         solver solver;
-        solver.set_option("chb_enabled", 1);
-        solver.set_option("reduction_fraction_percent", 30);
+        solver.set_option(option_id::chb_enabled, 1L);
+        solver.set_option(option_id::reduction_fraction_percent, 30L);
         solver.add_clause(unit_clause);
 
         const auto initial_rss_kb = resident_set_kb();
         auto peak_rss_kb = initial_rss_kb;
         const char* report_path = std::getenv("KMX_SAT_MEMORY_REPORT");
         std::ofstream report;
-        if (report_path != nullptr && *report_path != '\0')
+        if ((report_path != nullptr) && (*report_path != '\0'))
         {
             report.open(report_path, std::ios::out | std::ios::trunc);
             report << "{\"schema\":1,\"kind\":\"header\",\"episodes\":1000}\n";
@@ -78,8 +78,8 @@ namespace kmx::sat
             {
                 solver.reset_session();
                 REQUIRE(solver.current_state() == solver_state_machine::state::configuring);
-                solver.set_option("chb_enabled", 1);
-                solver.set_option("reduction_fraction_percent", 30);
+                solver.set_option(option_id::chb_enabled, 1L);
+                solver.set_option(option_id::reduction_fraction_percent, 30L);
                 solver.add_clause(unit_clause);
                 emit_sample(episode, "reset", "RESET");
             }

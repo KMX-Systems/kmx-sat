@@ -9,6 +9,9 @@ StaticLibrary {
     Depends { name: "kmx-sat-cdcl" }
     Depends { name: "kmx-sat-proof" }
     Depends { name: "kmx-sat-telemetry" }
+    Depends { name: "kmx-sat-io" }
+    Depends { name: "kmx-sat-runtime" }
+    Depends { name: "kmx-sat-simplify" }
     Group {
         name: "kmx-api"
         prefix: "api/kmx/"
@@ -32,6 +35,7 @@ StaticLibrary {
         prefix: "src/kmx/sat/"
         files: [
             "c_api_adapter.cpp",
+            "proof_manager.cpp",
             "solver.cpp",
         ]
     }
@@ -46,6 +50,9 @@ StaticLibrary {
         Depends { name: "kmx-sat-cdcl" }
         Depends { name: "kmx-sat-proof" }
         Depends { name: "kmx-sat-telemetry" }
+        Depends { name: "kmx-sat-io" }
+        Depends { name: "kmx-sat-runtime" }
+        Depends { name: "kmx-sat-simplify" }
         cpp.includePaths: ["api", "inc"]
     }
 

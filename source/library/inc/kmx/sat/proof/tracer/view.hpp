@@ -8,6 +8,7 @@
 #endif
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
 #include <kmx/sat/proof/event_stream.hpp>
+#include <kmx/sat/proof/format.hpp>
 #include <kmx/sat/proof/tracer/variant_t.hpp>
 
 namespace kmx::sat::proof::tracer
@@ -69,88 +70,35 @@ namespace kmx::sat::proof::tracer
         /// @brief Forwards an original-clause-added event to the active concrete tracer.
         /// @param ref Reference to the newly added original clause.
         /// @throws None (noexcept).
-        void add_original(const cdcl::clause::ref_t ref) noexcept
-        {
-            if (!variant_)
-                return;
-            std::visit([&](auto& tracer) noexcept { tracer.add_original(ref); }, *variant_);
-        }
+        void add_original(const cdcl::clause::ref_t ref) noexcept;
 
         /// @brief Forwards a derived-clause-added event to the active concrete tracer.
         /// @param ref Reference to the newly derived clause.
         /// @throws None (noexcept).
-        void add_derived(const cdcl::clause::ref_t ref) noexcept
-        {
-            if (!variant_)
-                return;
-            std::visit([&](auto& tracer) noexcept { tracer.add_derived(ref); }, *variant_);
-        }
+        void add_derived(const cdcl::clause::ref_t ref) noexcept;
 
         /// @brief Forwards a clause-deleted event to the active concrete tracer.
         /// @param ref Reference to the deleted clause.
         /// @throws None (noexcept).
-        void delete_clause(const cdcl::clause::ref_t ref) noexcept
-        {
-            if (!variant_)
-                return;
-            std::visit([&](auto& tracer) noexcept { tracer.delete_clause(ref); }, *variant_);
-        }
+        void delete_clause(const cdcl::clause::ref_t ref) noexcept;
 
         /// @brief Forwards a clause-shrunk event to the active concrete tracer.
         /// @param ref Reference to the shrunk clause.
         /// @throws None (noexcept).
-        void shrink_clause(const cdcl::clause::ref_t ref) noexcept
-        {
-            if (!variant_)
-                return;
-            std::visit([&](auto& tracer) noexcept { tracer.shrink_clause(ref); }, *variant_);
-        }
+        void shrink_clause(const cdcl::clause::ref_t ref) noexcept;
 
         /// @brief Forwards a fully-populated proof event payload to the active concrete tracer.
         /// @param event Proof event payload containing kind, ids, literals, and antecedents.
         /// @throws None (noexcept).
-        void on_event(const proof::proof_event& event) noexcept
-        {
-            if (!variant_)
-                return;
-            std::visit([&](auto& tracer) noexcept { tracer.on_event(event); }, *variant_);
-        }
+        void on_event(const proof::proof_event& event) noexcept;
 
         /// @brief Forwards the proof-finalization event to the active concrete tracer.
         /// @throws None (noexcept).
-        void finalize() noexcept
-        {
-            if (!variant_)
-                return;
-            std::visit([](auto& tracer) noexcept { tracer.finalize(); }, *variant_);
-        }
+        void finalize() noexcept;
 
-        /// @brief Returns the concrete proof format name represented by this view.
-        /// @return Format identifier, or empty when no tracer is bound.
-        std::string_view format_name() const noexcept
-        {
-            if (!variant_)
-                return {};
-
-            return std::visit(
-                [](const auto& tracer) noexcept -> std::string_view
-                {
-                    using tracer_t = std::decay_t<decltype(tracer)>;
-                    if constexpr (std::same_as<tracer_t, drat>)
-                        return "drat";
-                    else if constexpr (std::same_as<tracer_t, lrat>)
-                        return "lrat";
-                    else if constexpr (std::same_as<tracer_t, frat>)
-                        return "frat";
-                    else if constexpr (std::same_as<tracer_t, idrup>)
-                        return "idrup";
-                    else if constexpr (std::same_as<tracer_t, lidrup>)
-                        return "lidrup";
-                    else
-                        return "veripb";
-                },
-                *variant_);
-        }
+        /// @brief Returns the concrete proof format represented by this view.
+        /// @return Format identifier, or an empty optional when no tracer is bound.
+        std::optional<format_id> format() const noexcept;
 
     private:
         std::optional<variant_t> variant_ {};

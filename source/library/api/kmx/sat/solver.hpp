@@ -13,6 +13,7 @@
 #endif
 #include <kmx/sat/counter.hpp>
 #include <kmx/sat/literal.hpp>
+#include <kmx/sat/option_id.hpp>
 #include <kmx/sat/proof/event_stream.hpp>
 #include <kmx/sat/solve_request.hpp>
 #include <kmx/sat/solve_result.hpp>
@@ -117,15 +118,15 @@ namespace kmx::sat
         /// @return True if the literal is marked failed in the latest failed-core extraction.
         /// @throws None (noexcept).
         bool failed(const literal lit) const noexcept;
-        /// @brief Sets one numeric solver option by symbolic name.
-        /// @param name Option identifier.
+        /// @brief Sets one numeric solver option.
+        /// @param id Option to assign.
         /// @param value Option value to assign.
         /// @throws None (noexcept).
-        void set_option(const std::string_view name, const std::int64_t value) noexcept;
+        void set_option(const option_id id, const std::int64_t value) noexcept;
         /// @brief Applies a predefined option profile.
-        /// @param profile_name Configuration/profile name to load.
+        /// @param id Configuration profile to load.
         /// @throws None (noexcept).
-        void set_configuration(const std::string_view profile_name) noexcept;
+        void set_configuration(const configuration_profile_id id) noexcept;
         /// @brief Attaches a proof tracer sink to receive proof events.
         /// @param sink Concrete tracer view object used as an event sink.
         /// @throws None (noexcept).
@@ -219,7 +220,7 @@ namespace kmx::sat
         /// @brief Returns currently configured decision maintenance intervals in conflict/conflict/restart order.
         /// @return Active intervals used by the internal decision engine.
         /// @throws None (noexcept).
-        std::array<std::uint32_t, 3> decision_maintenance_intervals() const noexcept;
+        std::array<std::uint32_t, 3u> decision_maintenance_intervals() const noexcept;
 
         /// @brief Returns whether the research-track CHB candidate source is enabled.
         bool chb_enabled() const noexcept;
@@ -259,10 +260,10 @@ namespace kmx::sat
         /// @throws None (noexcept).
         std::optional<bool> configured_strict_mode() const noexcept;
 
-        /// @brief Returns the active configuration profile name, if one is configured.
-        /// @return Empty string view when no named profile is active.
+        /// @brief Returns the active configuration profile, if one is configured.
+        /// @return Empty optional when no profile is active.
         /// @throws None (noexcept).
-        std::string_view configuration_profile_name() const noexcept;
+        std::optional<configuration_profile_id> configuration_profile() const noexcept;
 
         /// @brief Clears persisted option/profile overrides stored in this facade instance.
         /// @throws None (noexcept).

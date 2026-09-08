@@ -60,7 +60,7 @@ namespace kmx::sat::simplify
                 bool all = true;
                 for (const auto& clause: clauses)
                 {
-                    bool satisfied = false;
+                    bool satisfied {};
                     for (const auto lit: clause)
                         satisfied |= (((assignment >> (lit.variable_of().index() - 1u)) & 1u) != 0u) != lit.is_negated();
                     if (!satisfied)
@@ -120,7 +120,8 @@ namespace kmx::sat::simplify
             reducer.prune_binary_edges();
 
             const auto after = models(live_clauses(database), variables, variables);
-            INFO("sample " << sample << " variables " << variables << " clauses " << clause_count << " removed " << reducer.removed_edge_count());
+            INFO("sample " << sample << " variables " << variables << " clauses " << clause_count << " removed "
+                           << reducer.removed_edge_count());
             REQUIRE(after == before);
         }
     }
@@ -130,9 +131,10 @@ namespace kmx::sat::simplify
         // The defect: the original clause was deleted as subsumed by a learned clause that a later reduction pass
         // then threw away, and three satisfiable instances came back with models violating the lost clause.
         cdcl::clause::database database;
-        const std::array<literal, 3> original {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, true}};
-        const std::array<literal, 2> learned {literal {variable {1u}, false}, literal {variable {2u}, false}};
-        const std::array<literal, 2> other {literal {variable {4u}, false}, literal {variable {5u}, true}};
+        const std::array<literal, 3u> original {literal {variable {1u}, false}, literal {variable {2u}, false},
+                                               literal {variable {3u}, true}};
+        const std::array<literal, 2u> learned {literal {variable {1u}, false}, literal {variable {2u}, false}};
+        const std::array<literal, 2u> other {literal {variable {4u}, false}, literal {variable {5u}, true}};
         database.add_clause(original, false);
         database.add_clause(other, false);
         const auto learned_ref = database.add_clause(learned, true);
@@ -145,12 +147,12 @@ namespace kmx::sat::simplify
         const auto remaining = live_clauses(database);
         // The subsumed original is gone, the subsuming clause now stands in the irredundant set.
         REQUIRE(remaining.size() == 2u);
-        const bool promoted = std::any_of(remaining.begin(), remaining.end(), [](const clause_t& clause) {
-            return clause.size() == 2u && clause[0].variable_of().index() == 1u && clause[1].variable_of().index() == 2u;
-        });
+        const bool promoted = std::any_of(
+            remaining.begin(), remaining.end(), [](const clause_t& clause)
+            { return (clause.size() == 2u) && (clause[0u].variable_of().index() == 1u) && (clause[1u].variable_of().index() == 2u); });
         REQUIRE(promoted);
         REQUIRE(database.stats_snapshot().redundant_count == 0u);
-        (void) learned_ref;
+        (void)learned_ref;
     }
 
     TEST_CASE("a second subsumption run over a grown database finds what a fresh run finds", "[sat][regression]")
@@ -220,7 +222,8 @@ namespace kmx::sat::simplify
                 return text;
             };
             INFO("sample " << sample << " originals " << original_count << " learned " << learned_count << "\nincremental: " << dump(left)
-                           << "\nfresh:       " << dump(right) << "\noriginals:   " << dump(original) << "\nlearned:     " << dump(learned));
+                           << "\nfresh:       " << dump(right) << "\noriginals:   " << dump(original)
+                           << "\nlearned:     " << dump(learned));
             REQUIRE(left == right);
             REQUIRE(incremental.stats_snapshot().redundant_count == reference.stats_snapshot().redundant_count);
             if (twice.subsumed_count() != 0u)
@@ -248,7 +251,8 @@ namespace kmx::sat::simplify
                 column_negated.push_back(random.next(2u) != 0u);
             for (std::uint32_t row = 0u; row < rows; ++row)
                 for (std::uint32_t column = 0u; column < columns; ++column)
-                    clauses.push_back({literal {variable {1u + row}, false}, literal {variable {1u + rows + column}, column_negated[column]}});
+                    clauses.push_back(
+                        {literal {variable {1u + row}, false}, literal {variable {1u + rows + column}, column_negated[column]}});
             const std::uint32_t extra = random.next(6u);
             for (std::uint32_t index = 0u; index < extra; ++index)
             {
@@ -298,7 +302,8 @@ namespace kmx::sat::simplify
                     dump += (lit.is_negated() ? "-" : "") + std::to_string(lit.variable_of().index()) + " ";
                 dump += "] ";
             }
-            INFO("sample " << sample << " rows " << rows << " columns " << columns << " introduced " << factor.introduced_variable_count() << " " << dump);
+            INFO("sample " << sample << " rows " << rows << " columns " << columns << " introduced " << factor.introduced_variable_count()
+                           << " " << dump);
             REQUIRE(after == before);
             REQUIRE(extension.size() == factor.introduced_variable_count());
             if (factor.introduced_variable_count() != 0u)

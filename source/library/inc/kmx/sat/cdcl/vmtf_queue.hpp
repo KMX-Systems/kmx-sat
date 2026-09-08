@@ -35,66 +35,28 @@ namespace kmx::sat::cdcl
         /// @brief Inserts a variable into the queue, typically when it first becomes relevant.
         /// @param var Variable to activate.
         /// @throws None (noexcept).
-        void activate(const variable var) noexcept
-        {
-            const auto variable_index = static_cast<std::size_t>(var.index());
-            if (node_index_of(variable_index) != npos)
-                return;
-
-            node node_value {var, npos, npos};
-            const auto node_index = nodes_storage_.size();
-            nodes_storage_.push_back(node_value);
-            set_node_index(variable_index, node_index);
-            if (tail_ == npos)
-                head_ = node_index;
-            else
-            {
-                nodes_storage_[tail_].next = node_index;
-                nodes_storage_[node_index].previous = tail_;
-            }
-            tail_ = node_index;
-            ++size_;
-        }
+        void activate(const variable var) noexcept;
 
         /// @brief Moves a variable to the front of the queue after it participates in a conflict/learned clause.
         /// @param var Variable to bump.
         /// @throws None (noexcept).
-        void bump(const variable var) noexcept
-        {
-            const auto node_index = node_index_of(static_cast<std::size_t>(var.index()));
-            if (node_index == npos || node_index == head_)
-                return;
-
-            unlink(node_index);
-            {
-                auto& node_value = nodes_storage_[node_index];
-                node_value.previous = npos;
-                node_value.next = head_;
-            }
-            nodes_storage_[head_].previous = node_index;
-            head_ = node_index;
-        }
+        void bump(const variable var) noexcept;
 
         /// @brief Returns the frontmost currently unassigned variable, the next branching candidate.
         /// @return Candidate variable, or `std::nullopt` if none is unassigned.
         /// @throws None (noexcept).
-        std::optional<variable> front_candidate() const noexcept
-        {
-            if (head_ == npos)
-                return {};
-            return nodes_storage_[head_].value;
-        }
+        std::optional<variable> front_candidate() const noexcept;
 
         /// @brief Returns the frontmost variable satisfying `selectable`, without modifying the queue.
         /// @details The decision engine previously called `remove` on every candidate it rejected, which drops the
         /// variable permanently even though rejection only means "currently assigned". Walking the list leaves the
         /// bump order intact, so a variable becomes a candidate again as soon as backtracking unassigns it.
-        /// @tparam predicate_t Callable of signature `bool(variable)`.
+        /// @tparam Predicate Callable of signature `bool(variable)`.
         /// @param selectable Predicate identifying an acceptable candidate.
         /// @return Frontmost acceptable variable, or `std::nullopt` when none qualifies.
         /// @throws None (noexcept).
-        template <typename predicate_t>
-        std::optional<variable> front_candidate_if(predicate_t&& selectable) const noexcept
+        template <typename Predicate>
+        std::optional<variable> front_candidate_if(Predicate&& selectable) const noexcept
         {
             for (auto node_index = head_; node_index != npos; node_index = nodes_storage_[node_index].next)
             {
@@ -108,17 +70,7 @@ namespace kmx::sat::cdcl
         /// @brief Removes a variable from the queue, typically when eliminated by simplification.
         /// @param var Variable to remove.
         /// @throws None (noexcept).
-        void remove(const variable var) noexcept
-        {
-            const auto variable_index = static_cast<std::size_t>(var.index());
-            const auto node_index = node_index_of(variable_index);
-            if (node_index != npos)
-            {
-                unlink(node_index);
-                erase_node_index(variable_index);
-                --size_;
-            }
-        }
+        void remove(const variable var) noexcept;
 
         /// @brief Reinserts a previously removed variable, typically when backtracking restores it.
         /// @param var Variable to reinsert.
@@ -127,38 +79,12 @@ namespace kmx::sat::cdcl
 
         /// @brief Randomizes the queue order, used by randomized restart/rephase strategies.
         /// @throws None (noexcept).
-        void shuffle() noexcept
-        {
-            if (size_ <= 1u)
-                return;
-
-            const auto max_stride = static_cast<std::uint32_t>(size_ - 1u);
-            const auto stride = static_cast<std::uint32_t>((shuffle_epoch_ % max_stride) + 1u);
-            std::vector<std::size_t> order {};
-            order.reserve(size_);
-            for (auto current = head_; current != npos; current = nodes_storage_[current].next)
-                order.push_back(current);
-            std::rotate(order.begin(), order.begin() + stride, order.end());
-            relink(order);
-            last_shuffle_stride_ = stride;
-            ++shuffle_epoch_;
-        }
+        void shuffle() noexcept;
 
         /// @brief Perturbs the queue order with caller-provided deterministic salt (e.g. restart count).
         /// @param salt External salt used to diversify the next shuffle stride deterministically.
         /// @throws None (noexcept).
-        void shuffle(const std::uint32_t salt) noexcept
-        {
-            if (size_ <= 1u)
-                return;
-
-            if (size_ > 2u)
-            {
-                const auto max_stride = static_cast<std::uint32_t>(size_ - 1u);
-                shuffle_epoch_ = (shuffle_epoch_ + salt) % max_stride;
-            }
-            shuffle();
-        }
+        void shuffle(const std::uint32_t salt) noexcept;
 
         /// @brief Returns the number of currently tracked variables in the queue.
         /// @return Number of active variables.
@@ -177,65 +103,17 @@ namespace kmx::sat::cdcl
         };
 
         /// Variable indices below this bound use the flat table; anything above falls back to the overflow map.
-        static constexpr std::size_t direct_index_limit {std::size_t {1} << 24};
+        static constexpr std::size_t direct_index_limit {std::size_t {1u} << 24};
 
-        std::size_t node_index_of(const std::size_t variable_index) const noexcept
-        {
-            if (variable_index < direct_index_limit)
-                return variable_index < node_indices_.size() ? node_indices_[variable_index] : npos;
-            const auto it = overflow_node_indices_.find(variable_index);
-            return it == overflow_node_indices_.end() ? npos : it->second;
-        }
+        std::size_t node_index_of(const std::size_t variable_index) const noexcept;
 
-        void set_node_index(const std::size_t variable_index, const std::size_t node_index) noexcept
-        {
-            if (variable_index < direct_index_limit)
-            {
-                if (variable_index >= node_indices_.size())
-                    node_indices_.resize(variable_index + 1u, npos);
-                node_indices_[variable_index] = node_index;
-                return;
-            }
-            overflow_node_indices_[variable_index] = node_index;
-        }
+        void set_node_index(const std::size_t variable_index, const std::size_t node_index) noexcept;
 
-        void erase_node_index(const std::size_t variable_index) noexcept
-        {
-            if (variable_index < direct_index_limit)
-            {
-                if (variable_index < node_indices_.size())
-                    node_indices_[variable_index] = npos;
-                return;
-            }
-            overflow_node_indices_.erase(variable_index);
-        }
+        void erase_node_index(const std::size_t variable_index) noexcept;
 
-        void unlink(const std::size_t node_index) noexcept
-        {
-            const auto& node_value = nodes_storage_[node_index];
-            const auto previous = node_value.previous;
-            const auto next = node_value.next;
-            if (previous == npos)
-                head_ = next;
-            else
-                nodes_storage_[previous].next = next;
-            if (next == npos)
-                tail_ = previous;
-            else
-                nodes_storage_[next].previous = previous;
-        }
+        void unlink(const std::size_t node_index) noexcept;
 
-        void relink(const std::vector<std::size_t>& order) noexcept
-        {
-            head_ = order.front();
-            tail_ = order.back();
-            for (std::size_t index {}; index < order.size(); ++index)
-            {
-                auto& current = nodes_storage_[order[index]];
-                current.previous = index == 0u ? npos : order[index - 1u];
-                current.next = index + 1u == order.size() ? npos : order[index + 1u];
-            }
-        }
+        void relink(const std::vector<std::size_t>& order) noexcept;
 
         std::vector<node> nodes_storage_ {};
         std::vector<std::size_t> node_indices_ {};

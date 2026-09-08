@@ -1,5 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <string>
+
 #include <kmx/sat/telemetry/solver_statistics.hpp>
 #include <kmx/sat/test_support/statistics_report_assertions.hpp>
 #include <kmx/sat/test_support/statistics_report_parser.hpp>
@@ -31,7 +33,13 @@ namespace kmx::sat::telemetry
             "extra=0";
         const auto compact_parsed = test_support::parse_statistics_report_line(compact_line);
         REQUIRE(test_support::compact_statistics_report_matches_snapshot(compact_parsed, snapshot));
-        REQUIRE_FALSE(test_support::compact_statistics_report_exactly_matches_snapshot(compact_parsed, snapshot));
+        // `junk`, `malformed`, `orphan` and `extra` name no counter, so they never reach the map and the line still
+        // carries exactly the compact schema; only a surplus counter field makes it something else.
+        REQUIRE(test_support::compact_statistics_report_exactly_matches_snapshot(compact_parsed, snapshot));
+
+        const auto surplus_counter_parsed = test_support::parse_statistics_report_line(std::string {compact_line} + " option_updates=23");
+        REQUIRE(test_support::compact_statistics_report_matches_snapshot(surplus_counter_parsed, snapshot));
+        REQUIRE_FALSE(test_support::compact_statistics_report_exactly_matches_snapshot(surplus_counter_parsed, snapshot));
 
         const auto verbose_line =
             "conflicts=3 decisions=7 propagations=11 restarts=2 learned_clauses=5 learned_clause_glue_total=9 "

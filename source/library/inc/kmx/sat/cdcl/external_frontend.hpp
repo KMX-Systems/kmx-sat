@@ -45,26 +45,13 @@ namespace kmx::sat::cdcl
         /// @param lit External literal as supplied through the public `solver` surface.
         /// @return Internal literal usable by `solver_core` and its collaborators.
         /// @throws None (noexcept).
-        literal import_external_literal(const literal lit) noexcept
-        {
-            if (mapper_ != nullptr)
-            {
-                const variable internal = mapper_->ensure_external_variable(lit.variable_of());
-                return literal {internal, lit.is_negated()};
-            }
-            return lit;
-        }
+        literal import_external_literal(const literal lit) noexcept;
 
         /// @brief Translates one internal literal back into its externally visible representation.
         /// @param lit Internal literal produced by the CDCL core.
         /// @return External literal safe to expose to the caller (for example through `model_view`).
         /// @throws None (noexcept).
-        literal export_internal_literal(const literal lit) noexcept
-        {
-            if (mapper_ != nullptr)
-                return mapper_->to_external_literal(lit);
-            return lit;
-        }
+        literal export_internal_literal(const literal lit) noexcept;
 
         /// @brief Marks a variable as frozen, preventing it from being eliminated by simplification passes so its
         /// external identity and value remain queryable after `solve`.
@@ -97,13 +84,7 @@ namespace kmx::sat::cdcl
         /// @brief Stages one normalized clause for the next replay/materialization step.
         /// @param clause Clause literals supplied by a fixture or other external source.
         /// @throws None (noexcept).
-        void push_clause(const std::span<const literal> clause) noexcept
-        {
-            auto& stored_clause = clauses_.emplace_back();
-            stored_clause.reserve(clause.size());
-            for (const auto lit: clause)
-                stored_clause.push_back(import_external_literal(lit));
-        }
+        void push_clause(const std::span<const literal> clause) noexcept;
 
         /// @brief Clears all staged clauses.
         /// @throws None (noexcept).
@@ -117,15 +98,7 @@ namespace kmx::sat::cdcl
         /// @brief Assembles the validated `solve_request` payload for the upcoming episode from the currently staged
         /// assumptions and mapping state.
         /// @throws None (noexcept).
-        void prepare_solve_request() noexcept
-        {
-            prepare_request_ = solve_request {};
-            prepare_request_.assumptions = assumptions_;
-            prepare_request_.decision_limit = 0u;
-            prepare_request_.conflict_limit = 0u;
-            prepare_request_.enabled_pass_mask = 0u;
-            prepare_request_.strict_mode = false;
-        }
+        void prepare_solve_request() noexcept;
 
         /// @brief Applies a fully formed solve-request payload to the frontend's prepared request state.
         /// @param request Request payload to expose for the next solve episode.
@@ -161,7 +134,7 @@ namespace kmx::sat::cdcl
 
         std::vector<literal> assumptions() const noexcept { return assumptions_; }
 
-        std::span<const std::vector<literal>> clauses() const noexcept { return clauses_; }
+        clause_span_t clauses() const noexcept { return clauses_; }
 
         solve_request const& prepared_request() const noexcept { return prepare_request_; }
 
@@ -171,7 +144,7 @@ namespace kmx::sat::cdcl
 
     private:
         variable_mapper* mapper_ {};
-        std::vector<std::vector<literal>> clauses_ {};
+        clause_list_t clauses_ {};
         std::vector<literal> assumptions_ {};
         solve_request prepare_request_ {};
         failed_core_view failed_core_ {};

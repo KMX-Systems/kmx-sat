@@ -16,6 +16,12 @@
 
 namespace kmx::sat::cdcl::store
 {
+    /// @brief Dense per-variable truth values, absent where the variable is unassigned.
+    using value_list_t = std::vector<std::optional<bool>>;
+
+    /// @brief Sparse per-variable truth values for indices outside the dense range.
+    using sparse_value_map_t = std::unordered_map<std::uint32_t, std::optional<bool>>;
+
     /// @brief SoA storage for values, levels, reasons, trail positions, and auxiliary flags.
     /// @details
     /// `assignment` keeps variable state in parallel arrays to preserve compact, cache-friendly access patterns.
@@ -26,143 +32,27 @@ namespace kmx::sat::cdcl::store
     public:
         assignment() noexcept = default;
 
-        std::optional<bool> value_of(const variable var) const noexcept
-        {
-            const auto index = index_of(var);
-            if (is_sparse(index))
-            {
-                const auto it = sparse_values_.find(var.index());
-                return it == sparse_values_.end() ? std::nullopt : it->second;
-            }
-            if (index >= values_.size())
-                return {};
-            return values_[index].has_value() ? std::optional<bool> {values_[index].value()} : std::nullopt;
-        }
+        std::optional<bool> value_of(const variable var) const noexcept;
 
-        void assign(const literal lit, const clause::ref_t reason) noexcept
-        {
-            const auto var = lit.variable_of();
-            const auto index = index_of(var);
-            if (is_sparse(index))
-            {
-                const auto var_index = var.index();
-                sparse_values_[var_index] = !lit.is_negated();
-                sparse_reasons_[var_index] = reason;
-                sparse_levels_[var_index] = current_level_;
-                sparse_trail_positions_[var_index] = current_trail_position_;
-                sparse_analyzed_[var_index] = false;
-                return;
-            }
-            ensure_capacity(index);
-            values_[index] = lit.is_negated() ? false : true;
-            reasons_[index] = reason;
-            levels_[index] = current_level_;
-            trail_positions_[index] = current_trail_position_;
-            analyzed_[index] = false;
-        }
+        void assign(const literal lit, const clause::ref_t reason) noexcept;
 
-        void unassign_from(const variable var) noexcept
-        {
-            const auto index = index_of(var);
-            if (is_sparse(index))
-            {
-                const auto var_index = var.index();
-                sparse_values_.erase(var_index);
-                sparse_reasons_.erase(var_index);
-                sparse_levels_.erase(var_index);
-                sparse_trail_positions_.erase(var_index);
-                sparse_analyzed_.erase(var_index);
-                return;
-            }
-            if (index >= values_.size())
-                return;
-            values_[index].reset();
-            reasons_[index] = {};
-            levels_[index] = 0;
-            trail_positions_[index] = 0;
-            analyzed_[index] = false;
-        }
+        void unassign_from(const variable var) noexcept;
 
-        void unassign_above_level(const std::uint32_t level) noexcept
-        {
-            for (std::size_t index = 0; index < values_.size(); ++index)
-                if (values_[index].has_value() && levels_[index] > level)
-                    unassign_from(variable {static_cast<std::uint32_t>(index)});
-        }
+        void unassign_above_level(const std::uint32_t level) noexcept;
 
-        clause::ref_t reason_of(const variable var) const noexcept
-        {
-            const auto index = index_of(var);
-            if (is_sparse(index))
-            {
-                const auto it = sparse_reasons_.find(var.index());
-                return it == sparse_reasons_.end() ? clause::ref_t {} : it->second;
-            }
-            if (index >= reasons_.size())
-                return {};
-            return reasons_[index];
-        }
+        clause::ref_t reason_of(const variable var) const noexcept;
 
-        std::uint32_t level_of(const variable var) const noexcept
-        {
-            const auto index = index_of(var);
-            if (is_sparse(index))
-            {
-                const auto it = sparse_levels_.find(var.index());
-                return it == sparse_levels_.end() ? 0u : it->second;
-            }
-            if (index >= levels_.size())
-                return 0;
-            return levels_[index];
-        }
+        std::uint32_t level_of(const variable var) const noexcept;
 
-        std::uint32_t trail_position_of(const variable var) const noexcept
-        {
-            const auto index = index_of(var);
-            if (is_sparse(index))
-            {
-                const auto it = sparse_trail_positions_.find(var.index());
-                return it == sparse_trail_positions_.end() ? 0u : it->second;
-            }
-            if (index >= trail_positions_.size())
-                return 0;
-            return trail_positions_[index];
-        }
+        std::uint32_t trail_position_of(const variable var) const noexcept;
 
-        void mark_analyzed(const variable var) noexcept
-        {
-            const auto index = index_of(var);
-            if (is_sparse(index))
-            {
-                sparse_analyzed_[var.index()] = true;
-                return;
-            }
-            if (index < analyzed_.size())
-                analyzed_[index] = true;
-        }
+        void mark_analyzed(const variable var) noexcept;
 
         void mark_analysis_seen(const variable var) noexcept { mark_analyzed(var); }
 
-        bool analysis_seen(const variable var) const noexcept
-        {
-            const auto index = index_of(var);
-            if (is_sparse(index))
-            {
-                const auto it = sparse_analyzed_.find(var.index());
-                return it != sparse_analyzed_.end() && it->second;
-            }
-            if (index >= analyzed_.size())
-                return false;
-            return analyzed_[index];
-        }
+        bool analysis_seen(const variable var) const noexcept;
 
-        void clear_analysis_marks() noexcept
-        {
-            for (std::size_t i = 0; i < analyzed_.size(); ++i)
-                analyzed_[i] = false;
-            for (auto& entry: sparse_analyzed_)
-                entry.second = false;
-        }
+        void clear_analysis_marks() noexcept;
 
         void set_current_level(const std::uint32_t level) noexcept { current_level_ = level; }
 
@@ -172,38 +62,20 @@ namespace kmx::sat::cdcl::store
         /// @param relocation Mapping from old clause offsets to relocated clause offsets.
         /// @throws None (noexcept).
         void rewrite_reasons_after_compaction(
-            const std::unordered_map<clause::ref_t::offset_t, clause::ref_t::offset_t>& relocation) noexcept
-        {
-            if (relocation.empty())
-                return;
-
-            for (auto& reason: reasons_)
-            {
-                if (!reason.valid())
-                    continue;
-                if (const auto it = relocation.find(reason.offset()); it != relocation.end())
-                    reason = clause::ref_t {it->second};
-            }
-            for (auto& [index, reason]: sparse_reasons_)
-            {
-                (void) index;
-                if (const auto it = relocation.find(reason.offset()); it != relocation.end())
-                    reason = clause::ref_t {it->second};
-            }
-        }
+            const std::unordered_map<clause::ref_t::offset_t, clause::ref_t::offset_t>& relocation) noexcept;
 
         /// @brief Visits every stored implication reason currently tracked by the assignment store.
         /// @param visitor Callable invoked with each stored reason reference.
         /// @throws None (noexcept).
-        template <typename visitor_t>
-        void iterate_reasons(visitor_t&& visitor) const noexcept
+        template <typename Visitor>
+        void iterate_reasons(Visitor&& visitor) const noexcept
         {
             for (const auto reason: reasons_)
                 if (reason.valid())
                     visitor(reason);
             for (const auto& [index, reason]: sparse_reasons_)
             {
-                (void) index;
+                (void)index;
                 if (reason.valid())
                     visitor(reason);
             }
@@ -216,25 +88,14 @@ namespace kmx::sat::cdcl::store
 
         static bool is_sparse(const std::size_t index) noexcept { return index >= sparse_variable_threshold; }
 
-        void ensure_capacity(const std::size_t index) noexcept
-        {
-            if (index >= values_.size())
-            {
-                const auto new_size = index + 1u;
-                values_.resize(new_size);
-                reasons_.resize(new_size);
-                levels_.resize(new_size);
-                trail_positions_.resize(new_size);
-                analyzed_.resize(new_size);
-            }
-        }
+        void ensure_capacity(const std::size_t index) noexcept;
 
-        std::vector<std::optional<bool>> values_ {};
+        value_list_t values_ {};
         std::vector<clause::ref_t> reasons_ {};
         std::vector<std::uint32_t> levels_ {};
         std::vector<std::uint32_t> trail_positions_ {};
         std::vector<bool> analyzed_ {};
-        std::unordered_map<std::uint32_t, std::optional<bool>> sparse_values_ {};
+        sparse_value_map_t sparse_values_ {};
         std::unordered_map<std::uint32_t, clause::ref_t> sparse_reasons_ {};
         std::unordered_map<std::uint32_t, std::uint32_t> sparse_levels_ {};
         std::unordered_map<std::uint32_t, std::uint32_t> sparse_trail_positions_ {};

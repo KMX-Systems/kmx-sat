@@ -1,19 +1,25 @@
+/// @file inc/kmx/sat/test_support/incremental_replay_executor.hpp
+/// @brief Executor replaying an incremental trace against a solver instance.
+/// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
-
-#include <cstdint>
-#include <optional>
-#include <vector>
-
+#ifndef PCH
+    #include <cstdint>
+    #include <optional>
+    #include <vector>
+#endif
 #include <kmx/sat/solve_request.hpp>
 #include <kmx/sat/solver.hpp>
 #include <kmx/sat/test_support/incremental_replay_trace.hpp>
 
 namespace kmx::sat::test_support
 {
+    /// @brief Per-query truth values reported by the replayed solver.
+    using value_list_t = std::vector<std::optional<bool>>;
+
     struct incremental_replay_outcome final
     {
         std::vector<solve_result::status> solve_statuses {};
-        std::vector<std::optional<bool>> value_results {};
+        value_list_t value_results {};
         std::vector<bool> failed_results {};
     };
 
@@ -46,7 +52,7 @@ namespace kmx::sat::test_support
                     solver.reset_session();
                     break;
                 case replay_operation_kind::set_option:
-                    solver.set_option(operation.option_name, operation.option_value);
+                    solver.set_option(operation.option, operation.option_value);
                     break;
                 case replay_operation_kind::value_of:
                     outcome.value_results.push_back(solver.value_of(operation.variable_operand));

@@ -18,6 +18,9 @@
 
 namespace kmx::sat::simplify
 {
+    /// @brief Pairs of variable indices linked by a discovered equivalence.
+    using index_pair_list_t = std::vector<std::pair<std::uint32_t, std::uint32_t>>;
+
     /// @brief Propagates ELS results across all subsystems.
     /// @details
     /// Once `engine::decomposition::find_equivalences` determines that a set of literals are all equivalent,
@@ -61,64 +64,19 @@ namespace kmx::sat::simplify
         /// @param from Raw identifier being replaced.
         /// @param to Raw identifier chosen as representative.
         /// @throws None (noexcept).
-        void apply_equivalence_class(const std::uint32_t from, const std::uint32_t to) noexcept
-        {
-            if (from == 0u || to == 0u || from == to)
-                return;
-
-            pending_rewrites_.push_back({from, to});
-            rewrite_map_[from] = to;
-            ++equivalence_class_count_;
-            rewrite_completed_ = false;
-        }
+        void apply_equivalence_class(const std::uint32_t from, const std::uint32_t to) noexcept;
 
         /// @brief Rewrites clause storage to use each equivalence class's representative literal.
         /// @throws None (noexcept).
-        void rewrite_clauses() noexcept
-        {
-            if (!pending_rewrites_.empty())
-            {
-                if (clause_database_ != nullptr)
-                {
-                    rewrite_clause_set(clause_database_->irredundant_refs());
-                    rewrite_clause_set(clause_database_->redundant_refs());
-                }
-                ++clause_rewrite_count_;
-            }
-        }
+        void rewrite_clauses() noexcept;
 
         /// @brief Rewrites watch-list entries to use each equivalence class's representative literal.
         /// @throws None (noexcept).
-        void rewrite_watches() noexcept
-        {
-            if (!pending_rewrites_.empty())
-            {
-                if (watch_list_ != nullptr)
-                    watch_list_->reindex_after_compaction([&](const literal old_literal) noexcept { return remap_literal(old_literal); });
-                ++watch_rewrite_count_;
-            }
-        }
+        void rewrite_watches() noexcept;
 
         /// @brief Propagates the substitution into the external variable mapping.
         /// @throws None (noexcept).
-        void rewrite_external_mapping() noexcept
-        {
-            if (!pending_rewrites_.empty())
-            {
-                if (variable_mapper_ != nullptr)
-                {
-                    std::unordered_map<std::uint32_t, variable> permutation {};
-                    permutation.reserve(pending_rewrites_.size());
-                    for (const auto& [from, to]: pending_rewrites_)
-                        permutation[from] = variable {resolve_representative(to)};
-                    variable_mapper_->rebuild_after_compaction(permutation);
-                }
-                ++external_mapping_rewrite_count_;
-                last_applied_rewrite_count_ = pending_rewrites_.size();
-                pending_rewrites_.clear();
-                rewrite_completed_ = true;
-            }
-        }
+        void rewrite_external_mapping() noexcept;
 
         std::size_t equivalence_class_count() const noexcept { return equivalence_class_count_; }
 
@@ -135,57 +93,16 @@ namespace kmx::sat::simplify
         std::size_t last_applied_rewrite_count() const noexcept { return last_applied_rewrite_count_; }
 
     private:
-        std::uint32_t resolve_representative(std::uint32_t value) const noexcept
-        {
-            std::size_t guard {};
-            while (guard++ < rewrite_map_.size())
-            {
-                const auto it = rewrite_map_.find(value);
-                if (it == rewrite_map_.end() || it->second == value)
-                    break;
-                value = it->second;
-            }
-            return value;
-        }
+        std::uint32_t resolve_representative(std::uint32_t value) const noexcept;
 
-        literal remap_literal(const literal old_literal) const noexcept
-        {
-            const auto old_var = old_literal.variable_of().index();
-            const auto new_var = resolve_representative(old_var);
-            if (new_var == old_var)
-                return old_literal;
-            return literal {variable {new_var}, old_literal.is_negated()};
-        }
+        literal remap_literal(const literal old_literal) const noexcept;
 
-        void rewrite_clause_set(const std::span<const cdcl::clause::ref_t> refs) noexcept
-        {
-            auto& storage = clause_database_->storage_of();
-            for (const auto ref: refs)
-            {
-                if (!ref.valid() || clause_database_->is_garbage(ref))
-                    continue;
-
-                auto literals = storage.literals_of(ref);
-                bool changed {};
-                for (auto& lit: literals)
-                {
-                    const auto remapped = remap_literal(lit);
-                    if (remapped != lit)
-                    {
-                        lit = remapped;
-                        changed = true;
-                    }
-                }
-
-                if (changed)
-                    storage.rewrite_clause_literals(ref, literals);
-            }
-        }
+        void rewrite_clause_set(const std::span<const cdcl::clause::ref_t> refs) noexcept;
 
         cdcl::clause::database* clause_database_ {};
         cdcl::bank::watch_list* watch_list_ {};
         cdcl::variable_mapper* variable_mapper_ {};
-        std::vector<std::pair<std::uint32_t, std::uint32_t>> pending_rewrites_ {};
+        index_pair_list_t pending_rewrites_ {};
         std::unordered_map<std::uint32_t, std::uint32_t> rewrite_map_ {};
         std::size_t equivalence_class_count_ {};
         std::size_t clause_rewrite_count_ {};

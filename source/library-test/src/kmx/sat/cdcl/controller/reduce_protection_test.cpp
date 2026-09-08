@@ -17,8 +17,9 @@ namespace kmx::sat::cdcl
     {
         clause::ref_t add_learned(clause::database& database, const std::uint32_t first_variable, const std::uint32_t glue)
         {
-            const std::array<literal, 4> literals {literal {variable {first_variable}, false}, literal {variable {first_variable + 1u}, false},
-                                                   literal {variable {first_variable + 2u}, true}, literal {variable {first_variable + 3u}, false}};
+            const std::array<literal, 4u> literals {
+                literal {variable {first_variable}, false}, literal {variable {first_variable + 1u}, false},
+                literal {variable {first_variable + 2u}, true}, literal {variable {first_variable + 3u}, false}};
             const auto ref = database.add_clause(literals, true);
             database.set_glue(ref, glue);
             return ref;

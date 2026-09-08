@@ -32,42 +32,18 @@ namespace kmx::sat::cdcl
         /// @param ref Reference to the candidate clause.
         /// @return True if the clause was strengthened.
         /// @throws None (noexcept).
-        bool try_strengthen(const clause::ref_t ref) noexcept
-        {
-            if (!ref.valid())
-                return false;
-
-            ++strengthened_clause_count_;
-            last_action_ = action::strengthened;
-            last_ref_ = ref;
-            return true;
-        }
+        bool try_strengthen(const clause::ref_t ref) noexcept;
 
         /// @brief Attempts to mark a clause as subsumed (redundant) by the clause under construction.
         /// @param ref Reference to the candidate clause.
         /// @return True if the clause was subsumed.
         /// @throws None (noexcept).
-        bool try_subsume(const clause::ref_t ref) noexcept
-        {
-            if (!ref.valid())
-                return false;
-
-            ++subsumed_clause_count_;
-            last_action_ = action::subsumed;
-            last_ref_ = ref;
-            return true;
-        }
+        bool try_subsume(const clause::ref_t ref) noexcept;
 
         /// @brief Rewrites any trail-level reason pointer affected by a just-performed strengthening/subsumption.
         /// @param ref Reference to the clause that was just strengthened or subsumed.
         /// @throws None (noexcept).
-        void rewrite_reason_if_needed(const clause::ref_t ref) noexcept
-        {
-            if (!ref.valid())
-                return;
-            ++rewritten_reason_count_;
-            last_rewritten_ref_ = ref;
-        }
+        void rewrite_reason_if_needed(const clause::ref_t ref) noexcept;
 
         /// @brief Reports the resulting clause deletions/shrinks to the proof manager.
         /// @throws None (noexcept).

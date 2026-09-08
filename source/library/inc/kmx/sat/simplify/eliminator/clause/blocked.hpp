@@ -16,7 +16,7 @@ namespace kmx::sat::simplify::eliminator::clause
     /// containing `\lnot l` is a tautology; such a clause can be removed without changing satisfiability, because any
     /// model of the reduced formula can be extended by choosing `l` true. `run` sweeps candidate clauses;
     /// `is_blocked_on` tests one (clause, literal) pair; `mark_blocked` marks a confirmed blocked clause for removal;
-    /// `emit_extension_record` pushes an `extension_record::bce_blocking` entry onto `stack::extension` recording the
+    /// `emit_extension_record` pushes an `extension_record::bce_blocking_t` entry onto `stack::extension` recording the
     /// blocking literal, so `model_reconstructor` can later choose that literal's polarity to satisfy the removed
     /// clause when reconstructing the full model.
     /// @note Per the proof-format compatibility matrix, DRAT/LRAT/FRAT can express BCE only through resolution
@@ -44,19 +44,14 @@ namespace kmx::sat::simplify::eliminator::clause
         /// @param lit Literal to test blockedness against.
         /// @return True if every resolvent on `lit` is a tautology.
         /// @throws None (noexcept).
-        bool is_blocked_on(const cdcl::clause::ref_t ref, const literal lit) const noexcept
-        {
-            (void) ref;
-            (void) lit;
-            return true;
-        }
+        bool is_blocked_on(const cdcl::clause::ref_t ref, const literal lit) const noexcept;
 
         /// @brief Marks a clause confirmed blocked for removal.
         /// @param ref Reference to the blocked clause.
         /// @throws None (noexcept).
         void mark_blocked(const cdcl::clause::ref_t ref) noexcept
         {
-            (void) ref;
+            (void)ref;
             ++blocked_count_;
         }
 

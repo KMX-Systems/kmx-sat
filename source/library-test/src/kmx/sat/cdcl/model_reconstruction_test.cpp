@@ -16,18 +16,18 @@ namespace kmx::sat::cdcl
     {
     }
 
-    using dimacs_clause = std::vector<int>;
+    using dimacs_clause_t = std::vector<int>;
 
     /// @brief Evaluates a DIMACS-style formula under a truth-value table indexed by variable.
-    static bool formula_is_satisfied(const std::vector<dimacs_clause>& formula, const std::vector<bool>& values) noexcept
+    static bool formula_is_satisfied(const std::vector<dimacs_clause_t>& formula, const std::vector<bool>& values) noexcept
     {
         for (const auto& clause: formula)
         {
-            bool satisfied = false;
+            bool satisfied {};
             for (const auto dimacs_literal: clause)
             {
-                const auto index = static_cast<std::size_t>(dimacs_literal < 0 ? -dimacs_literal : dimacs_literal);
-                if (index < values.size() && values[index] == (dimacs_literal > 0))
+                const auto index = static_cast<std::size_t>((dimacs_literal < 0) ? -dimacs_literal : dimacs_literal);
+                if ((index < values.size()) && (values[index] == (dimacs_literal > 0)))
                 {
                     satisfied = true;
                     break;
@@ -40,13 +40,13 @@ namespace kmx::sat::cdcl
     }
 
     /// @brief Converts a DIMACS clause into solver literals.
-    static std::vector<literal> to_literals(const dimacs_clause& clause) noexcept
+    static std::vector<literal> to_literals(const dimacs_clause_t& clause) noexcept
     {
         std::vector<literal> literals {};
         literals.reserve(clause.size());
         for (const auto dimacs_literal: clause)
         {
-            const auto index = static_cast<variable::index_t>(dimacs_literal < 0 ? -dimacs_literal : dimacs_literal);
+            const auto index = static_cast<variable::index_t>((dimacs_literal < 0) ? -dimacs_literal : dimacs_literal);
             literals.push_back(literal {variable {index}, dimacs_literal < 0});
         }
         return literals;
@@ -62,35 +62,35 @@ namespace kmx::sat::cdcl
             // that was removed. This drives real resolution-based eliminations and checks the restored model
             // against the pre-elimination formula.
             std::mt19937 rng {2026u};
-            std::size_t reconstructions_checked = 0u;
+            std::size_t reconstructions_checked {};
 
             for (int trial = 0; trial < 600; ++trial)
             {
                 static constexpr int variable_count = 6;
                 const auto clause_count = 8 + static_cast<int>(rng() % 8u);
 
-                std::vector<dimacs_clause> formula {};
+                std::vector<dimacs_clause_t> formula {};
                 for (int index = 0; index < clause_count; ++index)
                 {
-                    dimacs_clause clause {};
+                    dimacs_clause_t clause {};
                     const auto width = 2 + static_cast<int>(rng() % 2u);
                     while (static_cast<int>(clause.size()) < width)
                     {
                         const auto candidate = 1 + static_cast<int>(rng() % variable_count);
                         const auto occurs = std::any_of(clause.begin(), clause.end(), [candidate](const int existing) noexcept
-                                                        { return (existing < 0 ? -existing : existing) == candidate; });
+                                                        { return ((existing < 0) ? -existing : existing) == candidate; });
                         if (!occurs)
-                            clause.push_back((rng() & 1u) != 0u ? candidate : -candidate);
+                            clause.push_back(((rng() & 1u) != 0u) ? candidate : -candidate);
                     }
                     formula.push_back(clause);
                 }
 
                 const auto eliminated = 1 + static_cast<int>(rng() % variable_count);
 
-                std::vector<dimacs_clause> reduced {};
-                std::vector<dimacs_clause> positive {};
-                std::vector<dimacs_clause> negative {};
-                std::vector<dimacs_clause> touching {};
+                std::vector<dimacs_clause_t> reduced {};
+                std::vector<dimacs_clause_t> positive {};
+                std::vector<dimacs_clause_t> negative {};
+                std::vector<dimacs_clause_t> touching {};
                 for (const auto& clause: formula)
                 {
                     const auto has_positive = std::find(clause.begin(), clause.end(), eliminated) != clause.end();
@@ -109,11 +109,11 @@ namespace kmx::sat::cdcl
                 {
                     for (const auto& right: negative)
                     {
-                        dimacs_clause resolvent {};
-                        auto tautological = false;
+                        dimacs_clause_t resolvent {};
+                        bool tautological {};
                         for (const auto dimacs_literal: left)
-                            if (dimacs_literal != eliminated &&
-                                std::find(resolvent.begin(), resolvent.end(), dimacs_literal) == resolvent.end())
+                            if ((dimacs_literal != eliminated) &&
+                                (std::find(resolvent.begin(), resolvent.end(), dimacs_literal) == resolvent.end()))
                                 resolvent.push_back(dimacs_literal);
                         for (const auto dimacs_literal: right)
                         {
@@ -135,8 +135,8 @@ namespace kmx::sat::cdcl
                 // Stand in for the search: any model of the reduced formula, with the eliminated variable left
                 // at an arbitrary value, is what `solver_core` would hand to reconstruction.
                 std::vector<bool> reduced_model {};
-                auto found_reduced_model = false;
-                for (int mask = 0; mask < (1 << variable_count) && !found_reduced_model; ++mask)
+                bool found_reduced_model {};
+                for (int mask = 0; (mask < (1 << variable_count)) && !found_reduced_model; ++mask)
                 {
                     std::vector<bool> values(static_cast<std::size_t>(variable_count) + 1u, false);
                     for (int index = 1; index <= variable_count; ++index)
@@ -162,8 +162,8 @@ namespace kmx::sat::cdcl
 
                 std::vector<literal> initial_model {};
                 for (int index = 1; index <= variable_count; ++index)
-                    initial_model.push_back(literal {variable {static_cast<variable::index_t>(index)},
-                                                     !reduced_model[static_cast<std::size_t>(index)]});
+                    initial_model.push_back(
+                        literal {variable {static_cast<variable::index_t>(index)}, !reduced_model[static_cast<std::size_t>(index)]});
 
                 model_reconstructor reconstructor {};
                 reconstructor.attach_extension_stack(extension_stack);
@@ -188,14 +188,13 @@ namespace kmx::sat::cdcl
 
             model_reconstructor reconstructor {};
             reconstructor.attach_extension_stack(extension_stack);
-            reconstructor.set_initial_model({literal {variable {1u}, false}, literal {variable {2u}, true},
-                                             literal {variable {3u}, false}});
+            reconstructor.set_initial_model(
+                {literal {variable {1u}, false}, literal {variable {2u}, true}, literal {variable {3u}, false}});
 
             const auto model = reconstructor.reconstruct_full_model();
             const auto values = model.values();
             REQUIRE(values.size() == 2u);
-            REQUIRE(std::none_of(values.begin(), values.end(),
-                                 [](const literal lit) noexcept { return lit.variable_of().index() == 3u; }));
+            REQUIRE(std::none_of(values.begin(), values.end(), [](const literal lit) noexcept { return lit.variable_of().index() == 3u; }));
         }
     }
 }

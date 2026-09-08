@@ -32,47 +32,23 @@ namespace kmx::sat::io
         /// @param path Path or identifier of the source to open.
         /// @return True if the source was opened successfully.
         /// @throws None (noexcept).
-        bool open(const std::string_view path) noexcept
-        {
-            close();
-            path_ = std::string {path};
-            file_ = std::fopen(path_.c_str(), "rb");
-            compressed_ = false;
-            return file_ != nullptr;
-        }
+        bool open(const std::string_view path) noexcept;
 
         /// @brief Reads up to `buffer_size` bytes into `buffer`.
         /// @param buffer Destination buffer to read into.
         /// @param buffer_size Maximum number of bytes to read.
         /// @return Number of bytes actually read, which may be less than `buffer_size` at end of stream.
         /// @throws None (noexcept).
-        std::size_t read(char* buffer, const std::size_t buffer_size) noexcept
-        {
-            if (file_ == nullptr || buffer == nullptr || buffer_size == 0)
-                return 0;
-            return std::fread(buffer, 1, buffer_size, file_);
-        }
+        std::size_t read(char* buffer, const std::size_t buffer_size) noexcept;
 
         /// @brief Reads a single character from the source.
         /// @return The character read, or a negative value at end of stream.
         /// @throws None (noexcept).
-        int getc() noexcept
-        {
-            if (file_ == nullptr)
-                return -1;
-            return std::fgetc(file_);
-        }
+        int getc() noexcept;
 
         /// @brief Closes the underlying resource.
         /// @throws None (noexcept).
-        void close() noexcept
-        {
-            if (file_ != nullptr)
-            {
-                std::fclose(file_);
-                file_ = nullptr;
-            }
-        }
+        void close() noexcept;
 
         /// @brief Checks whether this source is being transparently decompressed.
         /// @return True if decompression is active for this source.
@@ -92,19 +68,7 @@ namespace kmx::sat::io
             other.compressed_ = false;
         }
 
-        file_source& operator=(file_source&& other) noexcept
-        {
-            if (this != &other)
-            {
-                close();
-                file_ = other.file_;
-                compressed_ = other.compressed_;
-                path_ = std::move(other.path_);
-                other.file_ = nullptr;
-                other.compressed_ = false;
-            }
-            return *this;
-        }
+        file_source& operator=(file_source&& other) noexcept;
 
     private:
         std::FILE* file_ {};

@@ -21,6 +21,23 @@ StaticLibrary {
             "signal.hpp",
         ]
     }
+    Group {
+        name: "src-runtime"
+        prefix: "src/kmx/sat/runtime/"
+        files: [
+            "co_fsm_adapter.cpp",
+            "parallel_preprocess_executor.cpp",
+            "shared_clause_exchange.cpp",
+        ]
+    }
+    Group {
+        name: "src-runtime-controller"
+        prefix: "src/kmx/sat/runtime/controller/"
+        files: [
+            "portfolio.cpp",
+            "signal.cpp",
+        ]
+    }
     cpp.cxxLanguageVersion: "c++26"
     cpp.enableRtti: false
     cpp.includePaths: ["api", "inc"]

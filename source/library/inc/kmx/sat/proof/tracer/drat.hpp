@@ -53,27 +53,7 @@ namespace kmx::sat::proof::tracer
         /// @brief Emits one tracer record from a fully-populated proof event.
         /// @param event Proof event payload.
         /// @throws None (noexcept).
-        void on_event(const proof::proof_event& event) noexcept
-        {
-            switch (event.kind)
-            {
-                case proof::event_kind::add_original:
-                    add_original(event.clause_ref);
-                    break;
-                case proof::event_kind::add_derived:
-                    add_derived(event.clause_ref);
-                    break;
-                case proof::event_kind::delete_clause:
-                    delete_clause(event.clause_ref);
-                    break;
-                case proof::event_kind::shrink_clause:
-                    shrink_clause(event.clause_ref);
-                    break;
-                case proof::event_kind::conclusion:
-                    finalize();
-                    break;
-            }
-        }
+        void on_event(const proof::proof_event& event) noexcept;
 
         /// @brief Writes the proof's closing marker.
         /// @throws None (noexcept).

@@ -5,6 +5,9 @@
 #ifndef PCH
     #include <compare>
     #include <cstdint>
+    #include <optional>
+    #include <span>
+    #include <vector>
 #endif
 #include <kmx/sat/variable.hpp>
 
@@ -75,4 +78,16 @@ namespace kmx::sat
     private:
         raw_t raw_ {};
     };
+
+    /// @brief A clause carried as a plain sequence of literals, outside the solver's clause arena.
+    using literal_clause_t = std::vector<literal>;
+
+    /// @brief A formula, or any batch of clauses, carried in literal form.
+    using clause_list_t = std::vector<literal_clause_t>;
+
+    /// @brief Read-only view over a batch of clauses in literal form.
+    using clause_span_t = std::span<const literal_clause_t>;
+
+    /// @brief A clause in literal form that may be absent.
+    using optional_clause_t = std::optional<literal_clause_t>;
 }

@@ -33,23 +33,10 @@ namespace kmx::sat::cdcl
         var_heap() noexcept = default;
 
         /// @brief Grows the per-variable tables to cover `variable_bound`; scores of new variables start at zero.
-        void resize(const index_t variable_bound) noexcept
-        {
-            const auto slots = static_cast<std::size_t>(variable_bound) + 1u;
-            if (score_.size() < slots)
-            {
-                score_.resize(slots, 0.0);
-                position_.resize(slots, npos);
-            }
-        }
+        void resize(const index_t variable_bound) noexcept;
 
         /// @brief Empties the heap without touching the scores.
-        void clear() noexcept
-        {
-            for (const auto index: heap_)
-                position_[index] = npos;
-            heap_.clear();
-        }
+        void clear() noexcept;
 
         [[nodiscard]] bool empty() const noexcept { return heap_.empty(); }
 
@@ -62,64 +49,26 @@ namespace kmx::sat::cdcl
         [[nodiscard]] index_t top() const noexcept { return heap_.front(); }
 
         /// @brief Inserts a variable that is not currently a candidate.
-        void push(const index_t index) noexcept
-        {
-            const auto position = heap_.size();
-            heap_.push_back(index);
-            position_[index] = static_cast<index_t>(position);
-            sift_up(position);
-        }
+        void push(const index_t index) noexcept;
 
         /// @brief Removes and returns the highest-activity candidate.
-        index_t pop() noexcept
-        {
-            const auto best = heap_.front();
-            const auto last = heap_.back();
-            heap_.pop_back();
-            position_[best] = npos;
-            if (!heap_.empty())
-            {
-                heap_.front() = last;
-                position_[last] = 0u;
-                sift_down(0u);
-            }
-            return best;
-        }
+        index_t pop() noexcept;
 
         /// @brief Adds the current increment to a variable's activity and restores its heap position.
-        void bump(const index_t index) noexcept
-        {
-            const auto bumped = score_[index] + increment_;
-            score_[index] = bumped;
-            if (bumped > rescale_limit)
-                rescale();
-            if (position_[index] != npos)
-                sift_up(position_[index]);
-        }
+        void bump(const index_t index) noexcept;
 
         /// @brief Ages every score relative to future bumps; call once per conflict.
-        void decay() noexcept
-        {
-            increment_ /= decay_;
-            if (increment_ > rescale_limit)
-                rescale();
-        }
+        void decay() noexcept;
 
         /// @brief Renormalizes every score and the increment by `factor`, preserving the ordering exactly.
         /// @details Periodic maintenance keeps the magnitudes small between the overflow-driven rescales;
         /// it never changes which variable ranks first.
-        void rescale_by(const double factor) noexcept
-        {
-            for (auto& score: score_)
-                score *= factor;
-            increment_ *= factor;
-            ++rescale_count_;
-        }
+        void rescale_by(const double factor) noexcept;
 
         /// @brief Sets the per-conflict decay factor in (0, 1]; values outside that range are ignored.
         void set_decay(const double decay) noexcept
         {
-            if (decay > 0.0 && decay <= 1.0)
+            if ((decay > 0.0) && (decay <= 1.0))
                 decay_ = decay;
         }
 
@@ -132,12 +81,7 @@ namespace kmx::sat::cdcl
         static constexpr double rescale_factor {1e-150};
 
         /// @brief True when `left` ranks strictly below `right`; ties go to the lower variable index.
-        [[nodiscard]] bool ranks_below(const index_t left, const index_t right) const noexcept
-        {
-            const auto left_score = score_[left];
-            const auto right_score = score_[right];
-            return left_score < right_score || (left_score == right_score && left > right);
-        }
+        [[nodiscard]] bool ranks_below(const index_t left, const index_t right) const noexcept;
 
         void place(const std::size_t position, const index_t index) noexcept
         {
@@ -145,52 +89,11 @@ namespace kmx::sat::cdcl
             position_[index] = static_cast<index_t>(position);
         }
 
-        void sift_up(std::size_t position) noexcept
-        {
-            const auto index = heap_[position];
-            while (position != 0u)
-            {
-                const auto parent_position = (position - 1u) / 2u;
-                const auto parent = heap_[parent_position];
-                if (!ranks_below(parent, index))
-                    break;
-                place(position, parent);
-                position = parent_position;
-            }
-            place(position, index);
-        }
+        void sift_up(std::size_t position) noexcept;
 
-        void sift_down(std::size_t position) noexcept
-        {
-            const auto index = heap_[position];
-            const auto count = heap_.size();
-            for (;;)
-            {
-                auto child_position = 2u * position + 1u;
-                if (child_position >= count)
-                    break;
-                auto child = heap_[child_position];
-                const auto right_position = child_position + 1u;
-                if (right_position < count && ranks_below(child, heap_[right_position]))
-                {
-                    child_position = right_position;
-                    child = heap_[right_position];
-                }
-                if (!ranks_below(index, child))
-                    break;
-                place(position, child);
-                position = child_position;
-            }
-            place(position, index);
-        }
+        void sift_down(std::size_t position) noexcept;
 
-        void rescale() noexcept
-        {
-            for (auto& score: score_)
-                score *= rescale_factor;
-            increment_ *= rescale_factor;
-            ++rescale_count_;
-        }
+        void rescale() noexcept;
 
         std::vector<double> score_ {};
         std::vector<index_t> heap_ {};

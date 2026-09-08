@@ -12,6 +12,7 @@ StaticLibrary {
             "factorizer.hpp",
             "flush_restore_manager.hpp",
             "forward_subsumer.hpp",
+            "pass_id.hpp",
             "preprocessing_profile_selector.hpp",
             "transitive_reducer.hpp",
             "vivifier.hpp",
@@ -58,6 +59,60 @@ StaticLibrary {
         files: [
             "inprocess.hpp",
             "preprocess.hpp",
+        ]
+    }
+    Group {
+        name: "src-simplify"
+        prefix: "src/kmx/sat/simplify/"
+        files: [
+            "equivalence_substitutor.cpp",
+            "factorizer.cpp",
+            "flush_restore_manager.cpp",
+            "forward_subsumer.cpp",
+            "preprocessing_profile_selector.cpp",
+            "transitive_reducer.cpp",
+            "vivifier.cpp",
+        ]
+    }
+    Group {
+        name: "src-simplify-eliminator-clause"
+        prefix: "src/kmx/sat/simplify/eliminator/clause/"
+        files: [
+            "blocked.cpp",
+        ]
+    }
+    Group {
+        name: "src-simplify-eliminator-variable"
+        prefix: "src/kmx/sat/simplify/eliminator/variable/"
+        files: [
+            "bounded.cpp",
+            "fast.cpp",
+        ]
+    }
+    Group {
+        name: "src-simplify-engine"
+        prefix: "src/kmx/sat/simplify/engine/"
+        files: [
+            "congruence.cpp",
+            "decomposition.cpp",
+            "probing.cpp",
+            "sweep.cpp",
+        ]
+    }
+    Group {
+        name: "src-simplify-extractor"
+        prefix: "src/kmx/sat/simplify/extractor/"
+        files: [
+            "backbone.cpp",
+            "gate.cpp",
+        ]
+    }
+    Group {
+        name: "src-simplify-scheduler"
+        prefix: "src/kmx/sat/simplify/scheduler/"
+        files: [
+            "inprocess.cpp",
+            "preprocess.cpp",
         ]
     }
     cpp.cxxLanguageVersion: "c++26"

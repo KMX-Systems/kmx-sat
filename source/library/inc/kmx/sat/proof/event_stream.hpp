@@ -61,15 +61,7 @@ namespace kmx::sat::proof
 
         /// @brief Hands buffered events to registered tracers/output sinks for processing.
         /// @throws None (noexcept).
-        void drain() noexcept
-        {
-            const auto drained = buffered_events_.size();
-            if (sink_)
-                for (const auto& event: buffered_events_)
-                    sink_(event);
-            buffered_events_.clear();
-            last_drain_count_ = drained;
-        }
+        void drain() noexcept;
 
         /// @brief Forces synchronous delivery of buffered events, guaranteeing durability before returning.
         /// @throws None (noexcept).

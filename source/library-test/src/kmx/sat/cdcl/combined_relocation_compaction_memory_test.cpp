@@ -44,17 +44,17 @@ namespace kmx::sat::cdcl
         mapper.mark_eliminated(internal_b);
 
         clause::database database;
-        const std::array<literal, 2> literals {literal {internal_a, false}, literal {internal_c, true}};
+        const std::array<literal, 2u> literals {literal {internal_a, false}, literal {internal_c, true}};
         auto clause_ref = database.add_clause(literals, true);
         database.set_glue(clause_ref, 2u);
         database.increment_used_count(clause_ref);
         database.increment_activity(clause_ref, 3.0);
 
         bank::watch_list watches;
-        watches.watch_literal(literals[0], watch {literals[1], clause_ref});
+        watches.watch_literal(literals[0u], watch {literals[1u], clause_ref});
         store::assignment assignment;
         assignment.set_current_level(1u);
-        assignment.assign(literals[0], clause_ref);
+        assignment.assign(literals[0u], clause_ref);
         proof_manager proof;
         proof.on_add_original(clause_ref, literals);
         const auto stable_id = proof.stable_id_for_clause(clause_ref);
@@ -81,7 +81,7 @@ namespace kmx::sat::cdcl
         for (std::uint32_t cycle {}; cycle < 256u; ++cycle)
         {
             const auto garbage_ref =
-                database.add_clause(std::array<literal, 1> {literal {variable {static_cast<std::uint32_t>(1500u + cycle)}, false}}, true);
+                database.add_clause(std::array<literal, 1u> {literal {variable {static_cast<std::uint32_t>(1500u + cycle)}, false}}, true);
             database.mark_garbage(garbage_ref);
             collector.collect();
             collector.relocate_live_clause();

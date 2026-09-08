@@ -18,7 +18,7 @@ namespace kmx::sat::cdcl
     {
         const literal watched_literal {variable {700u}, false};
         const literal blocking_literal {variable {701u}, false};
-        const std::array<literal, 2> literals {watched_literal, blocking_literal};
+        const std::array<literal, 2u> literals {watched_literal, blocking_literal};
 
         clause::database database;
         auto live_ref = database.add_clause(literals, true);
@@ -52,7 +52,7 @@ namespace kmx::sat::cdcl
         for (std::uint32_t cycle {}; cycle < 5u; ++cycle)
         {
             const auto garbage_ref =
-                database.add_clause(std::array<literal, 1> {literal {variable {static_cast<std::uint32_t>(800u + cycle)}, false}}, true);
+                database.add_clause(std::array<literal, 1u> {literal {variable {static_cast<std::uint32_t>(800u + cycle)}, false}}, true);
             database.mark_garbage(garbage_ref);
 
             collector.collect();

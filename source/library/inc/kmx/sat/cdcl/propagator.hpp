@@ -42,68 +42,27 @@ namespace kmx::sat::cdcl
         /// @brief Propagates all pending trail entries until fixpoint or a conflict is found.
         /// @return Reference to the conflicting clause, or an invalid reference if propagation reached fixpoint.
         /// @throws None (noexcept).
-        clause::ref_t propagate() noexcept
-        {
-            ++propagation_call_count_;
-            if (has_staged_conflicts())
-                return consume_staged_conflict();
-            return {};
-        }
+        clause::ref_t propagate() noexcept;
 
         /// @brief Propagates assumption-forced literals staged by `store::assumption` for the current episode.
         /// @return Reference to the conflicting clause, or an invalid reference if no conflict was found.
         /// @throws None (noexcept).
-        clause::ref_t propagate_assumptions() noexcept
-        {
-            ++assumption_propagation_call_count_;
-
-            if (pending_assumption_count_ == 0)
-            {
-                // No assumptions are pending for this episode: any currently staged conflict was not caused by
-                // assumption processing (e.g. it was staged directly ahead of the regular search loop), so it
-                // must not be misattributed here; leave it for `propagate` to discover in the normal loop.
-                return {};
-            }
-
-            pending_assumption_count_ = 0;
-            if (has_staged_conflicts())
-                return consume_staged_conflict();
-            return {};
-        }
+        clause::ref_t propagate_assumptions() noexcept;
 
         /// @brief Continues propagating implied literals needed by proof/analysis bookkeeping after a conflict.
         /// @return Reference to a further conflicting clause, or an invalid reference if none is found.
         /// @throws None (noexcept).
-        clause::ref_t propagate_beyond_conflict() noexcept
-        {
-            ++beyond_conflict_propagation_call_count_;
-            if (has_staged_conflicts())
-                return consume_staged_conflict();
-            return {};
-        }
+        clause::ref_t propagate_beyond_conflict() noexcept;
 
         /// @brief Registers a clause's currently chosen pair of watched literals in the watch lists.
         /// @param ref Reference to the clause being watched.
         /// @throws None (noexcept).
-        void watch_clause(const clause::ref_t ref) noexcept
-        {
-            if (!ref.valid() || is_watched(ref))
-                return;
-            watched_.push_back(ref);
-        }
+        void watch_clause(const clause::ref_t ref) noexcept;
 
         /// @brief Removes a clause's watched-literal entries, typically before deletion or relocation.
         /// @param ref Reference to the clause being detached.
         /// @throws None (noexcept).
-        void detach_clause(const clause::ref_t ref) noexcept
-        {
-            const auto it = std::find(watched_.begin(), watched_.end(), ref);
-            if (it != watched_.end())
-            {
-                std::swap(*it, watched_.back());
-                watched_.pop_back();
-            }
-        }
+        void detach_clause(const clause::ref_t ref) noexcept;
 
         /// @brief Selects and registers the initial pair of watched literals for a newly created clause.
         /// @param ref Reference to the clause being attached.
@@ -113,12 +72,7 @@ namespace kmx::sat::cdcl
         /// @brief Stages a conflict to be returned on the next propagation call.
         /// @param ref Reference to the clause to report as conflicting.
         /// @throws None (noexcept).
-        void stage_conflict(const clause::ref_t ref) noexcept
-        {
-            if (!ref.valid())
-                return;
-            staged_conflicts_.push_back(ref);
-        }
+        void stage_conflict(const clause::ref_t ref) noexcept;
 
         /// @brief Returns the number of currently watched clauses.
         /// @return Number of watched clause references.
@@ -138,7 +92,7 @@ namespace kmx::sat::cdcl
         /// @return Number of staged conflicts waiting to be consumed.
         std::size_t staged_conflict_count() const noexcept
         {
-            return staged_conflict_head_ < staged_conflicts_.size() ? staged_conflicts_.size() - staged_conflict_head_ : 0u;
+            return (staged_conflict_head_ < staged_conflicts_.size()) ? staged_conflicts_.size() - staged_conflict_head_ : 0u;
         }
 
         /// @brief Returns the number of main propagation calls performed so far.
@@ -163,12 +117,7 @@ namespace kmx::sat::cdcl
 
         /// @brief Clears episode-scoped propagation state before starting a fresh solve episode.
         /// @throws None (noexcept).
-        void reset_episode_state() noexcept
-        {
-            staged_conflicts_.clear();
-            staged_conflict_head_ = 0u;
-            pending_assumption_count_ = 0u;
-        }
+        void reset_episode_state() noexcept;
 
     private:
         bool is_watched(const clause::ref_t ref) const noexcept
@@ -176,27 +125,7 @@ namespace kmx::sat::cdcl
             return std::find(watched_.begin(), watched_.end(), ref) != watched_.end();
         }
 
-        clause::ref_t consume_staged_conflict() noexcept
-        {
-            if (!has_staged_conflicts())
-                return {};
-
-            const auto conflict = staged_conflicts_[staged_conflict_head_++];
-
-            if (staged_conflict_head_ == staged_conflicts_.size())
-            {
-                staged_conflicts_.clear();
-                staged_conflict_head_ = 0u;
-            }
-            else if (staged_conflict_head_ >= staged_conflict_compaction_threshold_)
-            {
-                staged_conflicts_.erase(staged_conflicts_.begin(),
-                                        staged_conflicts_.begin() + static_cast<std::ptrdiff_t>(staged_conflict_head_));
-                staged_conflict_head_ = 0u;
-            }
-
-            return conflict;
-        }
+        clause::ref_t consume_staged_conflict() noexcept;
 
         static constexpr std::size_t staged_conflict_compaction_threshold_ {64u};
 

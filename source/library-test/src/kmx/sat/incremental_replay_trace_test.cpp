@@ -25,7 +25,7 @@ namespace kmx::sat
             incremental_replay_operation {.kind = replay_operation_kind::solve, .conflict_limit = 3u, .decision_limit = 7u},
             incremental_replay_operation {.kind = replay_operation_kind::release_assumptions},
             incremental_replay_operation {.kind = replay_operation_kind::reset_session},
-            incremental_replay_operation {.kind = replay_operation_kind::set_option, .option_name = "chb_enabled", .option_value = 1},
+            incremental_replay_operation {.kind = replay_operation_kind::set_option, .option = option_id::chb_enabled, .option_value = 1L},
             incremental_replay_operation {.kind = replay_operation_kind::value_of, .variable_operand = variable {2u}},
             incremental_replay_operation {.kind = replay_operation_kind::failed, .literal_operand = literal {variable {1u}, true}},
         };
@@ -73,14 +73,14 @@ namespace kmx::sat
         solver solver;
         const auto outcome = execute_incremental_replay(trace, solver);
         REQUIRE(outcome.solve_statuses.size() == 3u);
-        REQUIRE(outcome.solve_statuses[0] == solve_result::status::satisfiable);
-        REQUIRE(outcome.solve_statuses[1] == solve_result::status::unsatisfiable);
-        REQUIRE(outcome.solve_statuses[2] == solve_result::status::satisfiable);
+        REQUIRE(outcome.solve_statuses[0u] == solve_result::status::satisfiable);
+        REQUIRE(outcome.solve_statuses[1u] == solve_result::status::unsatisfiable);
+        REQUIRE(outcome.solve_statuses[2u] == solve_result::status::satisfiable);
         REQUIRE(outcome.failed_results.size() == 1u);
-        REQUIRE(outcome.failed_results[0]);
+        REQUIRE(outcome.failed_results[0u]);
         REQUIRE(outcome.value_results.size() == 1u);
-        REQUIRE(outcome.value_results[0].has_value());
-        REQUIRE(*outcome.value_results[0]);
+        REQUIRE(outcome.value_results[0u].has_value());
+        REQUIRE(*outcome.value_results[0u]);
         REQUIRE(solver.current_state() == solver_state_machine::state::configuring);
     }
 

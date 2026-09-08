@@ -41,49 +41,19 @@ namespace kmx::sat::runtime::controller
         /// @throws None (noexcept).
         portfolio() noexcept = default;
 
-        void set_strategy_budget(std::uint32_t strategy_budget) noexcept
-        {
-            strategy_budget_ = strategy_budget;
-            if (strategy_budget_ < 1u)
-                strategy_budget_ = 1u;
-            if (strategy_budget_ > 64u)
-                strategy_budget_ = 64u;
-        }
+        void set_strategy_budget(std::uint32_t strategy_budget) noexcept;
 
         /// @brief Launches the configured set of independently seeded solver instances.
         /// @throws None (noexcept).
-        void launch_strategies() noexcept
-        {
-            launched_ = true;
-            cancelled_ = false;
-            collected_ = false;
-            signal_.clear();
-            launch_count_ += 1u;
-            ++launch_epoch_;
-        }
+        void launch_strategies() noexcept;
 
         /// @brief Requests orderly termination of every instance other than the one that produced a result.
         /// @throws None (noexcept).
-        void cancel_others_on_result() noexcept
-        {
-            if (launched_ && !cancelled_)
-            {
-                cancelled_ = true;
-                signal_.request_stop();
-                ++cancel_count_;
-            }
-        }
+        void cancel_others_on_result() noexcept;
 
         /// @brief Retrieves the result from whichever instance finished first.
         /// @throws None (noexcept).
-        void collect_winner() noexcept
-        {
-            if (launched_ && !collected_)
-            {
-                collected_ = true;
-                ++collect_count_;
-            }
-        }
+        void collect_winner() noexcept;
 
         [[nodiscard]] bool launched() const noexcept { return launched_; }
 
@@ -103,38 +73,14 @@ namespace kmx::sat::runtime::controller
 
         [[nodiscard]] bool termination_requested() const noexcept { return signal_.termination_requested(); }
 
-        [[nodiscard]] lifecycle_metrics lifecycle_metrics_snapshot() const noexcept
-        {
-            return lifecycle_metrics {
-                .launched = launched_,
-                .cancelled = cancelled_,
-                .collected = collected_,
-                .termination_requested = signal_.termination_requested(),
-                .launch_count = launch_count_,
-                .launch_epoch = launch_epoch_,
-                .cancel_count = cancel_count_,
-                .collect_count = collect_count_,
-                .strategy_budget = strategy_budget_,
-            };
-        }
+        [[nodiscard]] lifecycle_metrics lifecycle_metrics_snapshot() const noexcept;
 
-        void reset_lifecycle_metrics() noexcept
-        {
-            signal_.reset_metrics();
-            launched_ = false;
-            cancelled_ = false;
-            collected_ = false;
-            launch_count_ = 0u;
-            launch_epoch_ = 0u;
-            cancel_count_ = 0u;
-            collect_count_ = 0u;
-            strategy_budget_ = 1u;
-        }
+        void reset_lifecycle_metrics() noexcept;
 
         static bool lifecycle_monotonic(const lifecycle_metrics& before, const lifecycle_metrics& after) noexcept
         {
-            return after.launch_count >= before.launch_count && after.launch_epoch >= before.launch_epoch &&
-                   after.cancel_count >= before.cancel_count && after.collect_count >= before.collect_count;
+            return (after.launch_count >= before.launch_count) && (after.launch_epoch >= before.launch_epoch) &&
+                   (after.cancel_count >= before.cancel_count) && (after.collect_count >= before.collect_count);
         }
 
     private:

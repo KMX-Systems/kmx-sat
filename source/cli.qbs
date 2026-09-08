@@ -28,7 +28,12 @@ CppApplication {
         // the CLI reads a file and computes, with no dlopen and no NSS lookups to be caught by static glibc. It
         // also removes the libstdc++ version dependency from the shipped binary, which is the same portability
         // goal that keeps -march=native out of this build.
-        cpp.driverLinkerFlags: ["-flto=auto", "-static"]
+        // kmx-sat-cdcl and kmx-sat-simplify reference each other's symbols (solver_core
+        // drives the simplification schedulers; the schedulers work on cdcl clause
+        // storage), which no single order of static archives can satisfy. Link them as
+        // one group: cpp.linkerFlags lands before the archives, driverLinkerFlags after.
+        cpp.linkerFlags: ["--start-group"]
+        cpp.driverLinkerFlags: ["-flto=auto", "-static", "-Wl,--end-group"]
     }
     Group {
         fileTagsFilter: product.type

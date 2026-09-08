@@ -39,52 +39,12 @@ namespace kmx::sat::simplify
 
         /// @brief Runs a full vivification pass over eligible clauses under the pass budget.
         /// @throws None (noexcept).
-        void run() noexcept
-        {
-            run_completed_ = false;
-            processed_in_current_run_ = 0u;
-
-            if (database_ != nullptr)
-            {
-                bool stopped {};
-                auto process_ref = [&](const cdcl::clause::ref_t ref) noexcept
-                {
-                    if (stopped || abort_on_budget())
-                    {
-                        stopped = true;
-                        return;
-                    }
-
-                    vivify_clause(ref);
-                    commit_shrunk_clause(ref);
-                    ++processed_in_current_run_;
-                };
-
-                database_->iterate_irredundant(process_ref);
-                database_->iterate_redundant(process_ref);
-            }
-
-            run_completed_ = true;
-        }
+        void run() noexcept;
 
         /// @brief Attempts to strengthen one clause via temporary-assumption propagation.
         /// @param ref Reference to the candidate clause.
         /// @throws None (noexcept).
-        void vivify_clause(const cdcl::clause::ref_t ref) noexcept
-        {
-            ++vivified_clause_count_;
-
-            pending_shrink_ref_ = {};
-            pending_target_size_ = 0u;
-
-            auto& storage = database_->storage_of();
-            if (database_ == nullptr || !ref.valid() || !storage.is_alive(ref))
-                return;
-
-            const auto current_size = storage.literal_count(ref);
-            if (current_size <= 1u)
-                return;
-        }
+        void vivify_clause(const cdcl::clause::ref_t ref) noexcept;
 
         /// @brief Checks whether the current vivification budget has been exhausted.
         /// @return True if the pass should stop before processing further clauses.
@@ -94,16 +54,7 @@ namespace kmx::sat::simplify
         /// @brief Commits a clause's reduced literal set once a beneficial vivification result is confirmed.
         /// @param ref Reference to the clause to shrink.
         /// @throws None (noexcept).
-        void commit_shrunk_clause(const cdcl::clause::ref_t ref) noexcept
-        {
-            if (database_ == nullptr || !ref.valid() || ref != pending_shrink_ref_ || pending_target_size_ == 0u)
-                return;
-
-            database_->storage_of().shrink_clause(ref, pending_target_size_);
-            pending_shrink_ref_ = {};
-            pending_target_size_ = 0u;
-            ++committed_shrink_count_;
-        }
+        void commit_shrunk_clause(const cdcl::clause::ref_t ref) noexcept;
 
         std::size_t clause_budget() const noexcept { return clause_budget_; }
 

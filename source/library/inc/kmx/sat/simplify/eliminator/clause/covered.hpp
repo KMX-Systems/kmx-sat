@@ -33,14 +33,14 @@ namespace kmx::sat::simplify::eliminator::clause
         /// @brief Derives the extra covering literals for a candidate clause via propagation on its negation.
         /// @param ref Reference to the candidate clause.
         /// @throws None (noexcept).
-        void compute_covered_literals(const cdcl::clause::ref_t ref) noexcept { (void) ref; }
+        void compute_covered_literals(const cdcl::clause::ref_t ref) noexcept { (void)ref; }
 
         /// @brief Confirms and marks a clause eliminated under the covered-clause test.
         /// @param ref Reference to the covered clause.
         /// @throws None (noexcept).
         void mark_covered(const cdcl::clause::ref_t ref) noexcept
         {
-            (void) ref;
+            (void)ref;
             covered_count_ = 1u;
         }
 

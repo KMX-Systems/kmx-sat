@@ -7,7 +7,7 @@ namespace kmx::sat::cdcl
     TEST_CASE("propagator", "[sat]")
     {
         propagator propagator;
-        const clause::ref_t ref {7};
+        const clause::ref_t ref {7u};
 
         propagator.attach_clause(ref);
         REQUIRE(propagator.watched_clause_count() == 1u);
@@ -43,8 +43,8 @@ namespace kmx::sat::cdcl
         REQUIRE(propagator.propagate_assumptions() == ref);
         REQUIRE(propagator.staged_conflict_count() == 0u);
 
-        const clause::ref_t ref_b {8};
-        const clause::ref_t ref_c {9};
+        const clause::ref_t ref_b {8u};
+        const clause::ref_t ref_c {9u};
         propagator.stage_conflict(ref);
         propagator.stage_conflict(ref_b);
         propagator.stage_conflict(ref_c);

@@ -41,6 +41,38 @@ StaticLibrary {
             "writer.hpp",
         ]
     }
+    Group {
+        name: "src-io"
+        prefix: "src/kmx/sat/io/"
+        files: [
+            "dimacs_parser.cpp",
+            "file_source.cpp",
+            "proof_output_pipeline.cpp",
+        ]
+    }
+    Group {
+        name: "src-io-fixture"
+        prefix: "src/kmx/sat/io/fixture/"
+        files: [
+            "validator.cpp",
+        ]
+    }
+    Group {
+        name: "src-io-fixture-binary"
+        prefix: "src/kmx/sat/io/fixture/binary/"
+        files: [
+            "reader.cpp",
+            "writer.cpp",
+        ]
+    }
+    Group {
+        name: "src-io-writer"
+        prefix: "src/kmx/sat/io/writer/"
+        files: [
+            "format.cpp",
+            "kmx_aio_proof.cpp",
+        ]
+    }
     cpp.cxxLanguageVersion: "c++26"
     cpp.enableRtti: false
     cpp.includePaths: ["api", "inc"]

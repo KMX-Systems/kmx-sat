@@ -7,7 +7,7 @@ namespace kmx::sat::cdcl
     TEST_CASE("otf strengthener", "[sat]")
     {
         otf_strengthener strengthener;
-        const clause::ref_t ref {7};
+        const clause::ref_t ref {7u};
 
         REQUIRE(strengthener.try_strengthen(ref) == true);
         REQUIRE(strengthener.try_subsume(ref) == true);

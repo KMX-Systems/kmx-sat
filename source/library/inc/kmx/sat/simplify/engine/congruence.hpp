@@ -50,16 +50,7 @@ namespace kmx::sat::simplify::engine
 
         /// @brief Runs a full congruence-closure pass: extract gates, derive equivalences, substitute.
         /// @throws None (noexcept).
-        void run() noexcept
-        {
-            gate_.materialize_gate_summary();
-            apply_gate_constraints();
-            derive_equivalences();
-            equivalence_substitutor_.rewrite_clauses();
-            equivalence_substitutor_.rewrite_watches();
-            equivalence_substitutor_.rewrite_external_mapping();
-            run_completed_ = true;
-        }
+        void run() noexcept;
 
         /// @brief Feeds discovered gate structures in as equality constraints for the closure computation.
         /// @throws None (noexcept).
@@ -70,25 +61,7 @@ namespace kmx::sat::simplify::engine
 
         /// @brief Computes the congruence closure over the applied gate constraints.
         /// @throws None (noexcept).
-        void derive_equivalences() noexcept
-        {
-            equivalence_count_ = 0u;
-            for (const auto& record: gate_.gate_records())
-            {
-                if (record.kind == extractor::gate::gate_kind::xor_gate || record.kind == extractor::gate::gate_kind::ite_gate)
-                    continue;
-
-                if (record.inputs[0] != record.inputs[1])
-                    continue;
-
-                const auto representative = std::min(record.inputs[0], record.inputs[1]);
-                if (representative == 0u || record.output == 0u || record.output == representative)
-                    continue;
-
-                equivalence_substitutor_.apply_equivalence_class(record.output, representative);
-                ++equivalence_count_;
-            }
-        }
+        void derive_equivalences() noexcept;
 
         extractor::gate& gate_extractor() noexcept { return gate_; }
 

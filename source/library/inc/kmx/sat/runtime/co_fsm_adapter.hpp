@@ -34,28 +34,11 @@ namespace kmx::sat::runtime
 
         /// @brief Activates the placeholder adapter.
         /// @throws None (noexcept).
-        void activate() noexcept
-        {
-            if (!active_)
-            {
-                active_ = true;
-                ++activation_count_;
-                ++transition_epoch_;
-                last_activation_epoch_ = transition_epoch_;
-            }
-        }
+        void activate() noexcept;
 
         /// @brief Deactivates the placeholder adapter.
         /// @throws None (noexcept).
-        void deactivate() noexcept
-        {
-            if (active_)
-            {
-                active_ = false;
-                ++deactivation_count_;
-                ++transition_epoch_;
-            }
-        }
+        void deactivate() noexcept;
 
         /// @brief Returns whether the placeholder adapter is active.
         [[nodiscard]] bool active() const noexcept { return active_; }
@@ -68,30 +51,14 @@ namespace kmx::sat::runtime
 
         [[nodiscard]] std::uint32_t last_activation_epoch() const noexcept { return last_activation_epoch_; }
 
-        [[nodiscard]] lifecycle_metrics lifecycle_metrics_snapshot() const noexcept
-        {
-            return lifecycle_metrics {
-                .active = active_,
-                .activation_count = activation_count_,
-                .deactivation_count = deactivation_count_,
-                .transition_epoch = transition_epoch_,
-                .last_activation_epoch = last_activation_epoch_,
-            };
-        }
+        [[nodiscard]] lifecycle_metrics lifecycle_metrics_snapshot() const noexcept;
 
-        void reset_lifecycle_metrics() noexcept
-        {
-            active_ = false;
-            activation_count_ = 0u;
-            deactivation_count_ = 0u;
-            transition_epoch_ = 0u;
-            last_activation_epoch_ = 0u;
-        }
+        void reset_lifecycle_metrics() noexcept;
 
         static bool lifecycle_monotonic(const lifecycle_metrics& before, const lifecycle_metrics& after) noexcept
         {
-            return after.activation_count >= before.activation_count && after.deactivation_count >= before.deactivation_count &&
-                   after.transition_epoch >= before.transition_epoch && after.last_activation_epoch >= before.last_activation_epoch;
+            return (after.activation_count >= before.activation_count) && (after.deactivation_count >= before.deactivation_count) &&
+                   (after.transition_epoch >= before.transition_epoch) && (after.last_activation_epoch >= before.last_activation_epoch);
         }
 
     private:

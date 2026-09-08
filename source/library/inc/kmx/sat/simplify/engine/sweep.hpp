@@ -29,13 +29,7 @@ namespace kmx::sat::simplify::engine
         sweep() noexcept = default;
 
         /// @brief Clears the current micro-instance and all episode-local sweep results.
-        void reset() noexcept
-        {
-            micro_instance_built_ = false;
-            backbone_count_ = 0u;
-            equivalence_count_ = 0u;
-            transferred_ = false;
-        }
+        void reset() noexcept;
 
         /// @brief Runs the embedded micro-solver over the current micro-instance and collects its results.
         /// @throws None (noexcept).

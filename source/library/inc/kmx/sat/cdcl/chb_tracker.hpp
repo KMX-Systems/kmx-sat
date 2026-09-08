@@ -14,6 +14,9 @@
 
 namespace kmx::sat::cdcl
 {
+    /// @brief Per-variable activity scores held as a flat, cache-friendly list.
+    using variable_score_list_t = std::vector<std::pair<variable, double>>;
+
     /// @brief Conflict History-Based branching scores as a third candidate heuristic alongside VMTF/EVSIDS. Research-track
     /// heuristic to be validated against the comparative benchmarking harness before becoming a default.
     ///
@@ -53,35 +56,30 @@ namespace kmx::sat::cdcl
         double score_of(const variable var) const noexcept
         {
             const auto slot = slot_of(var);
-            return slot == npos ? zero_d : scores_[slot].second;
+            return (slot == npos) ? zero_d : scores_[slot].second;
         }
 
         /// @brief Returns the highest-scoring tracked variable accepted by an optional predicate.
-        template <typename predicate_t>
-        std::optional<variable> best_candidate(predicate_t&& selectable) const noexcept
+        template <typename Predicate>
+        std::optional<variable> best_candidate(Predicate&& selectable) const noexcept
         {
             const std::pair<variable, double>* best {};
             for (const auto& entry: scores_)
             {
-                if (entry.second <= zero_d || !selectable(entry.first))
+                if ((entry.second <= zero_d) || !selectable(entry.first))
                     continue;
-                if (best == nullptr || entry.second > best->second ||
+                if ((best == nullptr) || (entry.second > best->second) ||
                     (entry.second == best->second && entry.first.index() < best->first.index()))
                 {
                     best = &entry;
                 }
             }
-            return best == nullptr ? std::nullopt : std::optional<variable> {best->first};
+            return (best == nullptr) ? std::nullopt : std::optional<variable> {best->first};
         }
 
         /// @brief Applies one decay step to all scores, reducing the weight of older conflict participation.
         /// @throws None (noexcept).
-        void decay_step() noexcept
-        {
-            for (auto& entry: scores_)
-                entry.second *= decay_factor_;
-            ++decay_count_;
-        }
+        void decay_step() noexcept;
 
         /// @brief Sets the exponential reward learning rate in the inclusive range [0, 1].
         void set_learning_rate(const double rate) noexcept { learning_rate_ = std::clamp(rate, zero_d, 1.0); }
@@ -102,26 +100,12 @@ namespace kmx::sat::cdcl
         std::size_t slot_of(const variable var) const noexcept
         {
             const auto index = static_cast<std::size_t>(var.index());
-            return index < slots_.size() ? slots_[index] : npos;
+            return (index < slots_.size()) ? slots_[index] : npos;
         }
 
-        void update_score(const variable var, const double reward) noexcept
-        {
-            const auto index = static_cast<std::size_t>(var.index());
-            const auto slot = slot_of(var);
-            if (slot != npos)
-            {
-                auto& score = scores_[slot].second;
-                score += learning_rate_ * (reward - score);
-                return;
-            }
-            if (index >= slots_.size())
-                slots_.resize(index + 1u, npos);
-            slots_[index] = scores_.size();
-            scores_.emplace_back(var, learning_rate_ * reward);
-        }
+        void update_score(const variable var, const double reward) noexcept;
 
-        std::vector<std::pair<variable, double>> scores_ {};
+        variable_score_list_t scores_ {};
         std::vector<std::size_t> slots_ {};
         double learning_rate_ {0.1};
         double decay_factor_ {0.95};

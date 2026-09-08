@@ -41,16 +41,16 @@ namespace kmx::sat::cdcl::store
     {
         clause_cold cold;
         const clause::ref_t ref {31u};
-        const std::array<literal, 3> literals {literal {variable {100u}, true}, literal {variable {4u}, false},
+        const std::array<literal, 3u> literals {literal {variable {100u}, true}, literal {variable {4u}, false},
                                                literal {variable {101u}, false}};
         cold.set_enabled(true);
         cold.demote_to_cold(ref, literals);
 
         const auto decoded = cold.decode_literals(ref);
         REQUIRE(decoded.size() == literals.size());
-        REQUIRE(decoded[0].raw() == literals[0].raw());
-        REQUIRE(decoded[1].raw() == literals[1].raw());
-        REQUIRE(decoded[2].raw() == literals[2].raw());
+        REQUIRE(decoded[0u].raw() == literals[0u].raw());
+        REQUIRE(decoded[1u].raw() == literals[1u].raw());
+        REQUIRE(decoded[2u].raw() == literals[2u].raw());
         REQUIRE(cold.cold_footprint_bytes() > 0u);
 
         cold.promote_from_cold(ref);
@@ -72,7 +72,7 @@ namespace kmx::sat::cdcl::store
         clause_cold cold;
         const clause::ref_t old_ref {41u};
         const clause::ref_t new_ref {87u};
-        const std::array<literal, 2> literals {literal {variable {9u}, false}, literal {variable {3u}, true}};
+        const std::array<literal, 2u> literals {literal {variable {9u}, false}, literal {variable {3u}, true}};
         cold.set_enabled(true);
         cold.demote_to_cold(old_ref, literals);
 
@@ -82,15 +82,15 @@ namespace kmx::sat::cdcl::store
         REQUIRE(cold.is_cold(new_ref));
         const auto decoded = cold.decode_literals(new_ref);
         REQUIRE(decoded.size() == literals.size());
-        REQUIRE(decoded[0].raw() == literals[0].raw());
-        REQUIRE(decoded[1].raw() == literals[1].raw());
+        REQUIRE(decoded[0u].raw() == literals[0u].raw());
+        REQUIRE(decoded[1u].raw() == literals[1u].raw());
     }
 
     TEST_CASE("clause cold storage reports a compressed footprint", "[sat]")
     {
         clause_cold cold;
         const clause::ref_t ref {91u};
-        std::array<literal, 32> literals {};
+        std::array<literal, 32u> literals {};
         for (std::uint32_t index {}; index < literals.size(); ++index)
             literals[index] = literal {variable {index + 1u}, false};
 

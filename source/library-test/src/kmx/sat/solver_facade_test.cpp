@@ -24,26 +24,26 @@ namespace kmx::sat
         using namespace kmx::sat;
 
         solver sat_solver;
-        std::vector<literal> sat_clause {literal {variable {1}, false}};
+        std::vector<literal> sat_clause {literal {variable {1u}, false}};
         sat_solver.add_clause(std::span<const literal> {sat_clause});
 
         const auto sat_result = sat_solver.solve(solve_request {});
         REQUIRE(sat_result.status_of() == solve_result::status::satisfiable);
         REQUIRE(sat_solver.statistics().propagations > 0u);
 
-        const auto v1 = sat_solver.value_of(variable {1});
+        const auto v1 = sat_solver.value_of(variable {1u});
         REQUIRE(v1.has_value());
         REQUIRE(*v1);
 
         solver unsat_solver;
-        std::vector<literal> unit_clause {literal {variable {2}, false}};
+        std::vector<literal> unit_clause {literal {variable {2u}, false}};
         unsat_solver.add_clause(std::span<const literal> {unit_clause});
-        unsat_solver.assume(literal {variable {2}, true});
+        unsat_solver.assume(literal {variable {2u}, true});
 
         const auto unsat_result = unsat_solver.solve(solve_request {});
         REQUIRE(unsat_result.status_of() == solve_result::status::unsatisfiable);
         REQUIRE(!unsat_result.failed_core().assumptions().empty());
-        REQUIRE(unsat_solver.failed(literal {variable {2}, true}));
+        REQUIRE(unsat_solver.failed(literal {variable {2u}, true}));
 
         SECTION("solver facade tracks lifecycle state transitions")
         {
@@ -65,7 +65,7 @@ namespace kmx::sat
         SECTION("solver facade retains callbacks and reports termination")
         {
             solver callback_solver;
-            std::size_t terminate_calls = 0u;
+            std::size_t terminate_calls {};
             callback_solver.set_terminate(
                 [&]() noexcept
                 {
@@ -90,9 +90,9 @@ namespace kmx::sat
         SECTION("solver facade invokes external and learn callbacks on non-terminated solve")
         {
             solver callback_solver;
-            std::size_t external_calls = 0u;
-            std::size_t learn_calls = 0u;
-            std::size_t learned_literals_seen = 0u;
+            std::size_t external_calls {};
+            std::size_t learn_calls {};
+            std::size_t learned_literals_seen {};
 
             callback_solver.set_external_propagator([&]() noexcept { ++external_calls; });
             callback_solver.set_learn(
@@ -141,8 +141,8 @@ namespace kmx::sat
             REQUIRE(decision_limited_result.status_of() == solve_result::status::unknown);
 
             solver conflict_limited_solver;
-            conflict_limited_solver.add_clause(std::span<const literal> {std::array<literal, 1> {literal {variable {41u}, false}}});
-            conflict_limited_solver.add_clause(std::span<const literal> {std::array<literal, 1> {literal {variable {41u}, true}}});
+            conflict_limited_solver.add_clause(std::span<const literal> {std::array<literal, 1u> {literal {variable {41u}, false}}});
+            conflict_limited_solver.add_clause(std::span<const literal> {std::array<literal, 1u> {literal {variable {41u}, true}}});
 
             solve_request conflict_limited_request {};
             conflict_limited_request.conflict_limit = 1u;
@@ -153,7 +153,7 @@ namespace kmx::sat
         SECTION("solver facade applies persisted limit defaults when request limits are unset")
         {
             solver persisted_decision_limited_solver;
-            persisted_decision_limited_solver.set_option("decision_limit", 1);
+            persisted_decision_limited_solver.set_option(option_id::decision_limit, 1L);
             REQUIRE(persisted_decision_limited_solver.has_persisted_configuration());
             std::vector<literal> decision_clause {literal {variable {51u}, false}, literal {variable {52u}, false},
                                                   literal {variable {53u}, false}};
@@ -163,12 +163,12 @@ namespace kmx::sat
             REQUIRE(persisted_decision_result.status_of() == solve_result::status::unknown);
 
             solver persisted_conflict_limited_solver;
-            persisted_conflict_limited_solver.set_option("conflict_limit", 1);
+            persisted_conflict_limited_solver.set_option(option_id::conflict_limit, 1L);
             REQUIRE(persisted_conflict_limited_solver.has_persisted_configuration());
             persisted_conflict_limited_solver.add_clause(
-                std::span<const literal> {std::array<literal, 1> {literal {variable {61u}, false}}});
+                std::span<const literal> {std::array<literal, 1u> {literal {variable {61u}, false}}});
             persisted_conflict_limited_solver.add_clause(
-                std::span<const literal> {std::array<literal, 1> {literal {variable {61u}, true}}});
+                std::span<const literal> {std::array<literal, 1u> {literal {variable {61u}, true}}});
 
             const auto persisted_conflict_result = persisted_conflict_limited_solver.solve(solve_request {});
             REQUIRE(persisted_conflict_result.status_of() == solve_result::status::unknown);
@@ -183,10 +183,10 @@ namespace kmx::sat
             REQUIRE_FALSE(option_solver.configured_decision_limit().has_value());
             REQUIRE_FALSE(option_solver.configured_enabled_pass_mask().has_value());
             REQUIRE_FALSE(option_solver.configured_strict_mode().has_value());
-            REQUIRE(option_solver.configuration_profile_name().empty());
-            REQUIRE(option_solver.decision_maintenance_intervals()[0] == 16u);
-            REQUIRE(option_solver.decision_maintenance_intervals()[1] == 8u);
-            REQUIRE(option_solver.decision_maintenance_intervals()[2] == 4u);
+            REQUIRE_FALSE(option_solver.configuration_profile().has_value());
+            REQUIRE(option_solver.decision_maintenance_intervals()[0u] == 16u);
+            REQUIRE(option_solver.decision_maintenance_intervals()[1u] == 8u);
+            REQUIRE(option_solver.decision_maintenance_intervals()[2u] == 4u);
             REQUIRE_FALSE(option_solver.chb_enabled());
             REQUIRE(option_solver.reduction_fraction_percent() == 75u);
             REQUIRE(option_solver.activity_retention_threshold() == 2.0);
@@ -194,68 +194,64 @@ namespace kmx::sat
             REQUIRE_FALSE(option_solver.cold_storage_enabled());
             REQUIRE(option_solver.cold_footprint_bytes() == 0u);
 
-            option_solver.set_option("conflict_limit", 3);
+            option_solver.set_option(option_id::conflict_limit, 3L);
             REQUIRE(option_solver.persisted_option_subset());
             REQUIRE(option_solver.has_persisted_configuration());
             REQUIRE(option_solver.configured_conflict_limit().has_value());
             REQUIRE(option_solver.configured_conflict_limit().value() == 3u);
             REQUIRE(option_solver.statistics().option_updates == 1u);
 
-            option_solver.set_option("decision_limit", 17);
+            option_solver.set_option(option_id::decision_limit, 17L);
             REQUIRE(option_solver.configured_decision_limit().has_value());
             REQUIRE(option_solver.configured_decision_limit().value() == 17u);
             REQUIRE(option_solver.statistics().option_updates == 2u);
 
-            option_solver.set_option("decision_conflict_maintenance_interval", 2);
-            option_solver.set_option("decision_chb_decay_interval", 3);
-            option_solver.set_option("decision_restart_decay_interval", 5);
-            option_solver.set_option("chb_enabled", 1);
-            option_solver.set_option("reduction_fraction_percent", 25);
-            option_solver.set_option("glue_restart_threshold_percent", 110);
-            option_solver.set_option("cold_storage_enabled", 1);
-            option_solver.set_option("activity_retention_threshold_percent", 250);
+            option_solver.set_option(option_id::decision_conflict_maintenance_interval, 2L);
+            option_solver.set_option(option_id::decision_chb_decay_interval, 3L);
+            option_solver.set_option(option_id::decision_restart_decay_interval, 5L);
+            option_solver.set_option(option_id::chb_enabled, 1L);
+            option_solver.set_option(option_id::reduction_fraction_percent, 25L);
+            option_solver.set_option(option_id::glue_restart_threshold_percent, 110L);
+            option_solver.set_option(option_id::cold_storage_enabled, 1L);
+            option_solver.set_option(option_id::activity_retention_threshold_percent, 250L);
             REQUIRE(option_solver.statistics().option_updates == 10u);
-            REQUIRE(option_solver.decision_maintenance_intervals()[0] == 2u);
-            REQUIRE(option_solver.decision_maintenance_intervals()[1] == 3u);
-            REQUIRE(option_solver.decision_maintenance_intervals()[2] == 5u);
+            REQUIRE(option_solver.decision_maintenance_intervals()[0u] == 2u);
+            REQUIRE(option_solver.decision_maintenance_intervals()[1u] == 3u);
+            REQUIRE(option_solver.decision_maintenance_intervals()[2u] == 5u);
             REQUIRE(option_solver.chb_enabled());
             REQUIRE(option_solver.reduction_fraction_percent() == 25u);
             REQUIRE(option_solver.glue_restart_threshold_percent() == 110u);
             REQUIRE(option_solver.cold_storage_enabled());
             REQUIRE(option_solver.activity_retention_threshold() == 2.5);
 
-            option_solver.set_option("unknown_option", 9);
-            REQUIRE(option_solver.configured_decision_limit().value() == 17u);
-            REQUIRE(option_solver.statistics().option_updates == 10u);
-
-            option_solver.set_configuration("safe");
+            option_solver.set_configuration(configuration_profile_id::safe);
             REQUIRE(option_solver.persisted_option_subset());
             REQUIRE(option_solver.has_persisted_configuration());
-            REQUIRE(option_solver.configuration_profile_name() == "safe");
+            REQUIRE(option_solver.configuration_profile() == configuration_profile_id::safe);
             REQUIRE(option_solver.configured_strict_mode().has_value());
             REQUIRE(option_solver.configured_strict_mode().value());
             REQUIRE(option_solver.configured_enabled_pass_mask().has_value());
             REQUIRE(option_solver.configured_enabled_pass_mask().value() == 0u);
             REQUIRE(option_solver.statistics().configuration_updates == 1u);
 
-            option_solver.set_configuration("balanced");
-            REQUIRE(option_solver.configuration_profile_name() == "balanced");
+            option_solver.set_configuration(configuration_profile_id::balanced);
+            REQUIRE(option_solver.configuration_profile() == configuration_profile_id::balanced);
             REQUIRE(option_solver.configured_strict_mode().has_value());
             REQUIRE_FALSE(option_solver.configured_strict_mode().value());
             REQUIRE(option_solver.configured_enabled_pass_mask().has_value());
             REQUIRE(option_solver.configured_enabled_pass_mask().value() == ~0ull);
             REQUIRE(option_solver.statistics().configuration_updates == 2u);
 
-            option_solver.set_configuration("bounded");
-            REQUIRE(option_solver.configuration_profile_name() == "bounded");
+            option_solver.set_configuration(configuration_profile_id::bounded);
+            REQUIRE(option_solver.configuration_profile() == configuration_profile_id::bounded);
             REQUIRE(option_solver.configured_conflict_limit().has_value());
             REQUIRE(option_solver.configured_conflict_limit().value() == 1000u);
             REQUIRE(option_solver.configured_decision_limit().has_value());
             REQUIRE(option_solver.configured_decision_limit().value() == 10000u);
             REQUIRE(option_solver.statistics().configuration_updates == 3u);
 
-            option_solver.set_configuration("aggressive");
-            REQUIRE(option_solver.configuration_profile_name() == "aggressive");
+            option_solver.set_configuration(configuration_profile_id::aggressive);
+            REQUIRE(option_solver.configuration_profile() == configuration_profile_id::aggressive);
             REQUIRE(option_solver.configured_conflict_limit().has_value());
             REQUIRE(option_solver.configured_conflict_limit().value() == 0u);
             REQUIRE(option_solver.configured_decision_limit().has_value());
@@ -264,12 +260,12 @@ namespace kmx::sat
             REQUIRE_FALSE(option_solver.configured_strict_mode().value());
             REQUIRE(option_solver.statistics().configuration_updates == 4u);
 
-            option_solver.set_configuration("unknown-profile");
-            REQUIRE(option_solver.configuration_profile_name().empty());
+            option_solver.clear_persisted_configuration();
+            REQUIRE_FALSE(option_solver.configuration_profile().has_value());
             REQUIRE_FALSE(option_solver.has_persisted_configuration());
             REQUIRE(option_solver.statistics().configuration_updates == 4u);
 
-            option_solver.set_option("strict_mode", 1);
+            option_solver.set_option(option_id::strict_mode, 1L);
             REQUIRE(option_solver.has_persisted_configuration());
             REQUIRE(option_solver.configured_strict_mode().has_value());
             REQUIRE(option_solver.configured_strict_mode().value());
@@ -280,21 +276,21 @@ namespace kmx::sat
             REQUIRE_FALSE(option_solver.configured_decision_limit().has_value());
             REQUIRE_FALSE(option_solver.configured_enabled_pass_mask().has_value());
             REQUIRE_FALSE(option_solver.configured_strict_mode().has_value());
-            REQUIRE(option_solver.configuration_profile_name().empty());
+            REQUIRE_FALSE(option_solver.configuration_profile().has_value());
 
             option_solver.reset_session();
             REQUIRE_FALSE(option_solver.has_persisted_configuration());
 
-            option_solver.set_option("conflict_limit", 3);
+            option_solver.set_option(option_id::conflict_limit, 3L);
             REQUIRE(option_solver.has_persisted_configuration());
             option_solver.reset_session();
             REQUIRE(option_solver.persisted_option_subset());
             REQUIRE(option_solver.has_persisted_configuration());
             // The prior maintenance-interval overrides (2/3/5) were wiped by clear_persisted_configuration() above;
             // only conflict_limit was re-persisted since, so reset_session() correctly reapplies the defaults here.
-            REQUIRE(option_solver.decision_maintenance_intervals()[0] == 16u);
-            REQUIRE(option_solver.decision_maintenance_intervals()[1] == 8u);
-            REQUIRE(option_solver.decision_maintenance_intervals()[2] == 4u);
+            REQUIRE(option_solver.decision_maintenance_intervals()[0u] == 16u);
+            REQUIRE(option_solver.decision_maintenance_intervals()[1u] == 8u);
+            REQUIRE(option_solver.decision_maintenance_intervals()[2u] == 4u);
             REQUIRE_FALSE(option_solver.cold_storage_enabled());
 
             proof::tracer::view option_proof_sink {proof::tracer::drat {}};
@@ -311,16 +307,16 @@ namespace kmx::sat
             solver monotonic_solver;
             const auto baseline = monotonic_solver.statistics();
 
-            monotonic_solver.set_option("conflict_limit", 5);
+            monotonic_solver.set_option(option_id::conflict_limit, 5L);
             const auto after_option = monotonic_solver.statistics();
             REQUIRE(telemetry::solver_statistics::snapshot_monotonic(baseline, after_option));
 
-            monotonic_solver.set_configuration("bounded");
+            monotonic_solver.set_configuration(configuration_profile_id::bounded);
             const auto after_configuration = monotonic_solver.statistics();
             REQUIRE(telemetry::solver_statistics::snapshot_monotonic(after_option, after_configuration));
 
-            std::size_t external_calls = 0u;
-            std::size_t learn_calls = 0u;
+            std::size_t external_calls {};
+            std::size_t learn_calls {};
             monotonic_solver.set_terminate([]() noexcept { return false; });
             monotonic_solver.set_external_propagator([&]() noexcept { ++external_calls; });
             monotonic_solver.set_learn([&](std::span<const literal>) noexcept { ++learn_calls; });
@@ -417,9 +413,9 @@ namespace kmx::sat
             REQUIRE(verbose_line.find("option_updates=") != std::string::npos);
             REQUIRE(verbose_line.find("configuration_updates=") != std::string::npos);
 
-            reporting_solver.set_option("statistics_verbose_reporting", 0);
+            reporting_solver.set_option(option_id::statistics_verbose_reporting, 0L);
             REQUIRE(reporting_solver.statistics_report_detail_of() == solver::statistics_report_detail::compact);
-            reporting_solver.set_option("statistics_verbose_reporting", 1);
+            reporting_solver.set_option(option_id::statistics_verbose_reporting, 1L);
             REQUIRE(reporting_solver.statistics_report_detail_of() == solver::statistics_report_detail::verbose);
 
             reporting_solver.reset_session();
@@ -442,13 +438,17 @@ namespace kmx::sat
             REQUIRE(adapter.ipasir_configuration_profile_name().empty());
             REQUIRE_FALSE(adapter.ipasir_statistics_emission_tail_delta().has_value());
 
-            adapter.ipasir_set_option("conflict_limit", 5);
+            adapter.ipasir_set_option("conflict_limit", 5L);
             REQUIRE(adapter.ipasir_persisted_option_subset());
             REQUIRE(adapter.ipasir_has_persisted_configuration());
-            REQUIRE(adapter.ipasir_configured_conflict_limit() == 5);
+            REQUIRE(adapter.ipasir_configured_conflict_limit() == 5L);
 
-            adapter.ipasir_set_option("decision_limit", 11);
-            REQUIRE(adapter.ipasir_configured_decision_limit() == 11);
+            adapter.ipasir_set_option("decision_limit", 11L);
+            REQUIRE(adapter.ipasir_configured_decision_limit() == 11L);
+
+            // Option names reach the library only here, so this is the only layer where one can fail to resolve.
+            adapter.ipasir_set_option("unknown_option", 9L);
+            REQUIRE(adapter.ipasir_configured_decision_limit() == 11L);
 
             adapter.ipasir_set_configuration("safe");
             REQUIRE(adapter.ipasir_has_persisted_configuration());
@@ -457,8 +457,8 @@ namespace kmx::sat
 
             adapter.ipasir_set_configuration("bounded");
             REQUIRE(adapter.ipasir_configuration_profile_name() == "bounded");
-            REQUIRE(adapter.ipasir_configured_conflict_limit() == 1000);
-            REQUIRE(adapter.ipasir_configured_decision_limit() == 10000);
+            REQUIRE(adapter.ipasir_configured_conflict_limit() == 1000L);
+            REQUIRE(adapter.ipasir_configured_decision_limit() == 10000L);
 
             adapter.ipasir_set_configuration("unknown");
             REQUIRE_FALSE(adapter.ipasir_has_persisted_configuration());
@@ -479,7 +479,7 @@ namespace kmx::sat
             REQUIRE(adapter.ipasir_failed(-2));
             REQUIRE(adapter.ipasir_statistics_emission_tail_delta().has_value());
 
-            adapter.ipasir_set_option("strict_mode", 1);
+            adapter.ipasir_set_option("strict_mode", 1L);
             REQUIRE(adapter.ipasir_has_persisted_configuration());
             REQUIRE(adapter.ipasir_configured_strict_mode() == 1);
             adapter.ipasir_clear_persisted_configuration();
@@ -596,20 +596,20 @@ namespace kmx::sat
     TEST_CASE("solver facade drives deterministic restart and reduction schedules", "[sat]")
     {
         solver configured_solver;
-        configured_solver.set_option("restart_interval", 1);
-        configured_solver.set_option("decision_restart_interval", 1);
-        configured_solver.set_option("reduction_interval", 1);
-        configured_solver.set_option("reduction_fraction_percent", 100);
+        configured_solver.set_option(option_id::restart_interval, 1L);
+        configured_solver.set_option(option_id::decision_restart_interval, 1L);
+        configured_solver.set_option(option_id::reduction_interval, 1L);
+        configured_solver.set_option(option_id::reduction_fraction_percent, 100L);
 
-        const std::array<std::array<literal, 3>, 8> clauses {
-            std::array<literal, 3> {literal {variable {1u}, true}, literal {variable {2u}, true}, literal {variable {3u}, true}},
-            std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, true}, literal {variable {3u}, true}},
-            std::array<literal, 3> {literal {variable {1u}, true}, literal {variable {2u}, false}, literal {variable {3u}, true}},
-            std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, true}},
-            std::array<literal, 3> {literal {variable {1u}, true}, literal {variable {2u}, true}, literal {variable {3u}, false}},
-            std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, true}, literal {variable {3u}, false}},
-            std::array<literal, 3> {literal {variable {1u}, true}, literal {variable {2u}, false}, literal {variable {3u}, false}},
-            std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}},
+        const std::array<std::array<literal, 3u>, 8u> clauses {
+            std::array<literal, 3u> {literal {variable {1u}, true}, literal {variable {2u}, true}, literal {variable {3u}, true}},
+            std::array<literal, 3u> {literal {variable {1u}, false}, literal {variable {2u}, true}, literal {variable {3u}, true}},
+            std::array<literal, 3u> {literal {variable {1u}, true}, literal {variable {2u}, false}, literal {variable {3u}, true}},
+            std::array<literal, 3u> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, true}},
+            std::array<literal, 3u> {literal {variable {1u}, true}, literal {variable {2u}, true}, literal {variable {3u}, false}},
+            std::array<literal, 3u> {literal {variable {1u}, false}, literal {variable {2u}, true}, literal {variable {3u}, false}},
+            std::array<literal, 3u> {literal {variable {1u}, true}, literal {variable {2u}, false}, literal {variable {3u}, false}},
+            std::array<literal, 3u> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}},
         };
         for (const auto& clause: clauses)
             configured_solver.add_clause(std::span<const literal> {clause});

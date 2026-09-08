@@ -38,16 +38,7 @@ namespace kmx::sat::cdcl
         /// @param soft_ceiling_bytes Usage threshold that triggers the soft-breach escalation ladder.
         /// @param hard_ceiling_bytes Usage threshold that triggers the hard-breach escalation ladder.
         /// @throws None (noexcept).
-        void register_budget(const std::size_t soft_ceiling_bytes, const std::size_t hard_ceiling_bytes) noexcept
-        {
-            soft_ceiling_bytes_ = soft_ceiling_bytes;
-            hard_ceiling_bytes_ = hard_ceiling_bytes;
-            current_usage_ = 0u;
-            soft_limit_breached_ = false;
-            hard_limit_breached_ = false;
-            shrink_requests_ = 0u;
-            escalation_steps_ = 0u;
-        }
+        void register_budget(const std::size_t soft_ceiling_bytes, const std::size_t hard_ceiling_bytes) noexcept;
 
         /// @brief Returns the current tracked memory usage across every registered category.
         /// @return Current usage in bytes.
@@ -91,12 +82,7 @@ namespace kmx::sat::cdcl
 
         /// @brief Resets per-epoch usage accounting at the start of a new solve epoch.
         /// @throws None (noexcept).
-        void reset_epoch_usage() noexcept
-        {
-            current_usage_ = 0u;
-            soft_limit_breached_ = false;
-            hard_limit_breached_ = false;
-        }
+        void reset_epoch_usage() noexcept;
 
         /// @brief Returns how many shrink requests were made.
         /// @return Number of shrink requests.
@@ -113,12 +99,12 @@ namespace kmx::sat::cdcl
             hard_limit_breached_ = current_usage_ >= hard_ceiling_bytes_;
         }
 
-        std::size_t current_usage_ = 0u;
+        std::size_t current_usage_ {};
         std::size_t soft_ceiling_bytes_ = std::numeric_limits<std::size_t>::max();
         std::size_t hard_ceiling_bytes_ = std::numeric_limits<std::size_t>::max();
-        bool soft_limit_breached_ = false;
-        bool hard_limit_breached_ = false;
-        std::size_t shrink_requests_ = 0u;
-        std::size_t escalation_steps_ = 0u;
+        bool soft_limit_breached_ {};
+        bool hard_limit_breached_ {};
+        std::size_t shrink_requests_ {};
+        std::size_t escalation_steps_ {};
     };
 }

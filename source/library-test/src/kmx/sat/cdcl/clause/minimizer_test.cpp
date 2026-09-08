@@ -21,12 +21,12 @@ namespace kmx::sat::cdcl
         minimizer.attach_storage(storage);
         minimizer.attach_database(database);
 
-        const variable var_a {1};
-        const variable var_b {2};
+        const variable var_a {1u};
+        const variable var_b {2u};
         const literal a_pos {var_a, false};
         const literal b_pos {var_b, false};
 
-        const std::array<literal, 3> literals {a_pos, b_pos, a_pos};
+        const std::array<literal, 3u> literals {a_pos, b_pos, a_pos};
         const auto ref = database.add_clause(literals, true);
         REQUIRE(ref.valid());
         REQUIRE(database.tier_of(ref) == clause::database::default_tier);
@@ -44,30 +44,30 @@ namespace kmx::sat::cdcl
         REQUIRE(minimizer.promoted_clause_count() == 1u);
         REQUIRE(database.tier_of(ref) == 0u);
 
-        const std::array<literal, 3> lbd_literals {literal {variable {20u}, false}, literal {variable {21u}, false},
+        const std::array<literal, 3u> lbd_literals {literal {variable {20u}, false}, literal {variable {21u}, false},
                                                    literal {variable {22u}, false}};
         const auto lbd_ref = storage.create_learned_clause(lbd_literals);
-        const auto level_of = [](const void*, const variable var) noexcept -> std::uint32_t { return var.index() == 22u ? 2u : 1u; };
+        const auto level_of = [](const void*, const variable var) noexcept -> std::uint32_t { return (var.index() == 22u) ? 2u : 1u; };
 
         minimizer.recompute_glue(lbd_ref, level_of, nullptr);
         REQUIRE(minimizer.last_glue() == 2u);
 
-        const std::array<literal, 3> closure_literals {literal {variable {30u}, false}, literal {variable {31u}, false},
+        const std::array<literal, 3u> closure_literals {literal {variable {30u}, false}, literal {variable {31u}, false},
                                                        literal {variable {32u}, false}};
         const auto closure_ref = storage.create_learned_clause(closure_literals);
-        const std::array<literal, 2> reason_for_31 {literal {variable {31u}, false}, literal {variable {32u}, false}};
+        const std::array<literal, 2u> reason_for_31 {literal {variable {31u}, false}, literal {variable {32u}, false}};
         const auto reason_of = [](const void* context, const variable var) noexcept -> std::span<const literal>
         {
             if (var.index() != 31u)
                 return {};
-            return *static_cast<const std::array<literal, 2>*>(context);
+            return *static_cast<const std::array<literal, 2u>*>(context);
         };
 
         minimizer.minimize_learned_clause(closure_ref, level_of, reason_of, &reason_for_31);
         minimizer.shrink_clause(closure_ref);
         const auto minimized_literals = storage.literals_of(closure_ref);
         REQUIRE(minimized_literals.size() == 2u);
-        REQUIRE(minimized_literals[0].variable_of().index() == 30u);
-        REQUIRE(minimized_literals[1].variable_of().index() == 32u);
+        REQUIRE(minimized_literals[0u].variable_of().index() == 30u);
+        REQUIRE(minimized_literals[1u].variable_of().index() == 32u);
     }
 }

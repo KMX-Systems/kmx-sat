@@ -14,9 +14,9 @@
 
 namespace kmx::sat::simplify
 {
-    using dimacs_clause = std::vector<int>;
+    using dimacs_clause_t = std::vector<int>;
 
-    static bool formula_is_satisfied(const std::vector<dimacs_clause>& formula, const std::vector<bool>& values) noexcept
+    static bool formula_is_satisfied(const std::vector<dimacs_clause_t>& formula, const std::vector<bool>& values) noexcept
     {
         for (const auto& clause: formula)
         {
@@ -24,8 +24,8 @@ namespace kmx::sat::simplify
                                                [&values](const int dimacs_literal) noexcept
                                                {
                                                    const auto index =
-                                                       static_cast<std::size_t>(dimacs_literal < 0 ? -dimacs_literal : dimacs_literal);
-                                                   return index < values.size() && values[index] == (dimacs_literal > 0);
+                                                       static_cast<std::size_t>((dimacs_literal < 0) ? -dimacs_literal : dimacs_literal);
+                                                   return (index < values.size()) && (values[index] == (dimacs_literal > 0));
                                                });
             if (!satisfied)
                 return false;
@@ -33,8 +33,7 @@ namespace kmx::sat::simplify
         return true;
     }
 
-    static bool find_any_model(const std::vector<dimacs_clause>& formula, const int variable_count,
-                               std::vector<bool>& model) noexcept
+    static bool find_any_model(const std::vector<dimacs_clause_t>& formula, const int variable_count, std::vector<bool>& model) noexcept
     {
         for (int mask = 0; mask < (1 << variable_count); ++mask)
         {
@@ -56,26 +55,26 @@ namespace kmx::sat::simplify
         // the search only ever sees the reduced formula, so a reported model must still be repairable into a model
         // of the original, which is what the extension stack and `model_reconstructor` exist for.
         std::mt19937 rng {7u};
-        std::size_t formulas_with_eliminations = 0u;
-        std::size_t variables_eliminated = 0u;
+        std::size_t formulas_with_eliminations {};
+        std::size_t variables_eliminated {};
 
         for (int trial = 0; trial < 400; ++trial)
         {
             static constexpr int variable_count = 8;
             const auto clause_count = 10 + static_cast<int>(rng() % 12u);
 
-            std::vector<dimacs_clause> formula {};
+            std::vector<dimacs_clause_t> formula {};
             for (int index = 0; index < clause_count; ++index)
             {
-                dimacs_clause clause {};
+                dimacs_clause_t clause {};
                 const auto width = 2 + static_cast<int>(rng() % 2u);
                 while (static_cast<int>(clause.size()) < width)
                 {
                     const auto candidate = 1 + static_cast<int>(rng() % variable_count);
                     const auto occurs = std::any_of(clause.begin(), clause.end(), [candidate](const int existing) noexcept
-                                                    { return (existing < 0 ? -existing : existing) == candidate; });
+                                                    { return ((existing < 0) ? -existing : existing) == candidate; });
                     if (!occurs)
-                        clause.push_back((rng() & 1u) != 0u ? candidate : -candidate);
+                        clause.push_back(((rng() & 1u) != 0u) ? candidate : -candidate);
                 }
                 formula.push_back(clause);
             }
@@ -87,9 +86,9 @@ namespace kmx::sat::simplify
                 std::vector<literal> literals {};
                 literals.reserve(clause.size());
                 for (const auto dimacs_literal: clause)
-                    literals.push_back(literal {variable {static_cast<variable::index_t>(dimacs_literal < 0 ? -dimacs_literal
-                                                                                                            : dimacs_literal)},
-                                                dimacs_literal < 0});
+                    literals.push_back(
+                        literal {variable {static_cast<variable::index_t>((dimacs_literal < 0) ? -dimacs_literal : dimacs_literal)},
+                                 dimacs_literal < 0});
                 database.add_clause(std::span<const literal> {literals}, false);
             }
 
@@ -103,14 +102,14 @@ namespace kmx::sat::simplify
             ++formulas_with_eliminations;
             variables_eliminated += eliminator.eliminated_variables().size();
 
-            std::vector<dimacs_clause> reduced {};
+            std::vector<dimacs_clause_t> reduced {};
             const auto& storage = database.storage_of();
             database.iterate_irredundant(
                 [&](const cdcl::clause::ref_t ref) noexcept
                 {
                     if (database.is_garbage(ref))
                         return;
-                    dimacs_clause clause {};
+                    dimacs_clause_t clause {};
                     for (const auto lit: storage.view_literals(ref))
                     {
                         const auto index = static_cast<int>(lit.variable_of().index());
@@ -130,8 +129,8 @@ namespace kmx::sat::simplify
 
             std::vector<literal> initial_model {};
             for (int index = 1; index <= variable_count; ++index)
-                initial_model.push_back(literal {variable {static_cast<variable::index_t>(index)},
-                                                 !reduced_model[static_cast<std::size_t>(index)]});
+                initial_model.push_back(
+                    literal {variable {static_cast<variable::index_t>(index)}, !reduced_model[static_cast<std::size_t>(index)]});
 
             cdcl::model_reconstructor reconstructor {};
             reconstructor.attach_extension_stack(extension_stack);

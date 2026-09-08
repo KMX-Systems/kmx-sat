@@ -27,25 +27,11 @@ namespace kmx::sat::cdcl
 
         /// @brief Opens a new solve epoch, establishing the boundary for transient-state tracking.
         /// @throws None (noexcept).
-        void begin_solve_epoch() noexcept
-        {
-            in_epoch_ = true;
-            current_epoch_retained_learned_clauses_ = 0u;
-            transient_state_reset_ = false;
-        }
+        void begin_solve_epoch() noexcept;
 
         /// @brief Closes the current solve epoch, finalizing which state is retained versus discarded.
         /// @throws None (noexcept).
-        void end_solve_epoch() noexcept
-        {
-            if (in_epoch_)
-            {
-                retained_learned_clauses_ += current_epoch_retained_learned_clauses_;
-                last_epoch_retained_learned_clauses_ = current_epoch_retained_learned_clauses_;
-                current_epoch_retained_learned_clauses_ = 0u;
-            }
-            in_epoch_ = false;
-        }
+        void end_solve_epoch() noexcept;
 
         /// @brief Marks a learned clause from the just-finished episode as eligible to persist into the next epoch.
         /// @throws None (noexcept).

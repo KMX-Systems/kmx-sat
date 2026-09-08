@@ -31,33 +31,34 @@ namespace kmx::sat
             logger.log_literal(lit);
             logger.log_gate();
             logger.log_extension();
-            logger.log_phase_summary("search");
+            logger.log_phase_summary(telemetry::phase_id::search);
 
             REQUIRE(logger.event_count() == 5u);
             REQUIRE(logger.last_event().kind == telemetry::logging_facade::event_kind::phase_summary);
-            REQUIRE(logger.last_event().phase_name == "search");
+            REQUIRE(logger.last_event().phase == telemetry::phase_id::search);
             REQUIRE(logger.last_event().ref_offset == ref.offset());
         }
 
         SECTION("telemetry options and statistics track state")
         {
             telemetry::solver_options options;
-            options.set("max_conflicts", 128);
-            REQUIRE(options.get("max_conflicts") == 128);
-            REQUIRE(options.get("missing_option") == 0);
+            options.set(option_id::conflict_limit, 128L);
+            REQUIRE(options.get(option_id::conflict_limit) == 128L);
+            REQUIRE(options.get(option_id::restart_interval) == 0L);
 
-            const auto profile = options.load_profile("default");
+            const auto profile = options.load_profile(configuration_profile_id::bounded);
             REQUIRE(profile.has_value());
-            REQUIRE(options.get("max_conflicts") >= 1);
+            REQUIRE(options.get(option_id::conflict_limit) >= 1L);
+            REQUIRE(options.get(option_id::decision_limit) >= 1L);
 
             telemetry::solver_statistics stats;
-            stats.inc("conflicts");
-            stats.add("propagations", 4u);
-            stats.inc("terminate_callback_calls");
-            stats.add("learn_callback_calls", 2u);
-            stats.inc("external_propagator_calls");
-            stats.add("option_updates", 3u);
-            stats.inc("configuration_updates");
+            stats.inc(telemetry::counter_id::conflicts);
+            stats.add(telemetry::counter_id::propagations, 4u);
+            stats.inc(telemetry::counter_id::terminate_callback_calls);
+            stats.add(telemetry::counter_id::learn_callback_calls, 2u);
+            stats.inc(telemetry::counter_id::external_propagator_calls);
+            stats.add(telemetry::counter_id::option_updates, 3u);
+            stats.inc(telemetry::counter_id::configuration_updates);
 
             const auto snapshot = stats.snapshot_of();
             REQUIRE(snapshot.conflicts == 1u);
@@ -69,10 +70,10 @@ namespace kmx::sat
             REQUIRE(snapshot.configuration_updates == 1u);
 
             telemetry::solver_statistics child_stats;
-            child_stats.inc("conflicts");
-            child_stats.add("propagations", 2u);
-            child_stats.inc("terminate_callback_calls");
-            child_stats.inc("configuration_updates");
+            child_stats.inc(telemetry::counter_id::conflicts);
+            child_stats.add(telemetry::counter_id::propagations, 2u);
+            child_stats.inc(telemetry::counter_id::terminate_callback_calls);
+            child_stats.inc(telemetry::counter_id::configuration_updates);
 
             stats.merge_phase_statistics(child_stats);
             const auto merged = stats.snapshot_of();
@@ -108,9 +109,9 @@ namespace kmx::sat
         SECTION("profile clock tracks phase timing")
         {
             telemetry::profile_clock clock;
-            clock.start_phase("search");
+            clock.start_phase(telemetry::phase_id::search);
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            clock.stop_phase("search");
+            clock.stop_phase(telemetry::phase_id::search);
 
             REQUIRE(clock.current_wall_time() >= 1u);
             REQUIRE(clock.current_process_time() >= 1u);
@@ -155,17 +156,13 @@ namespace kmx::sat
         SECTION("solver facade stores options and resets session state")
         {
             solver option_solver;
-            option_solver.set_option("max_conflicts", 11);
-            option_solver.set_option("max_decisions", 7);
-            option_solver.set_configuration("default");
+            const auto before_configuration = option_solver.statistics();
+            REQUIRE(before_configuration.option_updates == 0u);
+            REQUIRE(before_configuration.configuration_updates == 0u);
 
-            const auto after_configuration = option_solver.statistics();
-            REQUIRE(after_configuration.option_updates == 0u);
-            REQUIRE(after_configuration.configuration_updates == 0u);
-
-            option_solver.set_option("conflict_limit", 11);
-            option_solver.set_option("decision_limit", 7);
-            option_solver.set_configuration("bounded");
+            option_solver.set_option(option_id::conflict_limit, 11L);
+            option_solver.set_option(option_id::decision_limit, 7L);
+            option_solver.set_configuration(configuration_profile_id::bounded);
 
             const auto initial_stats = option_solver.statistics();
             REQUIRE(initial_stats.conflicts == 0u);

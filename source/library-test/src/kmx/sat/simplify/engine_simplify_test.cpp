@@ -119,10 +119,10 @@ namespace kmx::sat::simplify
         REQUIRE(baseline_equivalence_snapshot.substitution_density_per_node_per_mille == 500u);
         const auto substitutions = decomposition.substitutions();
         REQUIRE(substitutions.size() == 2u);
-        REQUIRE(substitutions[0].first == 2u);
-        REQUIRE(substitutions[0].second == 1u);
-        REQUIRE(substitutions[1].first == 4u);
-        REQUIRE(substitutions[1].second == 3u);
+        REQUIRE(substitutions[0u].first == 2u);
+        REQUIRE(substitutions[0u].second == 1u);
+        REQUIRE(substitutions[1u].first == 4u);
+        REQUIRE(substitutions[1u].second == 3u);
         decomposition.emit_substitutions();
         REQUIRE(decomposition.node_count() == 4u);
         REQUIRE(decomposition.component_count() == 2u);
@@ -178,10 +178,10 @@ namespace kmx::sat::simplify
         decomposition_reordered.find_equivalences();
         const auto reordered_substitutions = decomposition_reordered.substitutions();
         REQUIRE(reordered_substitutions.size() == 2u);
-        REQUIRE(reordered_substitutions[0].first == 2u);
-        REQUIRE(reordered_substitutions[0].second == 1u);
-        REQUIRE(reordered_substitutions[1].first == 4u);
-        REQUIRE(reordered_substitutions[1].second == 3u);
+        REQUIRE(reordered_substitutions[0u].first == 2u);
+        REQUIRE(reordered_substitutions[0u].second == 1u);
+        REQUIRE(reordered_substitutions[1u].first == 4u);
+        REQUIRE(reordered_substitutions[1u].second == 3u);
 
         // Larger mixed SCC graph should keep stable representatives and ordered substitutions.
         engine::decomposition decomposition_mixed;
@@ -223,12 +223,12 @@ namespace kmx::sat::simplify
         REQUIRE(decomposition_mixed.singleton_component_count() == 1u);
         REQUIRE(decomposition_mixed.non_singleton_component_count() == 2u);
         REQUIRE(mixed_substitutions.size() == 3u);
-        REQUIRE(mixed_substitutions[0].first == 8u);
-        REQUIRE(mixed_substitutions[0].second == 7u);
-        REQUIRE(mixed_substitutions[1].first == 11u);
-        REQUIRE(mixed_substitutions[1].second == 10u);
-        REQUIRE(mixed_substitutions[2].first == 12u);
-        REQUIRE(mixed_substitutions[2].second == 10u);
+        REQUIRE(mixed_substitutions[0u].first == 8u);
+        REQUIRE(mixed_substitutions[0u].second == 7u);
+        REQUIRE(mixed_substitutions[1u].first == 11u);
+        REQUIRE(mixed_substitutions[1u].second == 10u);
+        REQUIRE(mixed_substitutions[2u].first == 12u);
+        REQUIRE(mixed_substitutions[2u].second == 10u);
 
         // Reordered edge insertion must preserve the exact emitted substitution order.
         engine::decomposition decomposition_mixed_reordered;
@@ -242,7 +242,7 @@ namespace kmx::sat::simplify
         decomposition_mixed_reordered.find_equivalences();
         const auto mixed_reordered_substitutions = decomposition_mixed_reordered.substitutions();
         REQUIRE(mixed_reordered_substitutions.size() == mixed_substitutions.size());
-        for (std::size_t index = 0; index < mixed_substitutions.size(); ++index)
+        for (std::size_t index = 0u; index < mixed_substitutions.size(); ++index)
         {
             REQUIRE(mixed_reordered_substitutions[index].first == mixed_substitutions[index].first);
             REQUIRE(mixed_reordered_substitutions[index].second == mixed_substitutions[index].second);
@@ -262,14 +262,14 @@ namespace kmx::sat::simplify
         const auto island_substitutions = decomposition_islands.substitutions();
         REQUIRE(decomposition_islands.max_component_size() == 3u);
         REQUIRE(island_substitutions.size() == 4u);
-        REQUIRE(island_substitutions[0].first == 31u);
-        REQUIRE(island_substitutions[0].second == 30u);
-        REQUIRE(island_substitutions[1].first == 41u);
-        REQUIRE(island_substitutions[1].second == 40u);
-        REQUIRE(island_substitutions[2].first == 42u);
-        REQUIRE(island_substitutions[2].second == 40u);
-        REQUIRE(island_substitutions[3].first == 51u);
-        REQUIRE(island_substitutions[3].second == 50u);
+        REQUIRE(island_substitutions[0u].first == 31u);
+        REQUIRE(island_substitutions[0u].second == 30u);
+        REQUIRE(island_substitutions[1u].first == 41u);
+        REQUIRE(island_substitutions[1u].second == 40u);
+        REQUIRE(island_substitutions[2u].first == 42u);
+        REQUIRE(island_substitutions[2u].second == 40u);
+        REQUIRE(island_substitutions[3u].first == 51u);
+        REQUIRE(island_substitutions[3u].second == 50u);
 
         // Duplicate implications should not affect equivalence extraction determinism.
         engine::decomposition decomposition_with_duplicates;
@@ -311,10 +311,10 @@ namespace kmx::sat::simplify
         REQUIRE(decomposition_with_duplicates.average_outgoing_implication_per_node_floor() == 1u);
         REQUIRE(decomposition_with_duplicates.dropped_duplicate_edge_count() == 4u);
         REQUIRE(duplicate_substitutions.size() == 2u);
-        REQUIRE(duplicate_substitutions[0].first == 2u);
-        REQUIRE(duplicate_substitutions[0].second == 1u);
-        REQUIRE(duplicate_substitutions[1].first == 4u);
-        REQUIRE(duplicate_substitutions[1].second == 3u);
+        REQUIRE(duplicate_substitutions[0u].first == 2u);
+        REQUIRE(duplicate_substitutions[0u].second == 1u);
+        REQUIRE(duplicate_substitutions[1u].first == 4u);
+        REQUIRE(duplicate_substitutions[1u].second == 3u);
         decomposition_with_duplicates.emit_substitutions();
         REQUIRE(decomposition_with_duplicates.emit_run_count() == 1u);
         REQUIRE(decomposition_with_duplicates.emit_skip_count() == 0u);
@@ -668,33 +668,33 @@ namespace kmx::sat::simplify
         engine::probing database_probing;
         cdcl::clause::database probing_database;
         proof_manager probing_proof_manager;
-        probing_proof_manager.enable_format("drat");
+        probing_proof_manager.enable_format(proof::format_id::drat);
         const literal unit_lit {variable {8u}, false};
         const literal implied_lit {variable {9u}, false};
-        const auto unit_ref = probing_database.add_clause(std::array<literal, 1> {unit_lit}, false);
-        const auto implied_ref = probing_database.add_clause(std::array<literal, 2> {unit_lit.negated(), implied_lit}, false);
-        probing_proof_manager.on_add_original(unit_ref, std::array<literal, 1> {unit_lit});
-        probing_proof_manager.on_add_original(implied_ref, std::array<literal, 2> {unit_lit.negated(), implied_lit});
+        const auto unit_ref = probing_database.add_clause(std::array<literal, 1u> {unit_lit}, false);
+        const auto implied_ref = probing_database.add_clause(std::array<literal, 2u> {unit_lit.negated(), implied_lit}, false);
+        probing_proof_manager.on_add_original(unit_ref, std::array<literal, 1u> {unit_lit});
+        probing_proof_manager.on_add_original(implied_ref, std::array<literal, 2u> {unit_lit.negated(), implied_lit});
         database_probing.attach_database(probing_database);
         database_probing.attach_proof_manager(probing_proof_manager);
         database_probing.run_failed_literal_probing();
         const auto shrunk_clause = probing_database.storage_of().literals_of(implied_ref);
         REQUIRE(shrunk_clause.size() == 1u);
-        REQUIRE(shrunk_clause[0] == implied_lit);
+        REQUIRE(shrunk_clause[0u] == implied_lit);
         REQUIRE(database_probing.hyper_binary_count() == 1u);
         REQUIRE(database_probing.backbone_candidate_count() == 1u);
         REQUIRE(probing_proof_manager.last_event().kind == proof::event_kind::shrink_clause);
         REQUIRE(probing_proof_manager.last_event().literals.size() == 1u);
-        REQUIRE(probing_proof_manager.last_event().literals[0] == 9);
+        REQUIRE(probing_proof_manager.last_event().literals[0u] == 9);
 
         transitive_reducer reducer;
         cdcl::clause::database transitive_database;
         const auto implication_ab =
-            transitive_database.add_clause(std::array<literal, 2> {literal {variable {1u}, true}, literal {variable {2u}, false}}, false);
+            transitive_database.add_clause(std::array<literal, 2u> {literal {variable {1u}, true}, literal {variable {2u}, false}}, false);
         const auto implication_bc =
-            transitive_database.add_clause(std::array<literal, 2> {literal {variable {2u}, true}, literal {variable {3u}, false}}, false);
+            transitive_database.add_clause(std::array<literal, 2u> {literal {variable {2u}, true}, literal {variable {3u}, false}}, false);
         const auto implication_ac =
-            transitive_database.add_clause(std::array<literal, 2> {literal {variable {1u}, true}, literal {variable {3u}, false}}, false);
+            transitive_database.add_clause(std::array<literal, 2u> {literal {variable {1u}, true}, literal {variable {3u}, false}}, false);
         reducer.attach_database(transitive_database);
         reducer.run();
         reducer.prune_binary_edges();
@@ -717,7 +717,7 @@ namespace kmx::sat::simplify
 
         const literal lit_a_pos {internal_a, false};
         const literal lit_b_neg {internal_b, true};
-        const std::array<literal, 2> congruence_clause {lit_a_pos, lit_b_neg};
+        const std::array<literal, 2u> congruence_clause {lit_a_pos, lit_b_neg};
         const auto congruence_clause_ref = congruence_clause_database.add_clause(congruence_clause, true);
 
         cdcl::watch congruence_watch {lit_a_pos, congruence_clause_ref, true};
@@ -742,8 +742,8 @@ namespace kmx::sat::simplify
 
         const auto rewritten_literals = congruence_clause_database.storage_of().literals_of(congruence_clause_ref);
         REQUIRE(rewritten_literals.size() == 2u);
-        REQUIRE(rewritten_literals[0].variable_of().index() == internal_a.index());
-        REQUIRE(rewritten_literals[1].variable_of().index() == internal_a.index());
+        REQUIRE(rewritten_literals[0u].variable_of().index() == internal_a.index());
+        REQUIRE(rewritten_literals[1u].variable_of().index() == internal_a.index());
 
         REQUIRE(congruence_watch_list.size_of(lit_b_neg) == 0u);
         const literal lit_a_neg {internal_a, true};

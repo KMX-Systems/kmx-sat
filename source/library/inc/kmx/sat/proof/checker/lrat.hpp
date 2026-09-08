@@ -12,6 +12,12 @@
 
 namespace kmx::sat::proof::checker
 {
+    /// @brief Literals of every clause the checker still tracks, keyed by proof clause id.
+    using clause_literal_map_t = std::unordered_map<clause::id::value_t, std::vector<literal>>;
+
+    /// @brief Antecedent clause ids justifying each derived clause.
+    using antecedent_map_t = std::unordered_map<clause::id::value_t, std::vector<clause::id::value_t>>;
+
     /// @brief Stricter LRAT validation.
     /// @details
     /// Where `checker::online` mirrors events for a cheap real-time sanity check, `checker::lrat` performs the
@@ -38,38 +44,18 @@ namespace kmx::sat::proof::checker
         /// @param clause_id Stable proof identity of the clause.
         /// @param literals Literal snapshot to associate with `clause_id`.
         /// @throws None (noexcept).
-        void record_clause(const clause::id clause_id, const std::span<const literal> literals) noexcept
-        {
-            if (!clause_id.valid())
-                return;
-            clauses_[clause_id.value()] = std::vector<literal> {literals.begin(), literals.end()};
-        }
+        void record_clause(const clause::id clause_id, const std::span<const literal> literals) noexcept;
 
         /// @brief Records the ordered LRAT antecedent chain justifying a derived clause.
         /// @param clause_id Stable proof identity of the derived clause.
         /// @param antecedents Ordered antecedent clause ids to replay during chain verification.
         /// @throws None (noexcept).
-        void record_antecedents(const clause::id clause_id, const std::span<const clause::id> antecedents) noexcept
-        {
-            if (!clause_id.valid())
-                return;
-            auto& chain = antecedents_[clause_id.value()];
-            chain.clear();
-            chain.reserve(antecedents.size());
-            for (const auto& antecedent: antecedents)
-                chain.push_back(antecedent.value());
-        }
+        void record_antecedents(const clause::id clause_id, const std::span<const clause::id> antecedents) noexcept;
 
         /// @brief Forgets a clause's recorded literals and antecedent chain once it is permanently deleted.
         /// @param clause_id Stable proof identity of the deleted clause.
         /// @throws None (noexcept).
-        void forget_clause(const clause::id clause_id) noexcept
-        {
-            if (!clause_id.valid())
-                return;
-            clauses_.erase(clause_id.value());
-            antecedents_.erase(clause_id.value());
-        }
+        void forget_clause(const clause::id clause_id) noexcept;
 
         /// @brief Checks whether any antecedent chain has been recorded yet.
         /// @return True if at least one derived clause has a recorded antecedent chain.
@@ -79,97 +65,25 @@ namespace kmx::sat::proof::checker
         /// @brief Verifies that every recorded derived clause's antecedent chain actually resolves to that clause.
         /// @return True if every recorded antecedent chain is valid; false if none are recorded or any fails.
         /// @throws None (noexcept).
-        [[nodiscard]] bool check_chain() const noexcept
-        {
-            if (antecedents_.empty())
-                return false;
-            for (const auto& [clause_key, chain]: antecedents_)
-            {
-                const auto clause_it = clauses_.find(clause_key);
-                if (clause_it == clauses_.end() || !verify_chain(clause_it->second, chain))
-                    return false;
-            }
-            return true;
-        }
+        [[nodiscard]] bool check_chain() const noexcept;
 
         /// @brief Validates one recorded clause's addition and antecedents in isolation.
         /// @param clause_id Stable proof identity of the clause to validate.
         /// @return True if the clause's recorded antecedent chain resolves to it.
         /// @throws None (noexcept).
-        [[nodiscard]] bool validate_clause(const clause::id clause_id) const noexcept
-        {
-            if (!clause_id.valid())
-                return false;
-            const auto clause_it = clauses_.find(clause_id.value());
-            const auto chain_it = antecedents_.find(clause_id.value());
-            if (clause_it == clauses_.end() || chain_it == antecedents_.end())
-                return false;
-            return verify_chain(clause_it->second, chain_it->second);
-        }
+        [[nodiscard]] bool validate_clause(const clause::id clause_id) const noexcept;
 
         /// @brief Confirms the proof concludes with the empty clause, certifying the UNSAT verdict.
         /// @return True if some recorded clause is empty and backed by a valid antecedent chain.
         /// @throws None (noexcept).
-        [[nodiscard]] bool finalize_unsat() const noexcept
-        {
-            for (const auto& [clause_key, literals]: clauses_)
-            {
-                if (!literals.empty())
-                    continue;
-                const auto chain_it = antecedents_.find(clause_key);
-                if (chain_it != antecedents_.end() && verify_chain(literals, chain_it->second))
-                    return true;
-            }
-            return false;
-        }
+        [[nodiscard]] bool finalize_unsat() const noexcept;
 
     private:
         /// @brief Performs reverse unit propagation: assumes `derived` false and replays `chain` looking for a
         /// conflict, exactly as an LRAT replay checker would.
-        [[nodiscard]] bool verify_chain(const std::vector<literal>& derived, const std::vector<clause::id::value_t>& chain) const noexcept
-        {
-            std::unordered_map<variable::index_t, bool> assigned {};
-            for (const auto lit: derived)
-                assigned[lit.variable_of().index()] = lit.is_negated();
+        [[nodiscard]] bool verify_chain(const std::vector<literal>& derived, const std::vector<clause::id::value_t>& chain) const noexcept;
 
-            for (const auto antecedent_key: chain)
-            {
-                const auto it = clauses_.find(antecedent_key);
-                if (it == clauses_.end())
-                    return false;
-
-                bool satisfied {};
-                std::size_t unassigned_count {};
-                literal pending {};
-                for (const auto lit: it->second)
-                {
-                    const auto entry = assigned.find(lit.variable_of().index());
-                    if (entry == assigned.end())
-                    {
-                        ++unassigned_count;
-                        pending = lit;
-                        continue;
-                    }
-                    if (entry->second != lit.is_negated())
-                    {
-                        satisfied = true;
-                        break;
-                    }
-                }
-
-                if (satisfied)
-                    return false;
-                if (unassigned_count == 0)
-                    return true;
-                if (unassigned_count > 1)
-                    return false;
-                assigned[pending.variable_of().index()] = !pending.is_negated();
-            }
-
-            return false;
-        }
-
-        std::unordered_map<clause::id::value_t, std::vector<literal>> clauses_ {};
-        std::unordered_map<clause::id::value_t, std::vector<clause::id::value_t>> antecedents_ {};
+        clause_literal_map_t clauses_ {};
+        antecedent_map_t antecedents_ {};
     };
 }

@@ -29,23 +29,12 @@ namespace kmx::sat::io::writer
 
         /// @brief Opens a non-blocking KMX-AIO output channel.
         /// @throws None (noexcept).
-        void open_sink() noexcept
-        {
-            opened_ = true;
-            closed_ = false;
-            flushed_ = false;
-        }
+        void open_sink() noexcept;
 
         /// @brief Submits a serialized proof buffer to the channel without blocking.
         /// @param buffer Serialized bytes to submit.
         /// @throws None (noexcept).
-        void submit_buffer(const std::span<const std::byte> buffer) noexcept
-        {
-            if (!opened_ || closed_)
-                return;
-            submitted_count_ += 1u;
-            last_buffer_size_ = buffer.size();
-        }
+        void submit_buffer(const std::span<const std::byte> buffer) noexcept;
 
         /// @brief Waits for all previously submitted buffers to be durably written.
         /// @throws None (noexcept).

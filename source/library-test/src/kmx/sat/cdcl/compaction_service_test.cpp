@@ -28,7 +28,7 @@ namespace kmx::sat::cdcl
         mapper.mark_eliminated(second_internal);
 
         clause::database database;
-        const std::array<literal, 2> clause_literals {literal {first_internal, false}, literal {third_internal, true}};
+        const std::array<literal, 2u> clause_literals {literal {first_internal, false}, literal {third_internal, true}};
         const auto clause_ref = database.add_clause(clause_literals, true);
         proof_manager proof_manager;
         proof_manager.on_add_original(clause_ref, clause_literals);
@@ -69,8 +69,8 @@ namespace kmx::sat::cdcl
 
         const auto rewritten_clause_literals = database.storage_of().literals_of(clause_ref);
         REQUIRE(rewritten_clause_literals.size() == 2u);
-        REQUIRE(rewritten_clause_literals[0].variable_of().index() == first_compacted.variable_of().index());
-        REQUIRE(rewritten_clause_literals[1].variable_of().index() == third_compacted.variable_of().index());
+        REQUIRE(rewritten_clause_literals[0u].variable_of().index() == first_compacted.variable_of().index());
+        REQUIRE(rewritten_clause_literals[1u].variable_of().index() == third_compacted.variable_of().index());
         const auto quality = database.quality_of(clause_ref);
         REQUIRE(quality.glue == 2u);
         REQUIRE(quality.used_count == 1u);

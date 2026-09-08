@@ -41,7 +41,7 @@ namespace kmx::sat::simplify::extractor
         {
             gate_kind kind {gate_kind::definition_gate};
             std::uint32_t output {};
-            std::array<std::uint32_t, 2> inputs {0u, 0u};
+            std::array<std::uint32_t, 2u> inputs {0u, 0u};
         };
 
         /// @brief Constructs a gate extractor with no cached candidate structures.
@@ -64,18 +64,7 @@ namespace kmx::sat::simplify::extractor
 
         /// @brief Searches for AND-gate clause patterns around candidate variables.
         /// @throws None (noexcept).
-        void find_and_gate() noexcept
-        {
-            if (clause_database_ != nullptr)
-            {
-                discover_and_gates_from_clause_database();
-                return;
-            }
-
-            if (!synthetic_discovery_enabled_)
-                return;
-            add_gate(gate_kind::and_gate, next_synthetic_output_++, {next_synthetic_input_++, next_synthetic_input_++});
-        }
+        void find_and_gate() noexcept;
 
         /// @brief Records an AND gate candidate discovered by the caller.
         /// @param output Candidate gate output variable id.
@@ -89,12 +78,7 @@ namespace kmx::sat::simplify::extractor
 
         /// @brief Searches for XOR-gate clause patterns around candidate variables.
         /// @throws None (noexcept).
-        void find_xor_gate() noexcept
-        {
-            if (!synthetic_discovery_enabled_)
-                return;
-            add_gate(gate_kind::xor_gate, next_synthetic_output_++, {next_synthetic_input_++, next_synthetic_input_++});
-        }
+        void find_xor_gate() noexcept;
 
         /// @brief Records an XOR gate candidate discovered by the caller.
         /// @param output Candidate gate output variable id.
@@ -108,12 +92,7 @@ namespace kmx::sat::simplify::extractor
 
         /// @brief Searches for if-then-else-gate clause patterns around candidate variables.
         /// @throws None (noexcept).
-        void find_ite_gate() noexcept
-        {
-            if (!synthetic_discovery_enabled_)
-                return;
-            add_gate(gate_kind::ite_gate, next_synthetic_output_++, {next_synthetic_input_++, next_synthetic_input_++});
-        }
+        void find_ite_gate() noexcept;
 
         /// @brief Records an ITE gate candidate discovered by the caller.
         /// @param output Candidate gate output variable id.
@@ -127,12 +106,7 @@ namespace kmx::sat::simplify::extractor
 
         /// @brief Searches for general functional-definition clause patterns not matching a specific gate shape.
         /// @throws None (noexcept).
-        void find_definition_gate() noexcept
-        {
-            if (!synthetic_discovery_enabled_)
-                return;
-            add_gate(gate_kind::definition_gate, next_synthetic_output_++, {next_synthetic_input_++, next_synthetic_input_++});
-        }
+        void find_definition_gate() noexcept;
 
         /// @brief Records a definition-gate candidate discovered by the caller.
         /// @param output Candidate defined variable id.
@@ -160,24 +134,10 @@ namespace kmx::sat::simplify::extractor
 
         const std::vector<gate_record>& gate_records() const noexcept { return gate_records_; }
 
-        void clear() noexcept
-        {
-            gate_records_.clear();
-            summarized_gate_count_ = 0u;
-            summary_materialized_ = false;
-        }
+        void clear() noexcept;
 
     private:
-        static std::array<std::uint32_t, 2> normalize_inputs(const gate_kind kind, const std::array<std::uint32_t, 2> inputs) noexcept
-        {
-            if (kind != gate_kind::and_gate && kind != gate_kind::xor_gate)
-                return inputs;
-
-            if (inputs[0] <= inputs[1])
-                return inputs;
-
-            return {inputs[1], inputs[0]};
-        }
+        static std::array<std::uint32_t, 2u> normalize_inputs(const gate_kind kind, const std::array<std::uint32_t, 2u> inputs) noexcept;
 
         static std::uint64_t implication_key(const std::uint32_t antecedent, const std::uint32_t output) noexcept
         {
@@ -190,101 +150,11 @@ namespace kmx::sat::simplify::extractor
             return binary_implications.contains(implication_key(antecedent, output));
         }
 
-        void collect_clauses(std::vector<std::vector<literal>>& out) const noexcept
-        {
-            if (clause_database_ == nullptr)
-                return;
+        void collect_clauses(clause_list_t& out) const noexcept;
 
-            out.clear();
-            out.reserve(clause_database_->stats_snapshot().irredundant_count + clause_database_->stats_snapshot().redundant_count);
+        void discover_and_gates_from_clause_database() noexcept;
 
-            const auto collect_one = [&](const cdcl::clause::ref_t ref) noexcept
-            {
-                if (!ref.valid() || clause_database_->is_garbage(ref))
-                    return;
-                out.push_back(clause_database_->storage_of().literals_of(ref));
-            };
-
-            clause_database_->iterate_irredundant(collect_one);
-            clause_database_->iterate_redundant(collect_one);
-        }
-
-        void discover_and_gates_from_clause_database() noexcept
-        {
-            std::vector<std::vector<literal>> clauses {};
-            collect_clauses(clauses);
-            if (clauses.empty())
-                return;
-
-            std::vector<std::vector<literal>> ternary_clauses {};
-            std::unordered_set<std::uint64_t> binary_implications {};
-            for (const auto& clause: clauses)
-            {
-                if (clause.size() == 2u)
-                {
-                    const auto& first = clause[0];
-                    const auto& second = clause[1];
-                    if (!first.is_negated() && second.is_negated())
-                        binary_implications.insert(implication_key(first.variable_of().index(), second.variable_of().index()));
-                    else if (first.is_negated() && !second.is_negated())
-                        binary_implications.insert(implication_key(second.variable_of().index(), first.variable_of().index()));
-                }
-                else if (clause.size() == 3u)
-                    ternary_clauses.push_back(clause);
-            }
-
-            for (const auto& clause: ternary_clauses)
-            {
-                std::uint32_t output {};
-                std::array<std::uint32_t, 2> negative_inputs {0u, 0u};
-                std::size_t negative_count {};
-
-                for (const auto lit: clause)
-                {
-                    if (lit.is_negated())
-                    {
-                        if (negative_count < negative_inputs.size())
-                            negative_inputs[negative_count++] = lit.variable_of().index();
-                        continue;
-                    }
-
-                    if (output != 0u)
-                    {
-                        output = 0u;
-                        break;
-                    }
-                    output = lit.variable_of().index();
-                }
-
-                if (output == 0u || negative_count != 2u)
-                    continue;
-
-                const bool has_left = has_binary_implication_clause(binary_implications, negative_inputs[0], output);
-                const bool has_right = has_binary_implication_clause(binary_implications, negative_inputs[1], output);
-                if (!has_left || !has_right)
-                    continue;
-
-                add_gate(gate_kind::and_gate, output, negative_inputs);
-            }
-        }
-
-        void add_gate(const gate_kind kind, const std::uint32_t output, const std::array<std::uint32_t, 2> inputs) noexcept
-        {
-            if (output == 0u || inputs[0] == 0u || inputs[1] == 0u)
-                return;
-
-            const auto normalized_inputs = normalize_inputs(kind, inputs);
-            const auto duplicate = std::find_if(gate_records_.begin(), gate_records_.end(),
-                                                [&](const gate_record& existing) noexcept {
-                                                    return existing.kind == kind && existing.output == output &&
-                                                           normalize_inputs(existing.kind, existing.inputs) == normalized_inputs;
-                                                });
-            if (duplicate != gate_records_.end())
-                return;
-
-            gate_records_.push_back(gate_record {kind, output, normalized_inputs});
-            summary_materialized_ = false;
-        }
+        void add_gate(const gate_kind kind, const std::uint32_t output, const std::array<std::uint32_t, 2u> inputs) noexcept;
 
         cdcl::clause::database* clause_database_ {};
         std::vector<gate_record> gate_records_ {};

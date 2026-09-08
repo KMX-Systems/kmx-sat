@@ -18,7 +18,8 @@ namespace kmx::sat::proof::tracer
     /// `tracer::variant_t` statically asserts every one of its alternatives satisfies this concept, and any future
     /// tracer format added to that variant must satisfy it as well.
     template <typename Tracer>
-    concept like = requires(Tracer& tracer, const cdcl::clause::ref_t ref, const proof::proof_event& event) {
+    concept like = requires(Tracer& tracer, const cdcl::clause::ref_t ref, const proof::proof_event& event)
+    {
         { tracer.add_original(ref) } noexcept -> std::same_as<void>;
         { tracer.add_derived(ref) } noexcept -> std::same_as<void>;
         { tracer.delete_clause(ref) } noexcept -> std::same_as<void>;

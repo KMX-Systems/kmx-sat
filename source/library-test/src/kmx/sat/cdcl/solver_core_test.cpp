@@ -18,16 +18,16 @@ namespace kmx::sat::cdcl
         using namespace kmx::sat::cdcl;
 
         solver_core solver;
-        solver.add_problem_clause({literal {variable {1}, false}});
-        solver.add_problem_clause({literal {variable {1}, true}});
-        REQUIRE(solver.original_clause_count() == 2);
+        solver.add_problem_clause({literal {variable {1u}, false}});
+        solver.add_problem_clause({literal {variable {1u}, true}});
+        REQUIRE(solver.original_clause_count() == 2u);
         REQUIRE(solver.solve({}) == solver_core::status::unsatisfiable);
         // Two contradicting units are refuted by root propagation in the first phase, before any preprocessing.
         REQUIRE(solver.preprocess_run_count() == 0u);
         REQUIRE(solver.current_search_outcome() == search_coordinator::outcome::unsatisfiable);
 
         solver_core satisfiable_solver;
-        std::vector<literal> satisfiable_clause {literal {variable {1}, true}, literal {variable {2}, true}};
+        std::vector<literal> satisfiable_clause {literal {variable {1u}, true}, literal {variable {2u}, true}};
         satisfiable_solver.add_problem_clause(std::span<const literal> {satisfiable_clause});
         REQUIRE(satisfiable_solver.solve({}) == solver_core::status::satisfiable);
         // The first phase on the formula as stated decides this one (the lucky check), so the preprocessing
@@ -79,8 +79,8 @@ namespace kmx::sat::cdcl
         REQUIRE(binary_conflict_solver.binary_watch_conflict_count() > 0u);
 
         solver_core assumption_solver;
-        assumption_solver.add_problem_clause({literal {variable {1}, false}});
-        const std::vector<literal> assumptions {literal {variable {1}, true}};
+        assumption_solver.add_problem_clause({literal {variable {1u}, false}});
+        const std::vector<literal> assumptions {literal {variable {1u}, true}};
         REQUIRE(assumption_solver.solve_under_assumptions(std::span<const literal> {assumptions}) == solver_core::status::unsatisfiable);
         REQUIRE(assumption_solver.preprocess_run_count() == 1u);
         REQUIRE(!assumption_solver.extract_failed_core().empty());
@@ -90,8 +90,8 @@ namespace kmx::sat::cdcl
         REQUIRE(assumption_solver.propagator_call_count() >= 1u);
 
         solver_core assumption_subset_solver;
-        assumption_subset_solver.add_problem_clause({literal {variable {1}, false}});
-        const std::vector<literal> subset_assumptions {literal {variable {1}, true}, literal {variable {9}, false}};
+        assumption_subset_solver.add_problem_clause({literal {variable {1u}, false}});
+        const std::vector<literal> subset_assumptions {literal {variable {1u}, true}, literal {variable {9u}, false}};
         REQUIRE(assumption_subset_solver.solve_under_assumptions(std::span<const literal> {subset_assumptions}) ==
                 solver_core::status::unsatisfiable);
         REQUIRE(assumption_subset_solver.extract_failed_core().size() == 1u);
@@ -99,28 +99,28 @@ namespace kmx::sat::cdcl
         REQUIRE(assumption_subset_solver.propagator_assumption_call_count() == 1u);
 
         solver_core assumption_reason_solver;
-        assumption_reason_solver.add_problem_clause({literal {variable {1}, true}, literal {variable {2}, false}});
-        assumption_reason_solver.add_problem_clause({literal {variable {2}, true}});
-        const std::vector<literal> reason_assumptions {literal {variable {1}, false}, literal {variable {9}, false}};
+        assumption_reason_solver.add_problem_clause({literal {variable {1u}, true}, literal {variable {2u}, false}});
+        assumption_reason_solver.add_problem_clause({literal {variable {2u}, true}});
+        const std::vector<literal> reason_assumptions {literal {variable {1u}, false}, literal {variable {9u}, false}};
         REQUIRE(assumption_reason_solver.solve_under_assumptions(std::span<const literal> {reason_assumptions}) ==
                 solver_core::status::unsatisfiable);
         REQUIRE(assumption_reason_solver.extract_failed_core().size() == 1u);
         REQUIRE(assumption_reason_solver.extract_failed_core().front().raw() == reason_assumptions.front().raw());
 
         solver_core propagation_guided_solver;
-        propagation_guided_solver.add_problem_clause({literal {variable {1}, false}});
-        propagation_guided_solver.add_problem_clause({literal {variable {1}, false}, literal {variable {2}, false}});
+        propagation_guided_solver.add_problem_clause({literal {variable {1u}, false}});
+        propagation_guided_solver.add_problem_clause({literal {variable {1u}, false}, literal {variable {2u}, false}});
         solve_request propagation_guided_request {};
-        propagation_guided_request.decision_limit = 2;
+        propagation_guided_request.decision_limit = 2u;
         REQUIRE(propagation_guided_solver.solve(propagation_guided_request) == solver_core::status::satisfiable);
 
         solver_core learning_solver;
         // v1 has no unit clause, so it must be branched on; whichever polarity is tried first, propagation
         // forces a direct contradiction on v2, exercising real first-UIP resolution at a genuine decision level.
-        learning_solver.add_problem_clause({literal {variable {1}, true}, literal {variable {2}, false}});
-        learning_solver.add_problem_clause({literal {variable {1}, true}, literal {variable {2}, true}});
-        learning_solver.add_problem_clause({literal {variable {1}, false}, literal {variable {2}, false}});
-        learning_solver.add_problem_clause({literal {variable {1}, false}, literal {variable {2}, true}});
+        learning_solver.add_problem_clause({literal {variable {1u}, true}, literal {variable {2u}, false}});
+        learning_solver.add_problem_clause({literal {variable {1u}, true}, literal {variable {2u}, true}});
+        learning_solver.add_problem_clause({literal {variable {1u}, false}, literal {variable {2u}, false}});
+        learning_solver.add_problem_clause({literal {variable {1u}, false}, literal {variable {2u}, true}});
         REQUIRE(learning_solver.solve({}) == solver_core::status::unsatisfiable);
         // Refuted by the first phase's search on the formula as stated, so the pipeline never runs.
         REQUIRE(learning_solver.preprocess_run_count() == 0u);
@@ -153,10 +153,10 @@ namespace kmx::sat::cdcl
         // the direct level-0 contradiction between the two unit clauses on v11; this verifies that an inert
         // tautological original clause coexisting with a real contradiction does not confuse conflict handling.
         tautology_guard_solver.add_problem_clause(
-            {literal {variable {11}, false}, literal {variable {12}, true}, literal {variable {11}, true}});
-        tautology_guard_solver.add_problem_clause({literal {variable {11}, false}});
-        tautology_guard_solver.add_problem_clause({literal {variable {11}, true}});
-        tautology_guard_solver.add_problem_clause({literal {variable {12}, false}});
+            {literal {variable {11u}, false}, literal {variable {12u}, true}, literal {variable {11u}, true}});
+        tautology_guard_solver.add_problem_clause({literal {variable {11u}, false}});
+        tautology_guard_solver.add_problem_clause({literal {variable {11u}, true}});
+        tautology_guard_solver.add_problem_clause({literal {variable {12u}, false}});
         REQUIRE(tautology_guard_solver.solve({}) == solver_core::status::unsatisfiable);
         REQUIRE(tautology_guard_solver.learned_clause_count() == 0u);
         REQUIRE(tautology_guard_solver.minimized_learned_clause_count() == 0u);
@@ -168,12 +168,13 @@ namespace kmx::sat::cdcl
         solver_core subsumed_solver;
         solve_request subsumed_request {};
         subsumed_request.conflict_limit = 1'000'000'000u;
-        subsumed_solver.add_problem_clause({literal {variable {4}, false}, literal {variable {5}, false}});
-        subsumed_solver.add_problem_clause({literal {variable {4}, false}, literal {variable {5}, false}, literal {variable {6}, false}});
-        subsumed_solver.add_problem_clause({literal {variable {1}, false}, literal {variable {2}, false}});
-        subsumed_solver.add_problem_clause({literal {variable {1}, true}, literal {variable {2}, false}});
-        subsumed_solver.add_problem_clause({literal {variable {1}, false}, literal {variable {2}, true}});
-        subsumed_solver.add_problem_clause({literal {variable {1}, true}, literal {variable {2}, true}});
+        subsumed_solver.add_problem_clause({literal {variable {4u}, false}, literal {variable {5u}, false}});
+        subsumed_solver.add_problem_clause(
+            {literal {variable {4u}, false}, literal {variable {5u}, false}, literal {variable {6u}, false}});
+        subsumed_solver.add_problem_clause({literal {variable {1u}, false}, literal {variable {2u}, false}});
+        subsumed_solver.add_problem_clause({literal {variable {1u}, true}, literal {variable {2u}, false}});
+        subsumed_solver.add_problem_clause({literal {variable {1u}, false}, literal {variable {2u}, true}});
+        subsumed_solver.add_problem_clause({literal {variable {1u}, true}, literal {variable {2u}, true}});
         REQUIRE(subsumed_solver.solve(subsumed_request) == solver_core::status::unsatisfiable);
         REQUIRE(subsumed_solver.preprocess_run_count() == 1u);
         REQUIRE(subsumed_solver.subsumed_clause_count() >= 1u);
@@ -192,17 +193,17 @@ namespace kmx::sat::cdcl
         }
 
         solver_core unknown_solver;
-        unknown_solver.add_problem_clause({literal {variable {1}, false}, literal {variable {2}, false}, literal {variable {3}, false}});
+        unknown_solver.add_problem_clause({literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}});
         solve_request limited_request {};
-        limited_request.decision_limit = 1;
+        limited_request.decision_limit = 1u;
         REQUIRE(unknown_solver.solve(limited_request) == solver_core::status::unknown);
         REQUIRE(unknown_solver.current_search_outcome() == search_coordinator::outcome::terminated);
         REQUIRE(unknown_solver.current_search_termination_cause() == search_coordinator::termination_cause::decision_limit);
         REQUIRE(unknown_solver.preprocess_run_count() == 1u);
 
         solver_core unlimited_unsat_solver;
-        unlimited_unsat_solver.add_problem_clause({literal {variable {1}, false}});
-        unlimited_unsat_solver.add_problem_clause({literal {variable {1}, true}});
+        unlimited_unsat_solver.add_problem_clause({literal {variable {1u}, false}});
+        unlimited_unsat_solver.add_problem_clause({literal {variable {1u}, true}});
         solve_request unlimited_request {};
         unlimited_request.conflict_limit = 0u;
         unlimited_request.decision_limit = 0u;
@@ -210,14 +211,14 @@ namespace kmx::sat::cdcl
         REQUIRE(unlimited_unsat_solver.current_search_outcome() == search_coordinator::outcome::unsatisfiable);
 
         solver_core unlimited_sat_solver;
-        std::vector<literal> unlimited_sat_clause {literal {variable {1}, false}, literal {variable {2}, false}};
+        std::vector<literal> unlimited_sat_clause {literal {variable {1u}, false}, literal {variable {2u}, false}};
         unlimited_sat_solver.add_problem_clause(std::span<const literal> {unlimited_sat_clause});
         REQUIRE(unlimited_sat_solver.solve(unlimited_request) == solver_core::status::satisfiable);
         REQUIRE(unlimited_sat_solver.current_search_outcome() == search_coordinator::outcome::satisfiable);
 
         solver_core conflict_limited_solver;
-        conflict_limited_solver.add_problem_clause({literal {variable {1}, false}});
-        conflict_limited_solver.add_problem_clause({literal {variable {1}, true}});
+        conflict_limited_solver.add_problem_clause({literal {variable {1u}, false}});
+        conflict_limited_solver.add_problem_clause({literal {variable {1u}, true}});
         solve_request conflict_limited_request {};
         conflict_limited_request.conflict_limit = 1u;
         REQUIRE(conflict_limited_solver.solve(conflict_limited_request) == solver_core::status::unknown);
@@ -228,10 +229,10 @@ namespace kmx::sat::cdcl
         // Same construction as tautology_guard_solver above: clause 1 is an inert original tautology, and the
         // genuine, immediate conflict comes from the direct level-0 contradiction between the two v11 unit clauses.
         tautology_conflict_limited_solver.add_problem_clause(
-            {literal {variable {11}, false}, literal {variable {12}, true}, literal {variable {11}, true}});
-        tautology_conflict_limited_solver.add_problem_clause({literal {variable {11}, false}});
-        tautology_conflict_limited_solver.add_problem_clause({literal {variable {11}, true}});
-        tautology_conflict_limited_solver.add_problem_clause({literal {variable {12}, false}});
+            {literal {variable {11u}, false}, literal {variable {12u}, true}, literal {variable {11u}, true}});
+        tautology_conflict_limited_solver.add_problem_clause({literal {variable {11u}, false}});
+        tautology_conflict_limited_solver.add_problem_clause({literal {variable {11u}, true}});
+        tautology_conflict_limited_solver.add_problem_clause({literal {variable {12u}, false}});
         solve_request tautology_conflict_limited_request {};
         tautology_conflict_limited_request.conflict_limit = 1u;
         REQUIRE(tautology_conflict_limited_solver.solve(tautology_conflict_limited_request) == solver_core::status::unknown);
@@ -251,15 +252,15 @@ namespace kmx::sat::cdcl
         REQUIRE(option_solver.cold_footprint_bytes() == 0u);
         option_solver.set_decision_maintenance_intervals(1u, 1u, 1u);
         const auto option_intervals = option_solver.decision_maintenance_intervals();
-        REQUIRE(option_intervals[0] == 1u);
-        REQUIRE(option_intervals[1] == 1u);
-        REQUIRE(option_intervals[2] == 1u);
+        REQUIRE(option_intervals[0u] == 1u);
+        REQUIRE(option_intervals[1u] == 1u);
+        REQUIRE(option_intervals[2u] == 1u);
 
         solver_core maintenance_solver;
         maintenance_solver.set_decision_maintenance_intervals(1u, 1u, 1u);
-        maintenance_solver.add_problem_clause({literal {variable {41}, false}, literal {variable {42}, false}});
-        maintenance_solver.add_problem_clause({literal {variable {41}, true}});
-        maintenance_solver.add_problem_clause({literal {variable {42}, true}});
+        maintenance_solver.add_problem_clause({literal {variable {41u}, false}, literal {variable {42u}, false}});
+        maintenance_solver.add_problem_clause({literal {variable {41u}, true}});
+        maintenance_solver.add_problem_clause({literal {variable {42u}, true}});
         REQUIRE(maintenance_solver.solve({}) == solver_core::status::unsatisfiable);
         REQUIRE(maintenance_solver.decision_evsids_rescale_count() >= 1u);
         // CHB is no longer part of the search engine; its decay counter stays at zero.
@@ -268,7 +269,7 @@ namespace kmx::sat::cdcl
         solver_core reset_solver;
         proof::tracer::view reset_drat_sink {proof::tracer::drat {}};
         reset_solver.attach_proof_tracer(reset_drat_sink);
-        reset_solver.add_problem_clause({literal {variable {31}, false}});
+        reset_solver.add_problem_clause({literal {variable {31u}, false}});
         REQUIRE(reset_solver.proof_enabled());
         REQUIRE(reset_solver.proof_buffered_event_count() == 1u);
         REQUIRE(reset_solver.propagator_call_count() == 0u);
@@ -279,7 +280,7 @@ namespace kmx::sat::cdcl
         REQUIRE(reset_solver.propagator_call_count() == 0u);
         REQUIRE(reset_solver.propagator_assumption_call_count() == 0u);
         reset_solver.attach_proof_tracer(reset_drat_sink);
-        reset_solver.add_problem_clause({literal {variable {32}, false}});
+        reset_solver.add_problem_clause({literal {variable {32u}, false}});
         REQUIRE(reset_solver.proof_enabled());
         REQUIRE(reset_solver.proof_buffered_event_count() == 1u);
         REQUIRE(reset_solver.last_proof_event().kind == proof::event_kind::add_original);
@@ -287,7 +288,7 @@ namespace kmx::sat::cdcl
         solver_core proof_gated_solver;
         proof::tracer::view drat_sink {proof::tracer::drat {}};
         proof_gated_solver.attach_proof_tracer(drat_sink);
-        proof_gated_solver.add_problem_clause({literal {variable {9}, false}});
+        proof_gated_solver.add_problem_clause({literal {variable {9u}, false}});
         REQUIRE(proof_gated_solver.proof_buffered_event_count() == 1u);
         REQUIRE(proof_gated_solver.last_proof_event().kind == proof::event_kind::add_original);
         // Gate extraction and congruence closure left the default pipeline; the proof gating they exercise is
@@ -295,8 +296,9 @@ namespace kmx::sat::cdcl
         solve_request gated_request {};
         for (const auto id: simplify::scheduler::preprocess::baseline_passes)
             gated_request.enabled_pass_mask |= std::uint64_t {1u} << static_cast<std::size_t>(id);
-        gated_request.enabled_pass_mask |= std::uint64_t {1u} << static_cast<std::size_t>(simplify::scheduler::preprocess::pass_id::gate);
-        gated_request.enabled_pass_mask |= std::uint64_t {1u} << static_cast<std::size_t>(simplify::scheduler::preprocess::pass_id::congruence);
+        gated_request.enabled_pass_mask |= std::uint64_t {1u} << static_cast<std::size_t>(simplify::scheduler::preprocess::pass_id_t::gate);
+        gated_request.enabled_pass_mask |= std::uint64_t {1u}
+                                           << static_cast<std::size_t>(simplify::scheduler::preprocess::pass_id_t::congruence);
         REQUIRE(proof_gated_solver.solve(gated_request) == solver_core::status::satisfiable);
         REQUIRE(proof_gated_solver.proof_enabled());
         REQUIRE(proof_gated_solver.proof_checkers_valid());
@@ -304,14 +306,14 @@ namespace kmx::sat::cdcl
         const auto& preprocess_summaries = proof_gated_solver.preprocess_last_reported_summaries();
         const auto gate_summary = std::find_if(preprocess_summaries.begin(), preprocess_summaries.end(),
                                                [](const simplify::scheduler::preprocess::pass_summary& summary) noexcept
-                                               { return summary.id == simplify::scheduler::preprocess::pass_id::gate; });
+                                               { return summary.id == simplify::scheduler::preprocess::pass_id_t::gate; });
         REQUIRE(gate_summary != preprocess_summaries.end());
         REQUIRE_FALSE(gate_summary->executed);
         REQUIRE(gate_summary->skipped_by_proof_format);
 
         const auto congruence_summary = std::find_if(preprocess_summaries.begin(), preprocess_summaries.end(),
                                                      [](const simplify::scheduler::preprocess::pass_summary& summary) noexcept
-                                                     { return summary.id == simplify::scheduler::preprocess::pass_id::congruence; });
+                                                     { return summary.id == simplify::scheduler::preprocess::pass_id_t::congruence; });
         REQUIRE(congruence_summary != preprocess_summaries.end());
         REQUIRE_FALSE(congruence_summary->executed);
         REQUIRE(congruence_summary->skipped_by_proof_format);
@@ -325,14 +327,14 @@ namespace kmx::sat::cdcl
         // any full-search branch-order sensitivity, by the dedicated analyze_via_resolution tests in
         // cdcl_component_state_test.cpp; here we only assert the always-true, end-to-end proof-integration
         // properties that hold regardless of which explored branch produces the search's terminal conflict.
-        proof_learning_solver.add_problem_clause({literal {variable {1}, true}, literal {variable {2}, false}});  // A1 = (~v1 v v2)
-        proof_learning_solver.add_problem_clause({literal {variable {1}, false}, literal {variable {2}, false}}); // A2 = (v1 v v2)
-        proof_learning_solver.add_problem_clause({literal {variable {1}, true}, literal {variable {5}, false}});  // E1 = (~v1 v v5)
-        proof_learning_solver.add_problem_clause({literal {variable {1}, false}, literal {variable {5}, false}}); // E2 = (v1 v v5)
-        proof_learning_solver.add_problem_clause({literal {variable {3}, true}, literal {variable {4}, false}});  // B1 = (~v3 v v4)
-        proof_learning_solver.add_problem_clause({literal {variable {3}, false}, literal {variable {4}, false}}); // B2 = (v3 v v4)
+        proof_learning_solver.add_problem_clause({literal {variable {1u}, true}, literal {variable {2u}, false}});  // A1 = (~v1 v v2)
+        proof_learning_solver.add_problem_clause({literal {variable {1u}, false}, literal {variable {2u}, false}}); // A2 = (v1 v v2)
+        proof_learning_solver.add_problem_clause({literal {variable {1u}, true}, literal {variable {5u}, false}});  // E1 = (~v1 v v5)
+        proof_learning_solver.add_problem_clause({literal {variable {1u}, false}, literal {variable {5u}, false}}); // E2 = (v1 v v5)
+        proof_learning_solver.add_problem_clause({literal {variable {3u}, true}, literal {variable {4u}, false}});  // B1 = (~v3 v v4)
+        proof_learning_solver.add_problem_clause({literal {variable {3u}, false}, literal {variable {4u}, false}}); // B2 = (v3 v v4)
         proof_learning_solver.add_problem_clause(
-            {literal {variable {2}, true}, literal {variable {4}, true}, literal {variable {5}, true}}); // D = (~v2 v ~v4 v ~v5)
+            {literal {variable {2u}, true}, literal {variable {4u}, true}, literal {variable {5u}, true}}); // D = (~v2 v ~v4 v ~v5)
         REQUIRE(proof_learning_solver.solve({}) == solver_core::status::unsatisfiable);
         REQUIRE(proof_learning_solver.proof_buffered_event_count() >= 8u);
         REQUIRE(proof_learning_solver.last_proof_event().kind == proof::event_kind::add_derived);
@@ -351,7 +353,7 @@ namespace kmx::sat::cdcl
         std::vector<proof::clause::id> earlier_clause_ids {};
         for (const auto& event: buffered_events)
         {
-            if (event.kind == proof::event_kind::add_original || event.kind == proof::event_kind::add_derived)
+            if ((event.kind == proof::event_kind::add_original) || (event.kind == proof::event_kind::add_derived))
                 earlier_clause_ids.push_back(event.clause_id);
 
             if (event.clause_id.equals(proof_learning_solver.last_proof_event().clause_id))
@@ -365,7 +367,7 @@ namespace kmx::sat::cdcl
 
         for (const auto antecedent_id: antecedent_ids)
         {
-            bool found = false;
+            bool found {};
             for (const auto clause_id: earlier_clause_ids)
             {
                 if (clause_id.equals(antecedent_id))

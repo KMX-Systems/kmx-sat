@@ -27,8 +27,8 @@ namespace kmx::sat::io::fixture
         {
             fixture::binary::writer writer;
             writer.begin_fixture(schema::payload_kind::cnf_fixture);
-            const std::array<literal, 2> clause_1 {literal {variable {1}, false}, literal {variable {2}, true}};
-            const std::array<literal, 1> clause_2 {literal {variable {3}, false}};
+            const std::array<literal, 2u> clause_1 {literal {variable {1u}, false}, literal {variable {2u}, true}};
+            const std::array<literal, 1u> clause_2 {literal {variable {3u}, false}};
             writer.append_clause(clause_1);
             writer.append_clause(clause_2);
             writer.write_checksum();
@@ -49,9 +49,9 @@ namespace kmx::sat::io::fixture
             REQUIRE(reader.validate_header());
             REQUIRE(reader.load_payload());
             REQUIRE(reader.validate_payload());
-            REQUIRE(reader.clauses().size() == 2);
-            REQUIRE(reader.clauses()[0].size() == 2);
-            REQUIRE(reader.clauses()[1].size() == 1);
+            REQUIRE(reader.clauses().size() == 2u);
+            REQUIRE(reader.clauses()[0u].size() == 2u);
+            REQUIRE(reader.clauses()[1u].size() == 1u);
             source.close();
             std::filesystem::remove(cnf_path);
         }
@@ -60,7 +60,7 @@ namespace kmx::sat::io::fixture
             fixture::binary::writer writer;
             writer.begin_fixture(schema::payload_kind::solve_request_fixture);
             solve_request request {};
-            request.assumptions = {literal {variable {4}, false}, literal {variable {5}, true}};
+            request.assumptions = {literal {variable {4u}, false}, literal {variable {5u}, true}};
             request.conflict_limit = 11u;
             request.decision_limit = 22u;
             request.enabled_pass_mask = 7u;
@@ -84,7 +84,7 @@ namespace kmx::sat::io::fixture
             REQUIRE(reader.validate_header());
             REQUIRE(reader.load_payload());
             REQUIRE(reader.validate_payload());
-            REQUIRE(reader.assumptions().size() == 2);
+            REQUIRE(reader.assumptions().size() == 2u);
             REQUIRE(reader.request_payload().conflict_limit == 11u);
             REQUIRE(reader.request_payload().decision_limit == 22u);
             REQUIRE(reader.request_payload().enabled_pass_mask == 7u);
@@ -103,8 +103,8 @@ namespace kmx::sat::io::fixture
         {
             fixture::binary::writer writer;
             writer.begin_fixture(schema::payload_kind::cnf_fixture);
-            const std::array<literal, 2> clause_1 {literal {variable {7}, false}, literal {variable {8}, true}};
-            const std::array<literal, 1> clause_2 {literal {variable {9}, false}};
+            const std::array<literal, 2u> clause_1 {literal {variable {7u}, false}, literal {variable {8u}, true}};
+            const std::array<literal, 1u> clause_2 {literal {variable {9u}, false}};
             writer.append_clause(clause_1);
             writer.append_clause(clause_2);
             writer.write_checksum();
@@ -130,11 +130,11 @@ namespace kmx::sat::io::fixture
             cdcl::external_frontend frontend {mapper};
             reader.materialize_fixture_into_frontend(frontend);
             REQUIRE(frontend.clauses().size() == 2u);
-            REQUIRE(frontend.clauses()[0].size() == 2u);
-            REQUIRE(frontend.clauses()[1].size() == 1u);
-            REQUIRE(frontend.clauses()[0][0] == mapper.to_internal_literal(clause_1[0]));
-            REQUIRE(frontend.clauses()[0][1] == mapper.to_internal_literal(clause_1[1]));
-            REQUIRE(frontend.clauses()[1][0] == mapper.to_internal_literal(clause_2[0]));
+            REQUIRE(frontend.clauses()[0u].size() == 2u);
+            REQUIRE(frontend.clauses()[1u].size() == 1u);
+            REQUIRE(frontend.clauses()[0u][0u] == mapper.to_internal_literal(clause_1[0u]));
+            REQUIRE(frontend.clauses()[0u][1u] == mapper.to_internal_literal(clause_1[1u]));
+            REQUIRE(frontend.clauses()[1u][0u] == mapper.to_internal_literal(clause_2[0u]));
             REQUIRE(frontend.assumptions().empty());
             source.close();
             std::filesystem::remove(cnf_path);
@@ -264,7 +264,7 @@ namespace kmx::sat::io::fixture
         const auto temp_path = std::filesystem::temp_directory_path() / "kmx_fixture_equivalence.satb";
         fixture::binary::writer writer;
         writer.begin_fixture(schema::payload_kind::cnf_fixture);
-        const std::array<literal, 1> unit {literal {variable {1u}, false}};
+        const std::array<literal, 1u> unit {literal {variable {1u}, false}};
         writer.append_clause(unit);
         writer.write_checksum();
         writer.finalize_fixture();
@@ -327,7 +327,7 @@ namespace kmx::sat::io::fixture
         REQUIRE_FALSE(reader.load_payload());
 
         cdcl::external_frontend frontend;
-        const std::array<literal, 1> sentinel {literal {variable {9u}, false}};
+        const std::array<literal, 1u> sentinel {literal {variable {9u}, false}};
         frontend.push_clause(sentinel);
         reader.materialize_fixture_into_frontend(frontend);
         REQUIRE(frontend.clauses().size() == 1u);

@@ -4,8 +4,8 @@
 #pragma once
 #ifndef PCH
     #include <cstddef>
-    #include <span>
     #include <cstdint>
+    #include <span>
     #include <vector>
 #endif
 #include <kmx/sat/variable.hpp>
@@ -31,25 +31,17 @@ namespace kmx::sat::cdcl::store
 
         /// @brief Replaces the saved polarities with a full assignment, indexed by variable (index zero unused).
         /// @param assignment Per-variable polarity, as produced by a local-search probe.
-        void seed_saved_phases(const std::span<const std::uint8_t> assignment) noexcept
-        {
-            if (assignment.size() <= 1u)
-                return;
-            if (saved_phases_.size() < assignment.size())
-                saved_phases_.resize(assignment.size(), 0u);
-            for (std::size_t index = 1; index < assignment.size(); ++index)
-                saved_phases_[index] = assignment[index] != 0u ? 1u : 0u;
-        }
+        void seed_saved_phases(const std::span<const std::uint8_t> assignment) noexcept;
 
         void flip_all() noexcept
         {
-            for (std::size_t i = 0; i < saved_phases_.size(); ++i)
-                saved_phases_[i] = saved_phases_[i] == 0u ? 1u : 0u;
+            for (std::size_t i = 0u; i < saved_phases_.size(); ++i)
+                saved_phases_[i] = (saved_phases_[i] == 0u) ? 1u : 0u;
         }
 
         void randomize_subset() noexcept
         {
-            for (std::size_t i = 0; i < saved_phases_.size(); ++i)
+            for (std::size_t i = 0u; i < saved_phases_.size(); ++i)
                 saved_phases_[i] = (saved_phases_[i] + 1u) & 1u;
         }
 
@@ -64,21 +56,9 @@ namespace kmx::sat::cdcl::store
     private:
         static std::size_t index_of(const variable var) noexcept { return static_cast<std::size_t>(var.index()); }
 
-        static bool value_at(const variable var, const std::vector<std::uint8_t>& storage) noexcept
-        {
-            const auto index = index_of(var);
-            if (index >= storage.size())
-                return false;
-            return storage[index] != 0u;
-        }
+        static bool value_at(const variable var, const std::vector<std::uint8_t>& storage) noexcept;
 
-        static void set_value(const variable var, const bool value, std::vector<std::uint8_t>& storage) noexcept
-        {
-            const auto index = index_of(var);
-            if (index >= storage.size())
-                storage.resize(index + 1, 0u);
-            storage[index] = value ? 1u : 0u;
-        }
+        static void set_value(const variable var, const bool value, std::vector<std::uint8_t>& storage) noexcept;
 
         std::vector<std::uint8_t> saved_phases_ {};
         std::vector<std::uint8_t> best_phases_ {};

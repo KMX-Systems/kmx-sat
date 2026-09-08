@@ -3,56 +3,15 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
-    #include <array>
     #include <cstddef>
     #include <cstdint>
     #include <optional>
-    #include <string_view>
 #endif
 #include <kmx/sat/cdcl/clause/database.hpp>
+#include <kmx/sat/simplify/pass_id.hpp>
 
 namespace kmx::sat::simplify
 {
-    enum class pass_id : std::uint8_t
-    {
-        transitive_reducer,
-        decomposition,
-        probing,
-        forward_subsumer,
-        blocked,
-        covered,
-        bounded,
-        fast,
-        instantiation,
-        factorizer,
-        gate,
-        congruence,
-        vivifier,
-        sweep,
-    };
-
-    inline constexpr std::array<std::string_view, 14> pass_names {
-        "transitive_reducer", "decomposition", "probing", "forward_subsumer", "blocked",  "covered", "bounded", "fast",
-        "instantiation",      "factorizer",    "gate",    "congruence",       "vivifier", "sweep"};
-
-    inline constexpr std::optional<pass_id> parse_pass(const std::string_view name) noexcept
-    {
-        std::uint32_t hash {2166136261u};
-        for (const auto character: name)
-        {
-            hash ^= static_cast<std::uint8_t>(character);
-            hash *= 16777619u;
-        }
-
-        constexpr std::array<std::uint32_t, 14> pass_hashes {0xb70710c1u, 0xda4c4018u, 0xd6a79702u, 0x5ef40fb1u, 0x5a5d6eb3u,
-                                                             0xf6358681u, 0xff54b66au, 0x029402afu, 0x9a6bf24au, 0x587fb7f6u,
-                                                             0x1660eb12u, 0x60fe7efau, 0x1171d8a3u, 0x518432e3u};
-        for (std::size_t index {}; index < pass_hashes.size(); ++index)
-            if (pass_hashes[index] == hash && pass_names[index] == name)
-                return static_cast<pass_id>(index);
-        return {};
-    }
-
     /// @brief Instance-aware selection and ordering of preprocessing passes from cheap structural fingerprints, avoiding
     /// fixed-pipeline time wasted on passes unlikely to help. Research-track scheduler policy layered on top of
     /// scheduler::preprocess, not a replacement for it.
@@ -106,117 +65,21 @@ namespace kmx::sat::simplify
 
         /// @brief Computes cheap structural fingerprints of the current formula.
         /// @throws None (noexcept).
-        void fingerprint_formula() noexcept
-        {
-            ++fingerprint_count_;
-
-            current_fingerprint_ = {};
-            if (clause_database_ == nullptr)
-                return;
-
-            const auto collect_clause = [&](const cdcl::clause::ref_t ref) noexcept
-            {
-                if (clause_database_->is_garbage(ref))
-                    return;
-
-                const auto literals = clause_database_->storage_of().view_literals(ref);
-                current_fingerprint_.clause_count += 1u;
-                current_fingerprint_.total_literal_count += literals.size();
-                if (literals.size() == 2u)
-                    current_fingerprint_.binary_clause_count += 1u;
-                if (literals.size() >= 5u)
-                    current_fingerprint_.long_clause_count += 1u;
-            };
-
-            clause_database_->iterate_irredundant(collect_clause);
-            clause_database_->iterate_redundant(collect_clause);
-
-            if (current_fingerprint_.clause_count == 0u)
-                return;
-
-            current_fingerprint_.average_clause_length =
-                static_cast<double>(current_fingerprint_.total_literal_count) / static_cast<double>(current_fingerprint_.clause_count);
-            current_fingerprint_.binary_clause_ratio =
-                static_cast<double>(current_fingerprint_.binary_clause_count) / static_cast<double>(current_fingerprint_.clause_count);
-            current_fingerprint_.long_clause_ratio =
-                static_cast<double>(current_fingerprint_.long_clause_count) / static_cast<double>(current_fingerprint_.clause_count);
-        }
+        void fingerprint_formula() noexcept;
 
         /// @brief Selects and orders which preprocessing passes should run for this formula's fingerprint.
         /// @throws None (noexcept).
-        void select_pass_plan() noexcept
-        {
-            ++pass_plan_count_;
-            current_plan_.skip_pass_mask = 0u;
-            current_plan_.skip_memory_heavy_from_inprocess_pressure = false;
-            current_plan_.skip_memory_heavy_from_learned_clause_pressure = false;
-            current_plan_.skip_memory_heavy_passes = soft_memory_pressure_;
-            if (has_inprocess_telemetry_ && should_skip_memory_heavy_from_inprocess_pressure())
-            {
-                current_plan_.skip_memory_heavy_from_inprocess_pressure = true;
-                current_plan_.skip_memory_heavy_from_learned_clause_pressure =
-                    is_elevated_learned_clause_pressure() && inprocess_structural_gain_ema_ <= low_structural_gain_threshold;
-                current_plan_.skip_memory_heavy_passes = true;
-            }
-            current_plan_.skip_probing_for_long_clause_heavy = current_fingerprint_.clause_count >= 16u &&
-                                                               current_fingerprint_.long_clause_ratio >= probing_long_clause_threshold_ &&
-                                                               current_fingerprint_.binary_clause_ratio <= 0.10;
-            if (current_plan_.skip_memory_heavy_passes)
-                current_plan_.skip_pass_mask |= pass_bit(pass_id::congruence) | pass_bit(pass_id::vivifier);
-            if (current_plan_.skip_probing_for_long_clause_heavy)
-                current_plan_.skip_pass_mask |= pass_bit(pass_id::probing);
-        }
+        void select_pass_plan() noexcept;
 
         /// @brief Records the actual yield of a pass to refine future selection decisions.
         /// @throws None (noexcept).
         void record_pass_effectiveness() noexcept { ++effectiveness_count_; }
 
-        /// @brief Records observed effectiveness for one named pass.
-        /// @param pass_name Identifier of the pass whose effect was measured.
+        /// @brief Records observed effectiveness for one pass.
+        /// @param id Pass whose effect was measured.
         /// @param was_effective `true` if pass produced direct benefit, `false` if not, `nullopt` if unavailable.
         /// @throws None (noexcept).
-        void record_pass_effectiveness(const pass_id id, const std::optional<bool> was_effective) noexcept
-        {
-            ++effectiveness_count_;
-            if (was_effective.has_value())
-                switch (id)
-                {
-                    case pass_id::factorizer:
-                        ++factorizer_effectiveness_.observed_runs;
-                        if (*was_effective)
-                            ++factorizer_effectiveness_.effective_runs;
-                        break;
-                    case pass_id::probing:
-                        ++probing_effectiveness_.observed_runs;
-                        if (*was_effective)
-                            ++probing_effectiveness_.effective_runs;
-                        break;
-                    default:
-                        break;
-                }
-        }
-
-        /// @brief Compatibility adapter for callers that configure passes by their external names.
-        void record_pass_effectiveness(const std::string_view name, const std::optional<bool> was_effective) noexcept
-        {
-            const auto id = parse_pass(name);
-            if (!id.has_value())
-            {
-                record_pass_effectiveness();
-                return;
-            }
-
-            switch (id.value())
-            {
-                case pass_id::factorizer:
-                case pass_id::probing:
-                    record_pass_effectiveness(id.value(), was_effective);
-                    return;
-                default:
-                    record_pass_effectiveness();
-                    return;
-            }
-        }
+        void record_pass_effectiveness(const pass_id id, const std::optional<bool> was_effective) noexcept;
 
         /// @brief Records whether formula memory usage is above the soft ceiling for this planning cycle.
         /// @param has_soft_pressure True when the attached memory governor is above soft budget.
@@ -230,18 +93,10 @@ namespace kmx::sat::simplify
         /// @param reduction_pressure_ema Inprocess reduction-pressure EMA.
         /// @param learned_clause_pressure_ema Inprocess learned-clause-pressure EMA.
         void set_inprocess_telemetry(const double conflict_density_ema, const double structural_gain_ema, const double restart_pressure_ema,
-                                     const double reduction_pressure_ema, const double learned_clause_pressure_ema) noexcept
-        {
-            inprocess_conflict_density_ema_ = conflict_density_ema;
-            inprocess_structural_gain_ema_ = structural_gain_ema;
-            inprocess_restart_pressure_ema_ = restart_pressure_ema;
-            inprocess_reduction_pressure_ema_ = reduction_pressure_ema;
-            inprocess_learned_clause_pressure_ema_ = learned_clause_pressure_ema;
-            has_inprocess_telemetry_ = true;
-        }
+                                     const double reduction_pressure_ema, const double learned_clause_pressure_ema) noexcept;
 
         /// @brief Checks whether a pass should execute under the current plan.
-        /// @param pass_name Identifier of the candidate pass.
+        /// @param id Candidate pass.
         /// @return True when the pass is allowed in the active plan.
         /// @throws None (noexcept).
         bool should_run_pass(const pass_id id) const noexcept { return (current_plan_.skip_pass_mask & pass_bit(id)) == 0u; }
@@ -252,19 +107,7 @@ namespace kmx::sat::simplify
 
         /// @brief Updates the underlying selection policy from accumulated pass-effectiveness history.
         /// @throws None (noexcept).
-        void update_selection_policy() noexcept
-        {
-            ++policy_update_count_;
-
-            probing_long_clause_threshold_ = default_probing_long_clause_threshold;
-            if (probing_effectiveness_.observed_runs >= minimum_effectiveness_sample_size)
-            {
-                const auto probing_hit_rate =
-                    static_cast<double>(probing_effectiveness_.effective_runs) / static_cast<double>(probing_effectiveness_.observed_runs);
-                if (probing_hit_rate <= low_effectiveness_hit_rate_threshold)
-                    probing_long_clause_threshold_ = 0.65;
-            }
-        }
+        void update_selection_policy() noexcept;
 
         std::size_t fingerprint_count() const noexcept { return fingerprint_count_; }
 
@@ -295,15 +138,7 @@ namespace kmx::sat::simplify
             return inprocess_learned_clause_pressure_ema_ >= elevated_learned_clause_pressure_threshold;
         }
 
-        bool should_skip_memory_heavy_from_inprocess_pressure() const noexcept
-        {
-            const bool elevated_search_pressure = inprocess_conflict_density_ema_ >= elevated_conflict_density_threshold ||
-                                                  inprocess_restart_pressure_ema_ >= elevated_restart_pressure_threshold ||
-                                                  inprocess_reduction_pressure_ema_ >= elevated_reduction_pressure_threshold ||
-                                                  is_elevated_learned_clause_pressure();
-            const bool low_structural_yield = inprocess_structural_gain_ema_ <= low_structural_gain_threshold;
-            return elevated_search_pressure && low_structural_yield;
-        }
+        bool should_skip_memory_heavy_from_inprocess_pressure() const noexcept;
 
         cdcl::clause::database* clause_database_ {};
         formula_fingerprint current_fingerprint_ {};

@@ -8,7 +8,8 @@ StaticLibrary {
         name: "proof"
         prefix: "inc/kmx/sat/proof/"
         files: [
-            "event_stream.hpp"
+            "event_stream.hpp",
+            "format.hpp"
         ]
     }
     Group {
@@ -40,6 +41,41 @@ StaticLibrary {
             "variant_t.hpp",
             "veripb.hpp",
             "view.hpp",
+        ]
+    }
+    Group {
+        name: "src-proof"
+        prefix: "src/kmx/sat/proof/"
+        files: [
+            "event_stream.cpp",
+        ]
+    }
+    Group {
+        name: "src-proof-checker"
+        prefix: "src/kmx/sat/proof/checker/"
+        files: [
+            "lrat.cpp",
+            "online.cpp",
+        ]
+    }
+    Group {
+        name: "src-proof-clause"
+        prefix: "src/kmx/sat/proof/clause/"
+        files: [
+            "id_allocator.cpp",
+        ]
+    }
+    Group {
+        name: "src-proof-tracer"
+        prefix: "src/kmx/sat/proof/tracer/"
+        files: [
+            "drat.cpp",
+            "frat.cpp",
+            "idrup.cpp",
+            "lidrup.cpp",
+            "lrat.cpp",
+            "veripb.cpp",
+            "view.cpp",
         ]
     }
     cpp.cxxLanguageVersion: "c++26"

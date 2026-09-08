@@ -20,7 +20,7 @@ namespace kmx::sat::io::fixture
     class schema final
     {
     public:
-        static constexpr std::uint16_t current_version_value {1};
+        static constexpr std::uint16_t current_version_value {1u};
         static constexpr std::uint64_t supported_feature_mask {};
 
         /// @brief Enumerates the recognized binary fixture payload kinds.

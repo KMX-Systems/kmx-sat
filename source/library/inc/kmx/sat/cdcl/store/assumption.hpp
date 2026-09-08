@@ -23,12 +23,7 @@ namespace kmx::sat::cdcl::store
 
         void push(const literal lit) noexcept { literals_.push_back(lit); }
 
-        void clear() noexcept
-        {
-            literals_.clear();
-            failed_assumptions_.clear();
-            trail_level_base_ = 0;
-        }
+        void clear() noexcept;
 
         std::span<const literal> iterate() const noexcept { return literals_; }
 

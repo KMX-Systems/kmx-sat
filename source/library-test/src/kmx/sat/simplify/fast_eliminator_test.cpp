@@ -11,7 +11,7 @@ namespace kmx::sat::simplify::eliminator::variable
     TEST_CASE("fast eliminator tracks cheap scores and rounds", "[sat]")
     {
         fast eliminator;
-        std::vector<std::vector<literal>> clauses;
+        clause_list_t clauses;
         std::vector<literal> clause_one;
         clause_one.push_back(::kmx::sat::literal {::kmx::sat::variable {1u}, false});
         clause_one.push_back(::kmx::sat::literal {::kmx::sat::variable {2u}, false});
@@ -24,10 +24,10 @@ namespace kmx::sat::simplify::eliminator::variable
 
         eliminator.set_clauses(clauses);
 
-        REQUIRE(eliminator.cheap_score_variable(::kmx::sat::variable {1u}) <= 0);
+        REQUIRE(eliminator.cheap_score_variable(::kmx::sat::variable {1u}) <= 0L);
         REQUIRE(eliminator.cheap_can_eliminate(::kmx::sat::variable {1u}));
 
-        std::vector<std::vector<literal>> expensive_clauses;
+        clause_list_t expensive_clauses;
         std::vector<literal> expensive_clause_one;
         expensive_clause_one.push_back(::kmx::sat::literal {::kmx::sat::variable {4u}, false});
         expensive_clause_one.push_back(::kmx::sat::literal {::kmx::sat::variable {5u}, false});
@@ -39,7 +39,7 @@ namespace kmx::sat::simplify::eliminator::variable
         expensive_clauses.push_back(expensive_clause_two);
         eliminator.set_clauses(expensive_clauses);
 
-        REQUIRE(eliminator.cheap_score_variable(::kmx::sat::variable {4u}) >= 0);
+        REQUIRE(eliminator.cheap_score_variable(::kmx::sat::variable {4u}) >= 0L);
         REQUIRE(eliminator.cheap_can_eliminate(::kmx::sat::variable {4u}));
 
         eliminator.run_fast_round();

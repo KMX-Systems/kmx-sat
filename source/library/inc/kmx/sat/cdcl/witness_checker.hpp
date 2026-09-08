@@ -43,93 +43,24 @@ namespace kmx::sat::cdcl
         /// @param model Model to validate.
         /// @return True if every original clause is satisfied by `model`.
         /// @throws None (noexcept).
-        bool check_model_against_original(const model_view model) const noexcept
-        {
-            if (clauses_ == nullptr)
-                return true;
-
-            bool satisfied = true;
-            clauses_->iterate_irredundant(
-                [&](const clause::ref_t ref) noexcept
-                {
-                    if (!satisfied)
-                        return;
-                    satisfied = clause_satisfied(ref, model);
-                });
-            return satisfied;
-        }
+        bool check_model_against_original(const model_view model) const noexcept;
 
         /// @brief Validates a model against the currently tracked clause set.
         /// @param model Model to validate.
         /// @return True if every currently tracked clause is satisfied by `model`.
         /// @throws None (noexcept).
-        bool check_model_against_current(const model_view model) const noexcept
-        {
-            if (clauses_ == nullptr)
-                return true;
-
-            bool satisfied = true;
-            clauses_->iterate_irredundant(
-                [&](const clause::ref_t ref) noexcept
-                {
-                    if (!satisfied)
-                        return;
-                    satisfied = clause_satisfied(ref, model);
-                });
-            clauses_->iterate_redundant(
-                [&](const clause::ref_t ref) noexcept
-                {
-                    if (!satisfied)
-                        return;
-                    satisfied = clause_satisfied(ref, model);
-                });
-            return satisfied;
-        }
+        bool check_model_against_current(const model_view model) const noexcept;
 
         /// @brief Validates that the active temporary constraint clause, if any, is satisfied by a model.
         /// @param model Model to validate.
         /// @return True if the active constraint clause (if any) is satisfied by `model`.
         /// @throws None (noexcept).
-        bool check_constraint_satisfaction(const model_view model) const noexcept
-        {
-            if (constraint_ == nullptr || !constraint_->has_constraint_clause())
-                return true;
-
-            const auto clause = constraint_->constraint_clause_ref();
-            if (!clause.has_value())
-                return true;
-
-            bool satisfied = false;
-            for (const auto lit: *clause)
-                if (literal_satisfied(lit, model))
-                {
-                    satisfied = true;
-                    break;
-                }
-
-            return satisfied;
-        }
+        bool check_constraint_satisfaction(const model_view model) const noexcept;
 
     private:
-        static bool literal_satisfied(const literal lit, const model_view model) noexcept
-        {
-            for (const auto value: model.values())
-                if (value.variable_of() == lit.variable_of())
-                    return value.is_negated() == lit.is_negated();
-            return false;
-        }
+        static bool literal_satisfied(const literal lit, const model_view model) noexcept;
 
-        bool clause_satisfied(const clause::ref_t ref, const model_view model) const noexcept
-        {
-            if (!ref.valid())
-                return true;
-
-            const auto literals = clauses_->storage_of().view_literals(ref);
-            for (const auto lit: literals)
-                if (literal_satisfied(lit, model))
-                    return true;
-            return false;
-        }
+        bool clause_satisfied(const clause::ref_t ref, const model_view model) const noexcept;
 
         const clause::database* clauses_ {};
         const store::constraint* constraint_ {};

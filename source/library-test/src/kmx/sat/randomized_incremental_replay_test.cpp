@@ -23,12 +23,11 @@ namespace kmx::sat
         }
     };
 
-    static bool satisfies(const std::vector<std::vector<literal>>& clauses, const std::vector<literal>& assumptions,
-                          const std::uint32_t assignment) noexcept
+    static bool satisfies(const clause_list_t& clauses, const std::vector<literal>& assumptions, const std::uint32_t assignment) noexcept
     {
         for (const auto& clause: clauses)
         {
-            bool satisfied = false;
+            bool satisfied {};
             for (const auto lit: clause)
             {
                 const auto bit = (assignment >> (lit.variable_of().index() - 1u)) & 1u;
@@ -40,13 +39,13 @@ namespace kmx::sat
         for (const auto assumption: assumptions)
         {
             const auto bit = (assignment >> (assumption.variable_of().index() - 1u)) & 1u;
-            if ((assumption.is_negated() && bit != 0u) || (!assumption.is_negated() && bit == 0u))
+            if ((assumption.is_negated() && (bit != 0u)) || (!assumption.is_negated() && bit == 0u))
                 return false;
         }
         return true;
     }
 
-    static bool oracle_sat(const std::vector<std::vector<literal>>& clauses, const std::vector<literal>& assumptions,
+    static bool oracle_sat(const clause_list_t& clauses, const std::vector<literal>& assumptions,
                            const std::uint32_t variable_count) noexcept
     {
         const auto assignment_count = std::uint32_t {1u} << variable_count;
@@ -65,9 +64,9 @@ namespace kmx::sat
             const auto variable_index = 1u + rng.next() % variable_count;
             const auto negated = (rng.next() & 1u) != 0u;
             const literal candidate {variable {variable_index}, negated};
-            bool duplicate = false;
+            bool duplicate {};
             for (const auto existing: clause)
-                duplicate = duplicate || existing.raw() == candidate.raw();
+                duplicate = duplicate || (existing.raw() == candidate.raw());
             if (!duplicate)
                 clause.push_back(candidate);
         }
@@ -79,15 +78,15 @@ namespace kmx::sat
         constexpr std::uint32_t variable_count {4u};
         deterministic_rng rng;
         solver solver;
-        solver.set_option("chb_enabled", 1);
-        solver.set_option("reduction_fraction_percent", 30);
-        std::vector<std::vector<literal>> clauses;
+        solver.set_option(option_id::chb_enabled, 1L);
+        solver.set_option(option_id::reduction_fraction_percent, 30L);
+        clause_list_t clauses;
         bool configured_chb_enabled = true;
         auto previous_statistics = solver.statistics();
 
         for (std::uint32_t episode {}; episode < 96u; ++episode)
         {
-            if (episode != 0u && episode % 8u == 0u)
+            if ((episode != 0u) && (episode % 8u == 0u))
             {
                 solver.reset_session();
                 clauses.clear();
@@ -99,7 +98,7 @@ namespace kmx::sat
             if ((episode % 3u) == 0u)
             {
                 configured_chb_enabled = (episode % 2u) == 0u;
-                solver.set_option("chb_enabled", configured_chb_enabled ? 1 : 0);
+                solver.set_option(option_id::chb_enabled, configured_chb_enabled ? 1 : 0);
                 REQUIRE(solver.has_persisted_configuration());
             }
 
@@ -136,7 +135,7 @@ namespace kmx::sat
             previous_statistics = current_statistics;
             if (result.status_of() == solve_result::status::satisfiable)
                 REQUIRE(!result.model().values().empty());
-            if (result.status_of() == solve_result::status::unsatisfiable && !assumptions.empty())
+            if ((result.status_of() == solve_result::status::unsatisfiable) && !assumptions.empty())
                 REQUIRE(!result.failed_core().assumptions().empty());
             solver.release_incremental_assumptions();
         }

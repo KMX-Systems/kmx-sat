@@ -1,17 +1,21 @@
+/// @file inc/kmx/sat/test_support/incremental_replay_trace.hpp
+/// @brief Serializable trace of incremental solver operations used by replay tests.
+/// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
-
-#include <algorithm>
-#include <array>
-#include <charconv>
-#include <cstdint>
-#include <optional>
-#include <sstream>
-#include <string>
-#include <string_view>
-#include <utility>
-#include <vector>
-
+#ifndef PCH
+    #include <algorithm>
+    #include <array>
+    #include <charconv>
+    #include <cstdint>
+    #include <optional>
+    #include <sstream>
+    #include <string>
+    #include <string_view>
+    #include <utility>
+    #include <vector>
+#endif
 #include <kmx/sat/literal.hpp>
+#include <kmx/sat/option_id.hpp>
 #include <kmx/sat/variable.hpp>
 
 namespace kmx::sat::test_support
@@ -34,7 +38,7 @@ namespace kmx::sat::test_support
         std::vector<literal> literals {};
         std::uint64_t conflict_limit {};
         std::uint64_t decision_limit {};
-        std::string option_name {};
+        option_id option {};
         std::int64_t option_value {};
         variable variable_operand {};
         literal literal_operand {};
@@ -69,20 +73,20 @@ namespace kmx::sat::test_support
                 }
                 switch (operation.kind)
                 {
-                case replay_operation_kind::solve:
-                    output << ",\"conflict_limit\":" << operation.conflict_limit << ",\"decision_limit\":" << operation.decision_limit;
-                    break;
-                case replay_operation_kind::set_option:
-                    output << ",\"option\":\"" << escaped(operation.option_name) << "\",\"value\":" << operation.option_value;
-                    break;
-                case replay_operation_kind::value_of:
-                    output << ",\"variable\":" << operation.variable_operand.index();
-                    break;
-                case replay_operation_kind::failed:
-                    output << ",\"literal\":" << dimacs_value(operation.literal_operand);
-                    break;
-                default:
-                    break;
+                    case replay_operation_kind::solve:
+                        output << ",\"conflict_limit\":" << operation.conflict_limit << ",\"decision_limit\":" << operation.decision_limit;
+                        break;
+                    case replay_operation_kind::set_option:
+                        output << ",\"option\":\"" << name_of(operation.option) << "\",\"value\":" << operation.option_value;
+                        break;
+                    case replay_operation_kind::value_of:
+                        output << ",\"variable\":" << operation.variable_operand.index();
+                        break;
+                    case replay_operation_kind::failed:
+                        output << ",\"literal\":" << dimacs_value(operation.literal_operand);
+                        break;
+                    default:
+                        break;
                 }
                 output << "}\n";
             }
@@ -94,7 +98,7 @@ namespace kmx::sat::test_support
             std::istringstream input {std::string {text}};
             std::string line;
             incremental_replay_trace trace;
-            bool header_seen = false;
+            bool header_seen {};
             while (std::getline(input, line))
             {
                 if (line.empty())
@@ -104,7 +108,7 @@ namespace kmx::sat::test_support
                     return {};
                 if (kind.value() == "header")
                 {
-                    if (header_seen || number_field(line, "schema") != schema_version)
+                    if (header_seen || (number_field(line, "schema") != schema_version))
                         return {};
                     const auto seed = number_field(line, "seed");
                     const auto variables = number_field(line, "variable_count");
@@ -150,7 +154,12 @@ namespace kmx::sat::test_support
                         const auto value = signed_number_field(line, "value");
                         if (!option.has_value() || !value.has_value())
                             return {};
-                        operation.option_name = option.value();
+                        // The serialized form carries option names, so this is where text becomes an `option_id`;
+                        // an unknown name makes the whole trace invalid rather than silently replaying nothing.
+                        const auto parsed_option = parse_option_id(option.value());
+                        if (!parsed_option.has_value())
+                            return {};
+                        operation.option = parsed_option.value();
                         operation.option_value = static_cast<std::int64_t>(value.value());
                         break;
                     }
@@ -165,7 +174,7 @@ namespace kmx::sat::test_support
                     case replay_operation_kind::failed:
                     {
                         const auto literal_value = signed_number_field(line, "literal");
-                        if (!literal_value.has_value() || literal_value.value() == 0)
+                        if (!literal_value.has_value() || (literal_value.value() == 0L))
                             return {};
                         operation.literal_operand = from_dimacs(literal_value.value());
                         break;
@@ -181,7 +190,7 @@ namespace kmx::sat::test_support
     private:
         static std::optional<replay_operation_kind> parse_kind(const std::string_view value) noexcept
         {
-            static constexpr std::array<std::pair<std::string_view, replay_operation_kind>, 8> kinds {{
+            static constexpr std::array<std::pair<std::string_view, replay_operation_kind>, 8u> kinds {{
                 {"add_clause", replay_operation_kind::add_clause},
                 {"assume", replay_operation_kind::assume},
                 {"failed", replay_operation_kind::failed},
@@ -193,7 +202,7 @@ namespace kmx::sat::test_support
             }};
             const auto it = std::lower_bound(kinds.begin(), kinds.end(), value,
                                              [](const auto& pair, const std::string_view v) { return pair.first < v; });
-            if (it != kinds.end() && it->first == value)
+            if ((it != kinds.end()) && (it->first == value))
                 return it->second;
             return {};
         }
@@ -206,10 +215,10 @@ namespace kmx::sat::test_support
                 return {};
             const auto first = start + marker.size();
             const auto last = line.find_first_of(",}", first);
-            const auto token = line.substr(first, last == std::string_view::npos ? line.size() - first : last - first);
+            const auto token = line.substr(first, (last == std::string_view::npos) ? line.size() - first : last - first);
             std::uint64_t value {};
             const auto result = std::from_chars(token.data(), token.data() + token.size(), value);
-            return result.ec == std::errc {} && result.ptr == token.data() + token.size() ? std::optional {value} : std::nullopt;
+            return ((result.ec == std::errc {}) && (result.ptr == token.data() + token.size())) ? std::optional {value} : std::nullopt;
         }
 
         static std::optional<std::int64_t> signed_number_field(const std::string_view line, const std::string_view field) noexcept
@@ -220,10 +229,10 @@ namespace kmx::sat::test_support
                 return {};
             const auto first = start + marker.size();
             const auto last = line.find_first_of(",}", first);
-            const auto token = line.substr(first, last == std::string_view::npos ? line.size() - first : last - first);
+            const auto token = line.substr(first, (last == std::string_view::npos) ? line.size() - first : last - first);
             std::int64_t value {};
             const auto result = std::from_chars(token.data(), token.data() + token.size(), value);
-            return result.ec == std::errc {} && result.ptr == token.data() + token.size() ? std::optional {value} : std::nullopt;
+            return ((result.ec == std::errc {}) && (result.ptr == token.data() + token.size())) ? std::optional {value} : std::nullopt;
         }
 
         static std::optional<std::string> string_field(const std::string_view line, const std::string_view field)
@@ -234,10 +243,10 @@ namespace kmx::sat::test_support
                 return {};
             const auto first = start + marker.size();
             const auto last = line.find('"', first);
-            return last == std::string_view::npos ? std::nullopt : std::optional {std::string {line.substr(first, last - first)}};
+            return (last == std::string_view::npos) ? std::nullopt : std::optional {std::string {line.substr(first, last - first)}};
         }
 
-        static std::optional<std::vector<literal>> literal_array_field(const std::string_view line, const std::string_view field)
+        static optional_clause_t literal_array_field(const std::string_view line, const std::string_view field)
         {
             const std::string marker = "\"" + std::string {field} + "\":[";
             const auto start = line.find(marker);
@@ -255,7 +264,7 @@ namespace kmx::sat::test_support
             {
                 std::int64_t value {};
                 const auto result = std::from_chars(token.data(), token.data() + token.size(), value);
-                if (result.ec != std::errc {} || result.ptr != token.data() + token.size() || value == 0)
+                if ((result.ec != std::errc {}) || (result.ptr != token.data() + token.size()) || (value == 0L))
                     return {};
                 literals.push_back(from_dimacs(value));
             }
@@ -264,8 +273,8 @@ namespace kmx::sat::test_support
 
         static literal from_dimacs(const std::int64_t value) noexcept
         {
-            const auto magnitude = static_cast<variable::index_t>(value < 0 ? -value : value);
-            return literal {variable {magnitude}, value < 0};
+            const auto magnitude = static_cast<variable::index_t>((value < 0L) ? -value : value);
+            return literal {variable {magnitude}, value < 0L};
         }
 
         static std::string_view kind_name(const replay_operation_kind kind) noexcept
@@ -296,19 +305,6 @@ namespace kmx::sat::test_support
         {
             const auto variable_value = static_cast<std::int64_t>(value.variable_of().index());
             return value.is_negated() ? -variable_value : variable_value;
-        }
-
-        static std::string escaped(const std::string_view value)
-        {
-            std::string result;
-            result.reserve(value.size());
-            for (const char character: value)
-            {
-                if (character == '\\' || character == '"')
-                    result.push_back('\\');
-                result.push_back(character);
-            }
-            return result;
         }
     };
 }

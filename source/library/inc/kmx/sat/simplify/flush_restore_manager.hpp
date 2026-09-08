@@ -39,36 +39,15 @@ namespace kmx::sat::simplify
 
         /// @brief Physically removes redundant clauses currently marked garbage.
         /// @throws None (noexcept).
-        void flush_redundant() noexcept
-        {
-            ++flush_count_;
-            if (database_ == nullptr)
-                return;
-
-            flush_matching([&](const cdcl::clause::ref_t ref) noexcept { return database_->is_garbage(ref); });
-        }
+        void flush_redundant() noexcept;
 
         /// @brief Restores every previously flushed clause, both redundant and irredundant.
         /// @throws None (noexcept).
-        void restore_all() noexcept
-        {
-            ++restore_count_;
-            if (database_ == nullptr)
-                return;
-
-            restore_matching([](const flushed_clause&) noexcept { return true; });
-        }
+        void restore_all() noexcept;
 
         /// @brief Restores only previously flushed irredundant (original) clauses, the correctness-preserving option.
         /// @throws None (noexcept).
-        void restore_irredundant_only() noexcept
-        {
-            ++restore_count_;
-            if (database_ == nullptr)
-                return;
-
-            restore_matching([](const flushed_clause& record) noexcept { return !record.redundant; });
-        }
+        void restore_irredundant_only() noexcept;
 
         /// @brief Removes clauses already satisfied at decision level zero, regardless of redundancy.
         /// @throws None (noexcept).
@@ -77,8 +56,8 @@ namespace kmx::sat::simplify
         /// @brief Removes clauses deemed satisfied by the provided predicate.
         /// @param is_satisfied Predicate deciding which clauses to remove.
         /// @throws None (noexcept).
-        template <typename predicate_t>
-        void remove_satisfied(predicate_t&& is_satisfied) noexcept
+        template <typename Predicate>
+        void remove_satisfied(Predicate&& is_satisfied) noexcept
         {
             ++satisfied_removed_count_;
             if (database_ == nullptr)
@@ -106,8 +85,8 @@ namespace kmx::sat::simplify
             bool redundant {};
         };
 
-        template <typename predicate_t>
-        void flush_matching(predicate_t&& should_flush) noexcept
+        template <typename Predicate>
+        void flush_matching(Predicate&& should_flush) noexcept
         {
             if (database_ == nullptr)
                 return;
@@ -117,35 +96,11 @@ namespace kmx::sat::simplify
             capture_and_remove(*database_, false, should_flush);
         }
 
-        template <typename predicate_t>
-        void capture_and_remove(cdcl::clause::database& database, const bool redundant, predicate_t&& should_flush) noexcept
-        {
-            std::vector<cdcl::clause::ref_t> to_flush {};
-            const auto refs = redundant ? database.redundant_refs() : database.irredundant_refs();
+        template <typename Predicate>
+        void capture_and_remove(cdcl::clause::database& database, const bool redundant, Predicate&& should_flush) noexcept;
 
-            for (const auto ref: refs)
-            {
-                if (should_flush(ref))
-                {
-                    flushed_clauses_.push_back(flushed_clause {database.storage_of().literals_of(ref), redundant});
-                    to_flush.push_back(ref);
-                }
-            }
-
-            if (to_flush.empty())
-                return;
-
-            std::unordered_set<cdcl::clause::ref_t::offset_t> to_flush_offsets {};
-            to_flush_offsets.reserve(to_flush.size());
-            for (const auto ref: to_flush)
-                to_flush_offsets.insert(ref.offset());
-
-            database.flush_satisfied([&](const cdcl::clause::ref_t ref) noexcept { return to_flush_offsets.contains(ref.offset()); });
-            last_flush_removed_count_ += to_flush.size();
-        }
-
-        template <typename predicate_t>
-        void restore_matching(predicate_t&& should_restore) noexcept
+        template <typename Predicate>
+        void restore_matching(Predicate&& should_restore) noexcept
         {
             if (database_ == nullptr)
                 return;
@@ -178,4 +133,32 @@ namespace kmx::sat::simplify
         std::size_t restored_clause_count_ {};
         std::size_t last_flush_removed_count_ {};
     };
+
+    template <typename Predicate>
+    void flush_restore_manager::capture_and_remove(cdcl::clause::database& database, const bool redundant,
+                                                   Predicate&& should_flush) noexcept
+    {
+        std::vector<cdcl::clause::ref_t> to_flush {};
+        const auto refs = redundant ? database.redundant_refs() : database.irredundant_refs();
+
+        for (const auto ref: refs)
+        {
+            if (should_flush(ref))
+            {
+                flushed_clauses_.push_back(flushed_clause {database.storage_of().literals_of(ref), redundant});
+                to_flush.push_back(ref);
+            }
+        }
+
+        if (to_flush.empty())
+            return;
+
+        std::unordered_set<cdcl::clause::ref_t::offset_t> to_flush_offsets {};
+        to_flush_offsets.reserve(to_flush.size());
+        for (const auto ref: to_flush)
+            to_flush_offsets.insert(ref.offset());
+
+        database.flush_satisfied([&](const cdcl::clause::ref_t ref) noexcept { return to_flush_offsets.contains(ref.offset()); });
+        last_flush_removed_count_ += to_flush.size();
+    }
 }

@@ -7,20 +7,19 @@
     #include <chrono>
     #include <cstdint>
     #include <ctime>
-    #include <string>
-    #include <string_view>
     #include <utility>
     #include <vector>
 #endif
+#include <kmx/sat/telemetry/phase_id.hpp>
 
 namespace kmx::sat::telemetry
 {
     /// @brief Phase profiling and predictable accounting.
     /// @details
-    /// `profile_clock` measures wall-clock and process (CPU) time spent in named phases (parsing, preprocessing,
-    /// search, proof checking) so `report_formatter`/`solver_statistics` can attribute time accurately and so the
+    /// `profile_clock` measures wall-clock and process (CPU) time spent in each `phase_id` (parsing,
+    /// preprocessing, search, proof checking) so `report_formatter`/`solver_statistics` can attribute time accurately and so the
     /// comparative benchmarking harness can compare phase-level timing against pinned CaDiCaL/Kissat releases.
-    /// `start_phase`/`stop_phase` bracket one named phase (phases may nest or repeat); `current_process_time`/
+    /// `start_phase`/`stop_phase` bracket one phase (phases may nest or repeat); `current_process_time`/
     /// `current_wall_time` expose cumulative totals independent of any in-progress phase, giving predictable
     /// accounting even if a phase is stopped out of order or omitted.
     class profile_clock final
@@ -30,39 +29,15 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         profile_clock() noexcept = default;
 
-        /// @brief Starts timing a named phase.
-        /// @param phase_name Identifier of the phase being started.
+        /// @brief Starts timing one phase.
+        /// @param id Phase being started.
         /// @throws None (noexcept).
-        void start_phase(const std::string_view phase_name) noexcept
-        {
-            active_phases_.push_back({std::string {phase_name}, std::chrono::steady_clock::now(), std::clock()});
-        }
+        void start_phase(const phase_id id) noexcept { active_phases_.push_back({id, std::chrono::steady_clock::now(), std::clock()}); }
 
-        /// @brief Stops timing a named phase, accumulating its elapsed time.
-        /// @param phase_name Identifier of the phase being stopped.
+        /// @brief Stops timing one phase, accumulating its elapsed time.
+        /// @param id Phase being stopped.
         /// @throws None (noexcept).
-        void stop_phase(const std::string_view phase_name) noexcept
-        {
-            for (auto it = active_phases_.rbegin(); it != active_phases_.rend(); ++it)
-            {
-                if (it->name == phase_name)
-                {
-                    const auto wall_now = std::chrono::steady_clock::now();
-                    const auto process_now = std::clock();
-                    const auto wall_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(wall_now - it->wall_start);
-                    const auto process_elapsed_ticks = process_now >= it->process_start ? process_now - it->process_start : 0;
-                    const auto process_elapsed_ms =
-                        std::chrono::milliseconds {static_cast<std::int64_t>(process_elapsed_ticks * 1000 / CLOCKS_PER_SEC)};
-                    const auto wall_ticks = std::max<std::int64_t>(1, wall_elapsed_ms.count());
-                    const auto process_ticks = std::max<std::int64_t>(1, process_elapsed_ms.count());
-
-                    cumulative_wall_time_ += static_cast<std::uint64_t>(wall_ticks);
-                    cumulative_process_time_ += static_cast<std::uint64_t>(process_ticks);
-                    active_phases_.erase(std::next(it).base());
-                    break;
-                }
-            }
-        }
+        void stop_phase(const phase_id id) noexcept;
 
         /// @brief Returns the cumulative process (CPU) time consumed so far.
         /// @return Process time, in an implementation-defined unit.
@@ -79,7 +54,7 @@ namespace kmx::sat::telemetry
     private:
         struct phase_entry
         {
-            std::string name {};
+            phase_id id {};
             std::chrono::steady_clock::time_point wall_start {};
             std::clock_t process_start {};
         };

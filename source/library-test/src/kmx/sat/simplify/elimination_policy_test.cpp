@@ -22,9 +22,9 @@ namespace kmx::sat::simplify
     {
         cdcl::clause::database database;
         const auto longer_ref = database.add_clause(
-            std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}});
+            std::array<literal, 3u> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}});
         const auto shorter_ref =
-            database.add_clause(std::array<literal, 2> {literal {variable {1u}, false}, literal {variable {2u}, false}});
+            database.add_clause(std::array<literal, 2u> {literal {variable {1u}, false}, literal {variable {2u}, false}});
 
         forward_subsumer subsumer;
         subsumer.attach_database(database);
@@ -55,9 +55,9 @@ namespace kmx::sat::simplify
 
         cdcl::clause::database flush_database;
         const auto irredundant_ref =
-            flush_database.add_clause(std::array<literal, 2> {literal {variable {7u}, false}, literal {variable {8u}, false}}, false);
+            flush_database.add_clause(std::array<literal, 2u> {literal {variable {7u}, false}, literal {variable {8u}, false}}, false);
         const auto redundant_ref =
-            flush_database.add_clause(std::array<literal, 2> {literal {variable {9u}, false}, literal {variable {10u}, false}}, true);
+            flush_database.add_clause(std::array<literal, 2u> {literal {variable {9u}, false}, literal {variable {10u}, false}}, true);
         flush_database.mark_garbage(redundant_ref);
 
         flush_restore_manager flush_restore;
@@ -80,13 +80,13 @@ namespace kmx::sat::simplify
         REQUIRE(flush_database.stats_snapshot().redundant_count == 1u);
 
         cdcl::clause::database subsumption_database;
-        const auto subsuming_ref = subsumption_database.add_clause(std::array<literal, 1> {literal {variable {1u}, false}}, false);
-        const auto subsumed_ref =
-            subsumption_database.add_clause(std::array<literal, 2> {literal {variable {1u}, false}, literal {variable {2u}, false}}, false);
+        const auto subsuming_ref = subsumption_database.add_clause(std::array<literal, 1u> {literal {variable {1u}, false}}, false);
+        const auto subsumed_ref = subsumption_database.add_clause(
+            std::array<literal, 2u> {literal {variable {1u}, false}, literal {variable {2u}, false}}, false);
 
         forward_subsumer subsumer;
         proof_manager subsumer_proof_manager;
-        subsumer_proof_manager.enable_format("drat");
+        subsumer_proof_manager.enable_format(proof::format_id::drat);
         subsumer.attach_database(subsumption_database);
         subsumer.attach_proof_manager(subsumer_proof_manager);
         REQUIRE(subsumer.is_subsumed(subsumed_ref));
@@ -95,15 +95,15 @@ namespace kmx::sat::simplify
         // (2 v 3), which subsumes the second clause, so -1 can be dropped from it. Removing a literal without
         // such a partner would strengthen the formula and lose models, so an unjustified request is refused.
         cdcl::clause::database strengthen_database;
-        const std::array<literal, 2> justifier {literal {variable {1u}, false}, literal {variable {2u}, false}};
-        const std::array<literal, 3> strengthen_target {literal {variable {1u}, true}, literal {variable {2u}, false},
-                                                        literal {variable {3u}, false}};
+        const std::array<literal, 2u> justifier {literal {variable {1u}, false}, literal {variable {2u}, false}};
+        const std::array<literal, 3u> strengthen_target {literal {variable {1u}, true}, literal {variable {2u}, false},
+                                                         literal {variable {3u}, false}};
         strengthen_database.add_clause(std::span<const literal> {justifier}, false);
         const auto strengthen_ref = strengthen_database.add_clause(std::span<const literal> {strengthen_target}, false);
 
         forward_subsumer strengthener;
         proof_manager strengthener_proof_manager;
-        strengthener_proof_manager.enable_format("drat");
+        strengthener_proof_manager.enable_format(proof::format_id::drat);
         strengthener.attach_database(strengthen_database);
         strengthener.attach_proof_manager(strengthener_proof_manager);
 
@@ -124,7 +124,7 @@ namespace kmx::sat::simplify
 
         cdcl::clause::database backbone_database;
         proof_manager backbone_proof_manager;
-        backbone_proof_manager.enable_format("drat");
+        backbone_proof_manager.enable_format(proof::format_id::drat);
         extractor::backbone backbone;
         const literal backbone_lit {variable {30u}, false};
         backbone.attach_database(backbone_database);
@@ -163,7 +163,7 @@ namespace kmx::sat::simplify
 
         extractor::backbone existing_unit_backbone;
         cdcl::clause::database existing_unit_database;
-        existing_unit_database.add_clause(std::array<literal, 1> {literal {variable {32u}, false}}, false);
+        existing_unit_database.add_clause(std::array<literal, 1u> {literal {variable {32u}, false}}, false);
         existing_unit_backbone.attach_database(existing_unit_database);
         const literal existing_unit {variable {32u}, false};
         existing_unit_backbone.record_candidate(existing_unit);
@@ -192,14 +192,14 @@ namespace kmx::sat::simplify
 
         cdcl::clause::database vivifier_database;
         const auto vivifier_ref_a = vivifier_database.add_clause(
-            std::array<literal, 3> {
+            std::array<literal, 3u> {
                 literal {variable {11u}, false},
                 literal {variable {12u}, false},
                 literal {variable {13u}, false},
             },
             false);
         const auto vivifier_ref_b = vivifier_database.add_clause(
-            std::array<literal, 2> {
+            std::array<literal, 2u> {
                 literal {variable {14u}, false},
                 literal {variable {15u}, false},
             },

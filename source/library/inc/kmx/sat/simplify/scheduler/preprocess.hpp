@@ -7,12 +7,12 @@
     #include <array>
     #include <cstddef>
     #include <optional>
-    #include <string_view>
     #include <vector>
 #endif
 #include <kmx/sat/cdcl/bank/watch_list.hpp>
 #include <kmx/sat/cdcl/clause/database.hpp>
 #include <kmx/sat/cdcl/memory_governor.hpp>
+#include <kmx/sat/cdcl/stack/extension.hpp>
 #include <kmx/sat/cdcl/variable_mapper.hpp>
 #include <kmx/sat/proof_manager.hpp>
 #include <kmx/sat/simplify/eliminator/clause/blocked.hpp>
@@ -28,7 +28,6 @@
 #include <kmx/sat/simplify/extractor/backbone.hpp>
 #include <kmx/sat/simplify/extractor/gate.hpp>
 #include <kmx/sat/simplify/factorizer.hpp>
-#include <kmx/sat/cdcl/stack/extension.hpp>
 #include <kmx/sat/simplify/forward_subsumer.hpp>
 #include <kmx/sat/simplify/preprocessing_profile_selector.hpp>
 #include <kmx/sat/simplify/transitive_reducer.hpp>
@@ -44,7 +43,7 @@ namespace kmx::sat::simplify::scheduler
     /// `factorizer`, `extractor::gate`, `engine::congruence`, `vivifier`, `engine::sweep`, `extractor::backbone`)
     /// exactly once before `search_coordinator` begins, per the Phase 8 preprocess pipeline.
     /// `run_initial_pipeline` drives that sequence; `enable_pass`/`disable_pass` let a `solve_request::enabled_pass_mask`
-    /// or `preprocessing_profile_selector` decision include/exclude individual passes by name;
+    /// or `preprocessing_profile_selector` decision include/exclude individual passes;
     /// `should_abort_pipeline` checks the caller's termination callback and `memory_governor` ceilings between
     /// passes; `report_pass_summary` feeds `telemetry::solver_statistics` with per-pass effectiveness for
     /// diagnostics and for `preprocessing_profile_selector`'s future scheduling decisions.
@@ -54,11 +53,11 @@ namespace kmx::sat::simplify::scheduler
     class preprocess final
     {
     public:
-        using pass_id = simplify::pass_id;
+        using pass_id_t = simplify::pass_id;
 
         struct pass_summary final
         {
-            pass_id id {};
+            pass_id_t id {};
             bool executed {};
             bool skipped_by_selector {};
             bool skipped_by_proof_format {};
@@ -68,7 +67,7 @@ namespace kmx::sat::simplify::scheduler
         };
 
         /// @brief Passes enabled by default on every pipeline run.
-        /// @note `pass_id::bounded` is deliberately absent. Bounded variable elimination is implemented and is
+        /// @note `pass_id_t::bounded` is deliberately absent. Bounded variable elimination is implemented and is
         /// verified sound in isolation (satisfiability preservation plus model reconstruction, see
         /// `bounded_elimination_test`), but enabling it here makes the solver report satisfiable for
         /// unsatisfiable instances: learned clauses mentioning an eliminated variable are not removed with it, and
@@ -89,47 +88,22 @@ namespace kmx::sat::simplify::scheduler
         /// `congruence` shares the substitutor and is absent for the same reason, and `gate` extraction, which
         /// only feeds congruence closure, goes with it: on a 114k-clause scheduling formula it was 3% of the
         /// preprocessing instructions spent copying clauses for a consumer that never ran.
-        static constexpr std::array<pass_id, 9u> baseline_passes {pass_id::transitive_reducer,
-                                                                  pass_id::probing,
-                                                                  pass_id::forward_subsumer,
-                                                                  pass_id::blocked,
-                                                                  pass_id::covered,
-                                                                  pass_id::fast,
-                                                                  pass_id::instantiation,
-                                                                  pass_id::factorizer,
-                                                                  pass_id::vivifier};
-
-        static constexpr std::array<std::string_view, 14> pass_names {
-            "transitive_reducer", "decomposition", "probing", "forward_subsumer", "blocked",  "covered", "bounded", "fast",
-            "instantiation",      "factorizer",    "gate",    "congruence",       "vivifier", "sweep"};
-
-        static constexpr std::string_view pass_name(const pass_id id) noexcept
-        {
-            const auto index = static_cast<std::size_t>(id);
-            return index < pass_names.size() ? pass_names[index] : std::string_view {};
-        }
-
-        /// @brief Returns the reporting label for an enum-backed pass summary.
-        static constexpr std::string_view pass_name_of(const pass_summary& summary) noexcept { return pass_name(summary.id); }
+        static constexpr std::array<pass_id_t, 9u> baseline_passes {pass_id_t::transitive_reducer,
+                                                                    pass_id_t::probing,
+                                                                    pass_id_t::forward_subsumer,
+                                                                    pass_id_t::blocked,
+                                                                    pass_id_t::covered,
+                                                                    pass_id_t::fast,
+                                                                    pass_id_t::instantiation,
+                                                                    pass_id_t::factorizer,
+                                                                    pass_id_t::vivifier};
 
         /// @brief Constructs a preprocess scheduler with every baseline pass enabled.
         /// @throws None (noexcept).
-        preprocess() noexcept
-        {
-            decomposition_.attach_substitutor(decomposition_substitutor_);
-            for (const auto id: baseline_passes)
-            {
-                const auto index = static_cast<std::size_t>(id);
-                enabled_pass_mask_ |= (std::uint64_t {1u} << index);
-                ++enabled_pass_count_;
-            }
-        }
+        preprocess() noexcept;
 
         /// @brief Returns the bit representing one pass in an enabled-pass bitmask.
-        static constexpr std::uint64_t pass_bit(const pass_id id) noexcept
-        {
-            return std::uint64_t {1u} << static_cast<std::uint8_t>(id);
-        }
+        static constexpr std::uint64_t pass_bit(const pass_id_t id) noexcept { return std::uint64_t {1u} << static_cast<std::uint8_t>(id); }
 
         /// @brief Returns the bitmask of the default pass set.
         static constexpr std::uint64_t baseline_pass_mask() noexcept
@@ -145,24 +119,17 @@ namespace kmx::sat::simplify::scheduler
         /// afterwards; see the note on `baseline_passes`.
         static constexpr std::uint64_t baseline_pass_mask_with_variable_elimination() noexcept
         {
-            return baseline_pass_mask() | pass_bit(pass_id::bounded);
+            return baseline_pass_mask() | pass_bit(pass_id_t::bounded);
         }
 
-        /// @brief Replaces the enabled-pass set with an explicit bitmask, one bit per `pass_id`.
+        /// @brief Replaces the enabled-pass set with an explicit bitmask, one bit per `pass_id_t`.
         /// @details Backs `solve_request::enabled_pass_mask`, so a caller can state exactly which simplification
         /// it wants -- including none. Tests of the search machinery need that: preprocessing is strong enough to
         /// close a small formula outright, and a test that means to exercise propagation should say so rather than
         /// depend on which passes happen to be in the default set.
         /// @param mask Bitmask of enabled passes; zero disables every pass.
         /// @throws None (noexcept).
-        void set_enabled_pass_mask(const std::uint64_t mask) noexcept
-        {
-            enabled_pass_mask_ = mask;
-            enabled_pass_count_ = 0u;
-            for (std::uint8_t value {}; value < pass_count; ++value)
-                if ((enabled_pass_mask_ & (std::uint64_t {1u} << value)) != 0u)
-                    ++enabled_pass_count_;
-        }
+        void set_enabled_pass_mask(const std::uint64_t mask) noexcept;
 
         /// @brief Returns the current enabled-pass bitmask.
         [[nodiscard]] std::uint64_t enabled_pass_mask() const noexcept { return enabled_pass_mask_; }
@@ -178,20 +145,7 @@ namespace kmx::sat::simplify::scheduler
         /// @brief Attaches the clause database consumed by preprocess passes.
         /// @param database Clause database to simplify in place.
         /// @throws None (noexcept).
-        void attach_clause_database(cdcl::clause::database& database) noexcept
-        {
-            clause_database_ = &database;
-            transitive_reducer_.attach_database(database);
-            probing_.attach_database(database);
-            forward_subsumer_.attach_database(database);
-            vivifier_.attach_database(database);
-            backbone_.attach_database(database);
-            decomposition_substitutor_.attach_clause_database(database);
-            congruence_.attach_clause_database(database);
-            profile_selector_.attach_clause_database(database);
-            bounded_.attach_clause_database(database);
-            factorizer_.attach_clause_database(database);
-        }
+        void attach_clause_database(cdcl::clause::database& database) noexcept;
 
         /// @brief Attaches the extension stack that variable elimination and factoring record their changes on.
         /// @details Without this the eliminator cannot record what it removed, and a model of the reduced formula
@@ -208,12 +162,7 @@ namespace kmx::sat::simplify::scheduler
         /// @brief Declares how many variables the problem owns, for passes that introduce fresh ones.
         void set_problem_variable_count(const variable::index_t count) noexcept { factorizer_.set_problem_variable_count(count); }
 
-        void attach_clause_sink(extractor::backbone::clause_sink_t sink) noexcept
-        {
-            backbone_.attach_clause_sink(sink);
-            bounded_.attach_clause_sink(sink);
-            forward_subsumer_.attach_clause_sink(sink);
-        }
+        void attach_clause_sink(extractor::backbone::clause_sink_t sink) noexcept;
 
         /// @brief Attaches the watch-list bank consumed by equivalence-rewrite passes.
         /// @param watch_list Watch list to reindex during literal substitution.
@@ -254,16 +203,7 @@ namespace kmx::sat::simplify::scheduler
 
         /// @brief Attaches the proof manager used for format-aware pass gating.
         /// @param proof_manager Proof manager describing the currently active proof formats.
-        void attach_proof_manager(kmx::sat::proof_manager& proof_manager) noexcept
-        {
-            proof_manager_ = &proof_manager;
-            transitive_reducer_.attach_proof_manager(proof_manager);
-            probing_.attach_proof_manager(proof_manager);
-            forward_subsumer_.attach_proof_manager(proof_manager);
-            backbone_.attach_proof_manager(proof_manager);
-            bounded_.attach_proof_manager(proof_manager);
-            factorizer_.attach_proof_manager(proof_manager);
-        }
+        void attach_proof_manager(kmx::sat::proof_manager& proof_manager) noexcept;
 
         /// @brief Requests that the current or next pipeline run abort before further passes.
         /// @throws None (noexcept).
@@ -275,122 +215,17 @@ namespace kmx::sat::simplify::scheduler
 
         /// @brief Runs the full one-time preprocessing pipeline before the main search begins.
         /// @throws None (noexcept).
-        void run_initial_pipeline() noexcept
-        {
-            ++pipeline_run_count_;
-            executed_pass_count_ = 0u;
-            last_run_summaries_.clear();
-            backbone_.reset();
-            sweep_.reset();
+        void run_initial_pipeline() noexcept;
 
-            profile_selector_.fingerprint_formula();
-            profile_selector_.set_soft_memory_pressure(memory_governor_ != nullptr && memory_governor_->soft_limit_breached());
-            profile_selector_.select_pass_plan();
-
-            for (std::uint8_t value {}; value < pass_count; ++value)
-            {
-                const auto id = static_cast<pass_id>(value);
-                if (!is_enabled(id))
-                    continue;
-                if (should_abort_pipeline())
-                    break;
-
-                if (!profile_selector_.should_run_pass(id))
-                {
-                    last_run_summaries_.push_back(pass_summary {
-                        id,
-                        false,
-                        true,
-                        false,
-                        std::nullopt,
-                        std::nullopt,
-                        std::nullopt,
-                    });
-                    continue;
-                }
-
-                if (!is_proof_format_compatible(id))
-                {
-                    last_run_summaries_.push_back(pass_summary {
-                        id,
-                        false,
-                        false,
-                        true,
-                        std::nullopt,
-                        std::nullopt,
-                        std::nullopt,
-                    });
-                    continue;
-                }
-
-                const auto clause_count_before = clause_count_snapshot();
-                run_pass(id);
-                const auto clause_count_after = clause_count_snapshot();
-                ++executed_pass_count_;
-
-                std::optional<bool> pass_was_effective {std::nullopt};
-                if (clause_count_before.has_value() && clause_count_after.has_value())
-                    pass_was_effective = *clause_count_after < *clause_count_before;
-                profile_selector_.record_pass_effectiveness(id, pass_was_effective);
-                last_run_summaries_.push_back(pass_summary {
-                    id,
-                    true,
-                    false,
-                    false,
-                    clause_count_before,
-                    clause_count_after,
-                    pass_was_effective,
-                });
-            }
-
-            profile_selector_.update_selection_policy();
-        }
-
-        /// @brief Enables a named simplification pass for subsequent pipeline runs.
-        /// @param pass_name Identifier of the pass to enable.
+        /// @brief Enables one simplification pass for subsequent pipeline runs.
+        /// @param id Pass to enable.
         /// @throws None (noexcept).
-        void enable_pass(const std::string_view pass_name) noexcept
-        {
-            const auto id = pass_id_from_name(pass_name);
-            if (!id.has_value())
-                return;
-            enable_pass(id.value());
-        }
+        void enable_pass(const pass_id_t id) noexcept;
 
-        void enable_pass(const pass_id id) noexcept
-        {
-            const auto index = static_cast<std::size_t>(id);
-            const auto bit = std::uint64_t {1u} << index;
-            if (index < pass_count && (enabled_pass_mask_ & bit) == 0u)
-            {
-                enabled_pass_mask_ |= bit;
-                ++enabled_pass_count_;
-            }
-        }
-
-        /// @brief Disables a named simplification pass for subsequent pipeline runs.
-        /// @param pass_name Identifier of the pass to disable.
+        /// @brief Disables one simplification pass for subsequent pipeline runs.
+        /// @param id Pass to disable.
         /// @throws None (noexcept).
-        void disable_pass(const std::string_view pass_name) noexcept
-        {
-            const auto id = pass_id_from_name(pass_name);
-            if (id.has_value())
-                disable_pass(id.value());
-        }
-
-        void disable_pass(const pass_id id) noexcept
-        {
-            const auto index = static_cast<std::size_t>(id);
-            if (index < pass_count)
-            {
-                const auto bit = std::uint64_t {1u} << index;
-                if ((enabled_pass_mask_ & bit) != 0u)
-                {
-                    enabled_pass_mask_ &= ~bit;
-                    --enabled_pass_count_;
-                }
-            }
-        }
+        void disable_pass(const pass_id_t id) noexcept;
 
         /// @brief Checks whether the pipeline should abort early due to termination or memory pressure.
         /// @return True if the pipeline should stop before running further passes.
@@ -431,177 +266,19 @@ namespace kmx::sat::simplify::scheduler
         const simplify::preprocessing_profile_selector& profile_selector() const noexcept { return profile_selector_; }
 
     private:
-        static constexpr std::uint32_t pass_name_hash(const std::string_view name) noexcept
-        {
-            std::uint32_t hash {2166136261u};
-            for (const auto character: name)
-            {
-                hash ^= static_cast<std::uint8_t>(character);
-                hash *= 16777619u;
-            }
-            return hash;
-        }
+        std::optional<std::size_t> clause_count_snapshot() const noexcept;
 
-        static constexpr std::optional<pass_id> pass_id_from_name(const std::string_view name) noexcept
-        {
-            const auto hash = pass_name_hash(name);
-            std::optional<pass_id> candidate {};
-            switch (hash)
-            {
-                case 0xb70710c1u:
-                    candidate = pass_id::transitive_reducer;
-                    break;
-                case 0xda4c4018u:
-                    candidate = pass_id::decomposition;
-                    break;
-                case 0xd6a79702u:
-                    candidate = pass_id::probing;
-                    break;
-                case 0x5ef40fb1u:
-                    candidate = pass_id::forward_subsumer;
-                    break;
-                case 0x5a5d6eb3u:
-                    candidate = pass_id::blocked;
-                    break;
-                case 0xf6358681u:
-                    candidate = pass_id::covered;
-                    break;
-                case 0xff54b66au:
-                    candidate = pass_id::bounded;
-                    break;
-                case 0x029402afu:
-                    candidate = pass_id::fast;
-                    break;
-                case 0x9a6bf24au:
-                    candidate = pass_id::instantiation;
-                    break;
-                case 0x587fb7f6u:
-                    candidate = pass_id::factorizer;
-                    break;
-                case 0x1660eb12u:
-                    candidate = pass_id::gate;
-                    break;
-                case 0x60fe7efau:
-                    candidate = pass_id::congruence;
-                    break;
-                case 0x1171d8a3u:
-                    candidate = pass_id::vivifier;
-                    break;
-                case 0x518432e3u:
-                    candidate = pass_id::sweep;
-                    break;
-                default:
-                    return {};
-            }
-            if (pass_name(candidate.value()) == name)
-                return candidate;
-            return {};
-        }
-
-        std::optional<std::size_t> clause_count_snapshot() const noexcept
-        {
-            if (clause_database_ == nullptr)
-                return {};
-
-            const auto stats = clause_database_->stats_snapshot();
-            return stats.irredundant_count + stats.redundant_count;
-        }
-
-        bool is_enabled(const pass_id id) const noexcept
+        bool is_enabled(const pass_id_t id) const noexcept
         {
             const auto index = static_cast<std::size_t>(id);
-            return index < pass_count && (enabled_pass_mask_ & (std::uint64_t {1u} << index)) != 0u;
+            return (index < pass_count) && ((enabled_pass_mask_ & (std::uint64_t {1u} << index)) != 0u);
         }
 
-        bool is_proof_format_compatible(const pass_id id) const noexcept
-        {
-            if (proof_manager_ == nullptr || !proof_manager_->has_enabled_formats())
-                return true;
+        bool is_proof_format_compatible(const pass_id_t id) const noexcept;
 
-            if (id != pass_id::gate && id != pass_id::congruence)
-                return true;
+        void run_pass(const pass_id_t id) noexcept;
 
-            // Conservative gating: these passes currently rely on native gate-level reasoning support.
-            return proof_manager_->has_enabled_format("veripb");
-        }
-
-        void run_pass(const pass_id id) noexcept
-        {
-            switch (id)
-            {
-                case pass_id::transitive_reducer:
-                    transitive_reducer_.run();
-                    transitive_reducer_.prune_binary_edges();
-                    transitive_reducer_.report_removed_edges();
-                    return;
-                case pass_id::decomposition:
-                    decomposition_.run_scc();
-                    decomposition_.find_equivalences();
-                    decomposition_.emit_substitutions();
-                    decomposition_substitutor_.rewrite_clauses();
-                    decomposition_substitutor_.rewrite_watches();
-                    decomposition_substitutor_.rewrite_external_mapping();
-                    return;
-                case pass_id::probing:
-                    probing_.run_failed_literal_probing();
-                    for (const auto candidate: probing_.backbone_candidates())
-                    {
-                        backbone_.record_candidate(candidate);
-                        backbone_.confirm_candidate(candidate);
-                        backbone_.emit_unit_fact(candidate);
-                    }
-                    return;
-                case pass_id::forward_subsumer:
-                    forward_subsumer_.run();
-                    return;
-                case pass_id::blocked:
-                    blocked_.run();
-                    return;
-                case pass_id::covered:
-                    covered_.run();
-                    return;
-                case pass_id::bounded:
-                    bounded_.run();
-                    return;
-                case pass_id::fast:
-                    fast_.run_fast_round();
-                    return;
-                case pass_id::instantiation:
-                    instantiation_.run();
-                    return;
-                case pass_id::factorizer:
-                    factorizer_.run();
-                    return;
-                case pass_id::gate:
-                {
-                    auto& gate_extractor = congruence_.gate_extractor();
-                    gate_extractor.clear();
-                    gate_extractor.find_and_gate();
-                    gate_extractor.find_xor_gate();
-                    gate_extractor.find_ite_gate();
-                    gate_extractor.find_definition_gate();
-                    gate_extractor.materialize_gate_summary();
-                    return;
-                }
-                case pass_id::congruence:
-                    congruence_.run();
-                    return;
-                case pass_id::vivifier:
-                    vivifier_.run();
-                    return;
-                case pass_id::sweep:
-                    sweep_.build_micro_instance();
-                    sweep_.run();
-                    sweep_.extract_backbone();
-                    sweep_.extract_equivalences();
-                    sweep_.transfer_facts();
-                    return;
-            }
-            /* unreachable: every pass_id is handled above */
-            return;
-        }
-
-        static constexpr std::size_t pass_count {static_cast<std::size_t>(pass_id::sweep) + 1u};
+        static constexpr std::size_t pass_count {static_cast<std::size_t>(pass_id_t::sweep) + 1u};
         std::uint64_t enabled_pass_mask_ {};
         std::size_t enabled_pass_count_ {};
         cdcl::clause::database* clause_database_ {};

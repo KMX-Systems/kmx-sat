@@ -17,35 +17,35 @@ namespace kmx::sat::cdcl
         using namespace kmx::sat::cdcl;
 
         store::assignment assignment;
-        assignment.set_current_level(1);
-        assignment.set_current_trail_position(0);
-        assignment.assign(literal {variable {1}, false}, {});
-        REQUIRE(assignment.value_of(variable {1}).has_value());
-        REQUIRE(assignment.level_of(variable {1}) == 1);
+        assignment.set_current_level(1u);
+        assignment.set_current_trail_position(0u);
+        assignment.assign(literal {variable {1u}, false}, {});
+        REQUIRE(assignment.value_of(variable {1u}).has_value());
+        REQUIRE(assignment.level_of(variable {1u}) == 1u);
 
-        assignment.unassign_from(variable {1});
-        REQUIRE(!assignment.value_of(variable {1}).has_value());
+        assignment.unassign_from(variable {1u});
+        REQUIRE(!assignment.value_of(variable {1u}).has_value());
 
         store::phase phase;
-        phase.set_saved_phase(variable {2}, true);
-        REQUIRE(phase.saved_phase(variable {2}));
+        phase.set_saved_phase(variable {2u}, true);
+        REQUIRE(phase.saved_phase(variable {2u}));
 
         store::assumption assumptions;
-        assumptions.push(literal {variable {3}, true});
-        REQUIRE(assumptions.size() == 1);
+        assumptions.push(literal {variable {3u}, true});
+        REQUIRE(assumptions.size() == 1u);
 
         trail trail_state;
-        trail_state.push(literal {variable {4}, false});
-        trail_state.push(literal {variable {5}, true});
-        REQUIRE(trail_state.current_head() == 2);
-        const literal expected_literal {variable {5}, true};
-        REQUIRE(trail_state.literal_at(1).raw() == expected_literal.raw());
+        trail_state.push(literal {variable {4u}, false});
+        trail_state.push(literal {variable {5u}, true});
+        REQUIRE(trail_state.current_head() == 2u);
+        const literal expected_literal {variable {5u}, true};
+        REQUIRE(trail_state.literal_at(1u).raw() == expected_literal.raw());
 
         stack::decision_frame frames;
-        frames.push_frame(literal {variable {6}, false});
-        REQUIRE(frames.current_level() == 1);
-        const literal expected_decision {variable {6}, false};
-        REQUIRE(frames.decision_literal(1).raw() == expected_decision.raw());
+        frames.push_frame(literal {variable {6u}, false});
+        REQUIRE(frames.current_level() == 1u);
+        const literal expected_decision {variable {6u}, false};
+        REQUIRE(frames.decision_literal(1u).raw() == expected_decision.raw());
 
         // removed std::cout: "trail state test passed\n";
     }

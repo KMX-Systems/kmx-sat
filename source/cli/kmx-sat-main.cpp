@@ -44,7 +44,7 @@ static int read_dimacs_cnf(const fs::path& cnf_file, kmx::sat::solver& solver, c
     {
         char chunk[65536];
         std::size_t got {};
-        while ((got = std::fread(chunk, 1, sizeof(chunk), file)) != 0u)
+        while ((got = std::fread(chunk, 1u, sizeof(chunk), file)) != 0u)
             text.insert(text.end(), chunk, chunk + got);
     }
     std::fclose(file);
@@ -53,8 +53,8 @@ static int read_dimacs_cnf(const fs::path& cnf_file, kmx::sat::solver& solver, c
 
     const char* cursor = text.data();
     const char* const end = text.data() + text.size();
-    const auto is_space = [](const char ch) noexcept { return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n'; };
-    const auto is_digit = [](const char ch) noexcept { return ch >= '0' && ch <= '9'; };
+    const auto is_space = [](const char ch) noexcept { return (ch == ' ') || (ch == '\t') || (ch == '\r') || (ch == '\n'); };
+    const auto is_digit = [](const char ch) noexcept { return (ch >= '0') && (ch <= '9'); };
     std::vector<kmx::sat::literal> clause;
     clause.reserve(64u);
 
@@ -68,7 +68,7 @@ static int read_dimacs_cnf(const fs::path& cnf_file, kmx::sat::solver& solver, c
         }
         if (ch == 'c')
         {
-            while (cursor < end && *cursor != '\n')
+            while ((cursor < end) && (*cursor != '\n'))
                 ++cursor;
             continue;
         }
@@ -79,14 +79,14 @@ static int read_dimacs_cnf(const fs::path& cnf_file, kmx::sat::solver& solver, c
         if (ch == 'p')
         {
             ++cursor;
-            while (cursor < end && *cursor != '\n')
+            while ((cursor < end) && (*cursor != '\n'))
             {
-                if (*cursor == 'c' && cursor + 2 < end && cursor[1] == 'n' && cursor[2] == 'f')
+                if ((*cursor == 'c') && (cursor + 2 < end) && (cursor[1] == 'n') && (cursor[2] == 'f'))
                 {
                     cursor += 3;
-                    while (cursor < end && (*cursor == ' ' || *cursor == '\t'))
+                    while ((cursor < end) && (*cursor == ' ' || *cursor == '\t'))
                         ++cursor;
-                    int vars = 0;
+                    int vars {};
                     while (is_digit(*cursor))
                     {
                         vars = vars * 10 + (*cursor - '0');
@@ -120,7 +120,7 @@ static int read_dimacs_cnf(const fs::path& cnf_file, kmx::sat::solver& solver, c
             ++cursor;
             continue;
         }
-        int val = 0;
+        int val {};
         while (is_digit(*cursor))
         {
             val = val * 10 + (*cursor - '0');
@@ -137,7 +137,7 @@ static int read_dimacs_cnf(const fs::path& cnf_file, kmx::sat::solver& solver, c
         {
             clause.emplace_back(kmx::sat::variable {static_cast<kmx::sat::variable::index_t>(val)}, sign < 0);
             if (retained != nullptr)
-                retained->literals.push_back(sign < 0 ? -val : val);
+                retained->literals.push_back((sign < 0) ? -val : val);
         }
     }
     // A last clause without its terminating zero stays pending, exactly as it did when literals were added one by
@@ -158,14 +158,14 @@ static int read_dimacs_cnf(const fs::path& cnf_file, kmx::sat::solver& solver, c
 static std::vector<std::int8_t> model_values(const std::span<const kmx::sat::literal> model,
                                              const std::int32_t declared_variable_count) noexcept(false)
 {
-    const auto declared_bound = declared_variable_count > 0 ? static_cast<std::size_t>(declared_variable_count) : 0u;
-    const auto bound = model.size() > declared_bound ? model.size() : declared_bound;
+    const auto declared_bound = (declared_variable_count > 0) ? static_cast<std::size_t>(declared_variable_count) : 0u;
+    const auto bound = (model.size() > declared_bound) ? model.size() : declared_bound;
 
     std::vector<std::int8_t> values(bound + 1u, std::int8_t {1});
     for (const auto lit: model)
     {
         const auto index = static_cast<std::size_t>(lit.variable_of().index());
-        if (index != 0u && index < values.size())
+        if ((index != 0u) && (index < values.size()))
             values[index] = lit.is_negated() ? std::int8_t {0} : std::int8_t {1};
     }
 
@@ -180,7 +180,7 @@ static std::vector<std::int8_t> model_values(const std::span<const kmx::sat::lit
 static std::size_t first_unsatisfied_clause(const cnf_input& cnf, const std::vector<std::int8_t>& values) noexcept
 {
     std::size_t clause_index = 1u;
-    bool satisfied = false;
+    bool satisfied {};
 
     for (const auto dimacs_literal: cnf.literals)
     {
@@ -196,8 +196,8 @@ static std::size_t first_unsatisfied_clause(const cnf_input& cnf, const std::vec
         if (satisfied)
             continue;
 
-        const auto index = static_cast<std::size_t>(dimacs_literal < 0 ? -dimacs_literal : dimacs_literal);
-        if (index < values.size() && values[index] == (dimacs_literal > 0 ? std::int8_t {1} : std::int8_t {0}))
+        const auto index = static_cast<std::size_t>((dimacs_literal < 0) ? -dimacs_literal : dimacs_literal);
+        if ((index < values.size()) && (values[index] == ((dimacs_literal > 0) ? std::int8_t {1} : std::int8_t {0})))
             satisfied = true;
     }
 
@@ -215,7 +215,7 @@ static void print_model(const std::vector<std::int8_t>& values) noexcept(false)
     for (std::size_t index = 1u; index < values.size(); ++index)
     {
         const auto signed_index = static_cast<std::int64_t>(index);
-        const auto token = std::to_string(values[index] == 0 ? -signed_index : signed_index);
+        const auto token = std::to_string((values[index] == 0) ? -signed_index : signed_index);
         if (line.size() + token.size() + 1u > max_line_width)
         {
             std::cout << line << '\n';
@@ -255,6 +255,11 @@ static void print_usage(const char* const program) noexcept
               << "  --local-search-flips-per-variable <n>  Flip budget of the opening walk (0 disables local search).\n"
               << "  --local-search-effort-percent <n>  Share of search effort spent on later walks (0 disables them).\n"
               << "  --reduction-fraction-percent <n>   Percentage of ranked learned clauses to drop.\n"
+              << "  --enabled-pass-mask <n>            Simplification pass bitmask (0 = scheduler default).\n"
+              << "  --glue-restart-threshold-percent <n>  Glue-EMA restart ratio (0 disables; otherwise >= 101).\n"
+              << "  --activity-retention-threshold-percent <n>  Activity above which a clause survives reduction.\n"
+              << "  --decision-conflict-maintenance-interval <n>  EVSIDS renormalization cadence in conflicts.\n"
+              << "  --chb-enabled <0|1>                Toggle the CHB heuristic (accepted, currently inert).\n"
               << "  --no-model                         Suppress the `v` line on a satisfiable result.\n"
               << "  --no-verify                        Skip the independent model check before printing.\n"
               << "  -h, --help                         Show this message.\n";
@@ -268,7 +273,7 @@ int main(int argc, char* argv[])
     for (int index = 1; index < argc; ++index)
     {
         const std::string option = argv[index];
-        if (option == "--help" || option == "-h")
+        if ((option == "--help") || (option == "-h"))
         {
             print_usage(argv[0]);
             return 0;
@@ -309,9 +314,9 @@ int main(int argc, char* argv[])
     for (int index = 2; index < argc; ++index)
     {
         const std::string option = argv[index];
-        if (option == "--no-model" || option == "--no-verify")
+        if ((option == "--no-model") || (option == "--no-verify"))
             continue;
-        else if (option == "--assume" && index + 1 < argc)
+        else if ((option == "--assume") && (index + 1 < argc))
         {
             const int value = std::atoi(argv[++index]);
             if (value == 0)
@@ -321,34 +326,34 @@ int main(int argc, char* argv[])
             }
             request.assumptions.emplace_back(kmx::sat::variable(static_cast<kmx::sat::variable::index_t>(std::abs(value))), value < 0);
         }
-        else if (option == "--decision-limit" && index + 1 < argc)
+        else if ((option == "--decision-limit") && (index + 1 < argc))
             request.decision_limit = std::strtoull(argv[++index], nullptr, 10);
-        else if (option == "--conflict-limit" && index + 1 < argc)
+        else if ((option == "--conflict-limit") && (index + 1 < argc))
             request.conflict_limit = std::strtoull(argv[++index], nullptr, 10);
-        else if (option == "--restart-interval" && index + 1 < argc)
-            solver.set_option("restart_interval", std::strtoull(argv[++index], nullptr, 10));
-        else if (option == "--decision-restart-interval" && index + 1 < argc)
-            solver.set_option("decision_restart_interval", std::strtoull(argv[++index], nullptr, 10));
-        else if (option == "--enabled-pass-mask" && index + 1 < argc)
-            solver.set_option("enabled_pass_mask", std::strtoull(argv[++index], nullptr, 10));
-        else if (option == "--reduction-interval" && index + 1 < argc)
-            solver.set_option("reduction_interval", std::strtoull(argv[++index], nullptr, 10));
-        else if (option == "--inprocess-conflict-window" && index + 1 < argc)
-            solver.set_option("inprocess_conflict_window", std::strtoull(argv[++index], nullptr, 10));
-        else if (option == "--local-search-flips-per-variable" && index + 1 < argc)
-            solver.set_option("local_search_flips_per_variable", std::strtoull(argv[++index], nullptr, 10));
-        else if (option == "--local-search-effort-percent" && index + 1 < argc)
-            solver.set_option("local_search_effort_percent", std::strtoull(argv[++index], nullptr, 10));
-        else if (option == "--decision-conflict-maintenance-interval" && index + 1 < argc)
-            solver.set_option("decision_conflict_maintenance_interval", std::strtoull(argv[++index], nullptr, 10));
-        else if (option == "--reduction-fraction-percent" && index + 1 < argc)
-            solver.set_option("reduction_fraction_percent", std::strtoull(argv[++index], nullptr, 10));
-        else if (option == "--glue-restart-threshold-percent" && index + 1 < argc)
-            solver.set_option("glue_restart_threshold_percent", std::strtoull(argv[++index], nullptr, 10));
-        else if (option == "--activity-retention-threshold-percent" && index + 1 < argc)
-            solver.set_option("activity_retention_threshold_percent", std::strtoull(argv[++index], nullptr, 10));
-        else if (option == "--chb-enabled" && index + 1 < argc)
-            solver.set_option("chb_enabled", std::strtoull(argv[++index], nullptr, 10));
+        else if ((option == "--restart-interval") && (index + 1 < argc))
+            solver.set_option(kmx::sat::option_id::restart_interval, std::strtoull(argv[++index], nullptr, 10));
+        else if ((option == "--decision-restart-interval") && (index + 1 < argc))
+            solver.set_option(kmx::sat::option_id::decision_restart_interval, std::strtoull(argv[++index], nullptr, 10));
+        else if ((option == "--enabled-pass-mask") && (index + 1 < argc))
+            solver.set_option(kmx::sat::option_id::enabled_pass_mask, std::strtoull(argv[++index], nullptr, 10));
+        else if ((option == "--reduction-interval") && (index + 1 < argc))
+            solver.set_option(kmx::sat::option_id::reduction_interval, std::strtoull(argv[++index], nullptr, 10));
+        else if ((option == "--inprocess-conflict-window") && (index + 1 < argc))
+            solver.set_option(kmx::sat::option_id::inprocess_conflict_window, std::strtoull(argv[++index], nullptr, 10));
+        else if ((option == "--local-search-flips-per-variable") && (index + 1 < argc))
+            solver.set_option(kmx::sat::option_id::local_search_flips_per_variable, std::strtoull(argv[++index], nullptr, 10));
+        else if ((option == "--local-search-effort-percent") && (index + 1 < argc))
+            solver.set_option(kmx::sat::option_id::local_search_effort_percent, std::strtoull(argv[++index], nullptr, 10));
+        else if ((option == "--decision-conflict-maintenance-interval") && (index + 1 < argc))
+            solver.set_option(kmx::sat::option_id::decision_conflict_maintenance_interval, std::strtoull(argv[++index], nullptr, 10));
+        else if ((option == "--reduction-fraction-percent") && (index + 1 < argc))
+            solver.set_option(kmx::sat::option_id::reduction_fraction_percent, std::strtoull(argv[++index], nullptr, 10));
+        else if ((option == "--glue-restart-threshold-percent") && (index + 1 < argc))
+            solver.set_option(kmx::sat::option_id::glue_restart_threshold_percent, std::strtoull(argv[++index], nullptr, 10));
+        else if ((option == "--activity-retention-threshold-percent") && (index + 1 < argc))
+            solver.set_option(kmx::sat::option_id::activity_retention_threshold_percent, std::strtoull(argv[++index], nullptr, 10));
+        else if ((option == "--chb-enabled") && (index + 1 < argc))
+            solver.set_option(kmx::sat::option_id::chb_enabled, std::strtoull(argv[++index], nullptr, 10));
         else
         {
             std::cerr << "Error: unknown or incomplete option: " << option << "\n";
@@ -363,7 +368,8 @@ int main(int argc, char* argv[])
               << " learned_clause_glue_samples=" << statistics.learned_clause_glue_samples
               << " reduction_passes=" << statistics.reduction_passes << " reduced_clauses=" << statistics.reduced_clauses
               << " deleted_clauses=" << statistics.deleted_clauses << " probes=" << statistics.probes
-              << " probe_units=" << statistics.probe_units << " walk_flips=" << statistics.walk_flips << " proof_events=" << solver.proof_buffered_event_count()
+              << " probe_units=" << statistics.probe_units << " walk_flips=" << statistics.walk_flips
+              << " proof_events=" << solver.proof_buffered_event_count()
               << " proof_buffered_payload_bytes=" << solver.proof_buffered_payload_bytes() << "\n";
 
     switch (result.status_of())
@@ -376,8 +382,8 @@ int main(int argc, char* argv[])
                 const auto unsatisfied_clause = first_unsatisfied_clause(cnf, values);
                 if (unsatisfied_clause != 0u)
                 {
-                    std::cerr << "Error: reported model does not satisfy clause " << unsatisfied_clause
-                              << " of " << cnf_file << "; refusing to emit an invalid model\n";
+                    std::cerr << "Error: reported model does not satisfy clause " << unsatisfied_clause << " of " << cnf_file
+                              << "; refusing to emit an invalid model\n";
                     std::cout << "s UNKNOWN\n";
                     return 1;
                 }

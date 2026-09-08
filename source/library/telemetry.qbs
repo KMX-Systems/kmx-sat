@@ -18,8 +18,20 @@ StaticLibrary {
         files: [
             "ema_tracker.hpp",
             "logging_facade.hpp",
+            "phase_id.hpp",
             "profile_clock.hpp",
             "report_formatter.hpp",
+        ]
+    }
+    Group {
+        name: "src-telemetry"
+        prefix: "src/kmx/sat/telemetry/"
+        files: [
+            "logging_facade.cpp",
+            "profile_clock.cpp",
+            "report_formatter.cpp",
+            "solver_options.cpp",
+            "solver_statistics.cpp",
         ]
     }
     cpp.cxxLanguageVersion: "c++26"

@@ -3,13 +3,11 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <array>
     #include <cstdint>
     #include <expected>
-    #include <functional>
-    #include <string>
-    #include <string_view>
-    #include <unordered_map>
 #endif
+#include <kmx/sat/option_id.hpp>
 
 namespace kmx::sat::telemetry
 {
@@ -18,9 +16,9 @@ namespace kmx::sat::telemetry
     /// @details
     /// `solver_options` is the single reflection-ready store for every tunable value across the solver (restart
     /// intervals, EVSIDS decay, enabled simplification passes, memory ceilings, and so on): `set`/`get` provide
-    /// direct name/value access, `load_profile` applies a predefined bundle of values in one call (for example a
-    /// competition-mode profile versus a library-embedding profile), and `validate` checks the whole option set for
-    /// range violations, unknown names, features unsupported by the current build, and inter-option dependency
+    /// direct access to one `option_id`, `load_profile` applies a predefined bundle of values in one call (for
+    /// example a competition-mode profile versus a library-embedding profile), and `validate` checks the whole
+    /// option set for range violations, features unsupported by the current build, and inter-option dependency
     /// conflicts, reported through `std::expected` rather than exceptions since option configuration is an
     /// expected-to-sometimes-fail operation rather than a programming error. `iterate_descriptors` (declared in the
     /// plan for future Reflection-based descriptor generation) exposes the option set's metadata.
@@ -34,7 +32,7 @@ namespace kmx::sat::telemetry
         {
             /// @brief A numeric option value falls outside its permitted range.
             out_of_range,
-            /// @brief The requested option name is not recognized.
+            /// @brief The requested option is not recognized by this build.
             unknown_option,
             /// @brief The requested option is feature-gated and not available in the current build.
             unsupported_in_baseline_build,
@@ -46,37 +44,23 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         solver_options() noexcept = default;
 
-        /// @brief Sets one numeric option by name, without immediate cross-option validation.
-        /// @param name Option identifier.
+        /// @brief Sets one numeric option, without immediate cross-option validation.
+        /// @param id Option to assign.
         /// @param value Option value to assign.
         /// @throws None (noexcept).
-        void set(const std::string_view name, const std::int64_t value) noexcept { values_[std::string {name}] = value; }
+        void set(const option_id id, const std::int64_t value) noexcept { values_[static_cast<std::size_t>(id)] = value; }
 
-        /// @brief Returns the current value of one option by name.
-        /// @param name Option identifier.
-        /// @return Current option value.
+        /// @brief Returns the current value of one option.
+        /// @param id Option to read.
+        /// @return Current option value, zero when the option was never set.
         /// @throws None (noexcept).
-        std::int64_t get(const std::string_view name) const noexcept
-        {
-            if (const auto it = values_.find(std::string {name}); it != values_.end())
-                return it->second;
-            return 0;
-        }
+        std::int64_t get(const option_id id) const noexcept { return values_[static_cast<std::size_t>(id)]; }
 
-        /// @brief Applies a predefined bundle of option values identified by profile name.
-        /// @param profile_name Name of the profile to load.
+        /// @brief Applies a predefined bundle of option values.
+        /// @param id Configuration profile to load.
         /// @return Success, or a `validation_error` describing why the profile could not be applied.
         /// @throws None (noexcept).
-        std::expected<void, validation_error> load_profile(const std::string_view profile_name) noexcept
-        {
-            if (profile_name == "default")
-            {
-                values_["max_conflicts"] = 64;
-                values_["max_decisions"] = 2048;
-                return {};
-            }
-            return std::unexpected(validation_error::unknown_option);
-        }
+        std::expected<void, validation_error> load_profile(const configuration_profile_id id) noexcept;
 
         /// @brief Validates the entire current option set for range, dependency, and feature-availability issues.
         /// @return Success, or the first `validation_error` encountered.
@@ -84,23 +68,6 @@ namespace kmx::sat::telemetry
         std::expected<void, validation_error> validate() const noexcept { return {}; }
 
     private:
-        struct string_hash final
-        {
-            using is_transparent = void;
-
-            std::size_t operator()(const std::string_view value) const noexcept { return std::hash<std::string_view> {}(value); }
-
-            std::size_t operator()(const std::string& value) const noexcept { return std::hash<std::string_view> {}(value); }
-        };
-
-        struct string_equal final
-        {
-            using is_transparent = void;
-
-            bool operator()(const std::string_view left, const std::string_view right) const noexcept { return left == right; }
-            bool operator()(const std::string& left, const std::string& right) const noexcept { return left == right; }
-        };
-
-        std::unordered_map<std::string, std::int64_t, string_hash, string_equal> values_ {};
+        std::array<std::int64_t, option_count> values_ {};
     };
 }

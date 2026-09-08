@@ -20,10 +20,10 @@ namespace kmx::sat
         solver.attach_proof_sink(sink);
 
         solver.add_clause(
-            std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}});
-        solver.add_clause(std::array<literal, 1> {literal {variable {1u}, true}});
-        solver.add_clause(std::array<literal, 1> {literal {variable {2u}, true}});
-        solver.add_clause(std::array<literal, 1> {literal {variable {3u}, true}});
+            std::array<literal, 3u> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}});
+        solver.add_clause(std::array<literal, 1u> {literal {variable {1u}, true}});
+        solver.add_clause(std::array<literal, 1u> {literal {variable {2u}, true}});
+        solver.add_clause(std::array<literal, 1u> {literal {variable {3u}, true}});
 
         for (std::uint32_t episode {}; episode < 4u; ++episode)
         {
@@ -42,11 +42,11 @@ namespace kmx::sat
                 REQUIRE(!event.antecedent_ids.empty());
                 for (const auto antecedent: event.antecedent_ids)
                 {
-                    bool appeared_earlier = false;
+                    bool appeared_earlier {};
                     for (std::size_t prior {}; prior < index; ++prior)
                     {
-                        if ((events[prior].kind == proof::event_kind::add_original ||
-                             events[prior].kind == proof::event_kind::add_derived) &&
+                        if (((events[prior].kind == proof::event_kind::add_original) ||
+                             (events[prior].kind == proof::event_kind::add_derived)) &&
                             events[prior].clause_id.equals(antecedent))
                         {
                             appeared_earlier = true;
@@ -60,10 +60,10 @@ namespace kmx::sat
             solver.reset_session();
             REQUIRE(solver.proof_buffered_event_count() == 0u);
             solver.add_clause(
-                std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}});
-            solver.add_clause(std::array<literal, 1> {literal {variable {1u}, true}});
-            solver.add_clause(std::array<literal, 1> {literal {variable {2u}, true}});
-            solver.add_clause(std::array<literal, 1> {literal {variable {3u}, true}});
+                std::array<literal, 3u> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}});
+            solver.add_clause(std::array<literal, 1u> {literal {variable {1u}, true}});
+            solver.add_clause(std::array<literal, 1u> {literal {variable {2u}, true}});
+            solver.add_clause(std::array<literal, 1u> {literal {variable {3u}, true}});
         }
     }
 
@@ -74,7 +74,7 @@ namespace kmx::sat
         solver solver;
         solver.attach_proof_sink(sink);
 
-        const std::array<literal, 1> unit {literal {variable {71u}, false}};
+        const std::array<literal, 1u> unit {literal {variable {71u}, false}};
         solver.add_clause(unit);
 
         const auto sat_result = solver.solve(solve_request {});

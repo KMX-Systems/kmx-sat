@@ -14,6 +14,9 @@
 
 namespace kmx::sat::cdcl
 {
+    /// @brief External-to-internal variable mappings, in insertion order.
+    using variable_mapping_list_t = std::vector<std::pair<variable, variable>>;
+
     /// @brief e2i/i2e mapping and semantic stability of external variables.
     /// @details
     /// `variable_mapper` owns the external-to-internal (e2i) and internal-to-external (i2e) variable tables consumed
@@ -38,95 +41,32 @@ namespace kmx::sat::cdcl
         /// @param var External variable supplied by the caller.
         /// @return Internal variable identifier bound to `var`.
         /// @throws None (noexcept).
-        variable ensure_external_variable(const variable var) noexcept
-        {
-            const auto it = external_to_internal_.find(var.index());
-            if (it != external_to_internal_.end())
-                return it->second;
-
-            const variable internal {next_internal_index_};
-            ++next_internal_index_;
-            external_to_internal_[var.index()] = internal;
-            internal_to_external_[internal.index()] = var;
-            return internal;
-        }
+        variable ensure_external_variable(const variable var) noexcept;
 
         /// @brief Translates one external literal into its internal representation using the e2i table.
         /// @param lit External literal.
         /// @return Internal literal.
         /// @throws None (noexcept).
-        literal to_internal_literal(const literal lit) noexcept
-        {
-            const auto it = external_to_internal_.find(lit.variable_of().index());
-            if (it == external_to_internal_.end())
-                return lit;
-            return literal {it->second, lit.is_negated()};
-        }
+        literal to_internal_literal(const literal lit) noexcept;
 
         /// @brief Translates one internal literal into its external representation using the i2e table.
         /// @param lit Internal literal.
         /// @return External literal.
         /// @throws None (noexcept).
-        literal to_external_literal(const literal lit) noexcept
-        {
-            const auto it = internal_to_external_.find(lit.variable_of().index());
-            if (it == internal_to_external_.end())
-                return lit;
-            return literal {it->second, lit.is_negated()};
-        }
+        literal to_external_literal(const literal lit) noexcept;
 
         /// @brief Recomputes the e2i/i2e tables after `compaction_service` applies a variable permutation.
         /// @throws None (noexcept).
-        void rebuild_after_compaction() noexcept
-        {
-            if (external_to_internal_.empty())
-                return;
-
-            std::unordered_map<std::uint32_t, variable> rebuilt_external_to_internal = external_to_internal_;
-            std::unordered_map<std::uint32_t, variable> rebuilt_internal_to_external;
-            for (const auto& [external_index, internal_var]: rebuilt_external_to_internal)
-                rebuilt_internal_to_external[internal_var.index()] = variable {external_index};
-
-            external_to_internal_ = std::move(rebuilt_external_to_internal);
-            internal_to_external_ = std::move(rebuilt_internal_to_external);
-        }
+        void rebuild_after_compaction() noexcept;
 
         /// @brief Recomputes the e2i/i2e tables after applying an explicit internal-variable permutation.
         /// @param permutation Mapping from old internal variable indices to their new compacted identifiers.
         /// @throws None (noexcept).
-        void rebuild_after_compaction(const std::unordered_map<std::uint32_t, variable>& permutation) noexcept
-        {
-            if (external_to_internal_.empty())
-                return;
-
-            std::unordered_map<std::uint32_t, variable> rebuilt_external_to_internal = external_to_internal_;
-            std::unordered_map<std::uint32_t, variable> rebuilt_internal_to_external;
-            std::uint32_t highest_internal_index {internal_variable_base_};
-
-            for (auto& [external_index, internal_var]: rebuilt_external_to_internal)
-            {
-                if (const auto it = permutation.find(internal_var.index()); it != permutation.end())
-                    internal_var = it->second;
-
-                rebuilt_internal_to_external[internal_var.index()] = variable {external_index};
-                highest_internal_index = std::max(highest_internal_index, internal_var.index());
-            }
-
-            external_to_internal_ = std::move(rebuilt_external_to_internal);
-            internal_to_external_ = std::move(rebuilt_internal_to_external);
-            next_internal_index_ = highest_internal_index + 1u;
-        }
+        void rebuild_after_compaction(const std::unordered_map<std::uint32_t, variable>& permutation) noexcept;
 
         /// @brief Returns the currently known external-to-internal mapping entries.
         /// @return Snapshot of external variables paired with their internal identifiers.
-        std::vector<std::pair<variable, variable>> mapping_entries() const noexcept
-        {
-            std::vector<std::pair<variable, variable>> entries {};
-            entries.reserve(external_to_internal_.size());
-            for (const auto& [external_index, internal_var]: external_to_internal_)
-                entries.emplace_back(variable {external_index}, internal_var);
-            return entries;
-        }
+        variable_mapping_list_t mapping_entries() const noexcept;
 
         /// @brief Marks a variable inactive (for example melted or otherwise no longer part of the live problem)
         /// without discarding its identity mapping.

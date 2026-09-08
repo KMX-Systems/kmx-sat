@@ -18,7 +18,7 @@ namespace kmx::sat
 {
     TEST_CASE("live proof validation supports all registered tracer formats", "[sat]")
     {
-        using literal_array = std::array<literal, 2>;
+        using literal_array_t = std::array<literal, 2u>;
         const literal positive {variable {1u}, false};
         const literal negative {variable {1u}, true};
         const literal second {variable {2u}, false};
@@ -35,7 +35,7 @@ namespace kmx::sat
         proof::tracer::idrup idrup;
         proof::tracer::lidrup lidrup;
         proof::tracer::veripb veripb;
-        std::array<tracer_case, 6> tracers {
+        std::array<tracer_case, 6u> tracers {
             tracer_case {"drat", proof::tracer::view {drat}},     tracer_case {"lrat", proof::tracer::view {lrat}},
             tracer_case {"frat", proof::tracer::view {frat}},     tracer_case {"idrup", proof::tracer::view {idrup}},
             tracer_case {"lidrup", proof::tracer::view {lidrup}}, tracer_case {"veripb", proof::tracer::view {veripb}},
@@ -45,9 +45,9 @@ namespace kmx::sat
         {
             solver solver;
             solver.attach_proof_sink(tracer.sink);
-            solver.add_clause(literal_array {positive, second});
-            solver.add_clause(std::array<literal, 1> {negative});
-            solver.add_clause(std::array<literal, 1> {literal {variable {2u}, true}});
+            solver.add_clause(literal_array_t {positive, second});
+            solver.add_clause(std::array<literal, 1u> {negative});
+            solver.add_clause(std::array<literal, 1u> {literal {variable {2u}, true}});
 
             const auto result = solver.solve(solve_request {});
             REQUIRE(result.status_of() == solve_result::status::unsatisfiable);
@@ -60,7 +60,7 @@ namespace kmx::sat
             solver.reset_session();
             REQUIRE(solver.proof_buffered_event_count() == 0u);
 
-            solver.add_clause(std::array<literal, 1> {literal {variable {3u}, false}});
+            solver.add_clause(std::array<literal, 1u> {literal {variable {3u}, false}});
             const auto sat_result = solver.solve(solve_request {});
             REQUIRE(sat_result.status_of() == solve_result::status::satisfiable);
             REQUIRE(sat_result.proof_summary_of().proof_enabled);

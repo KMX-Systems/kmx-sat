@@ -66,7 +66,7 @@ namespace kmx::sat::cdcl
     TEST_CASE("decision engine uses conflict bump candidates without fallback variable", "[sat]")
     {
         engine::decision decision;
-        const std::array<variable, 3> bump_candidates {variable {21u}, variable {22u}, variable {23u}};
+        const std::array<variable, 3u> bump_candidates {variable {21u}, variable {22u}, variable {23u}};
 
         decision.notify_conflict_variables(bump_candidates);
         decision.set_next_variable(0u);
@@ -80,7 +80,7 @@ namespace kmx::sat::cdcl
     TEST_CASE("decision engine uses propagated variables without fallback variable", "[sat]")
     {
         engine::decision decision;
-        const std::array<variable, 2> propagated_variables {variable {31u}, variable {32u}};
+        const std::array<variable, 2u> propagated_variables {variable {31u}, variable {32u}};
 
         // Propagation makes variables selectable but must not rank them: an implied literal is not evidence that
         // the variable matters, and scoring every propagation flattens the ranking for the ones that do.
@@ -90,11 +90,11 @@ namespace kmx::sat::cdcl
         const auto candidate = decision.pick_decision_variable();
         REQUIRE(candidate.has_value());
         const auto propagated_only = candidate->variable_of().index();
-        REQUIRE((propagated_only == 31u || propagated_only == 32u));
+        REQUIRE(((propagated_only == 31u) || (propagated_only == 32u)));
         REQUIRE(decision.has_active_blend());
 
         // Conflict participation does rank, and outranks anything merely propagated.
-        const std::array<variable, 1> conflict_variables {variable {32u}};
+        const std::array<variable, 1u> conflict_variables {variable {32u}};
         decision.notify_conflict_variables(conflict_variables);
 
         const auto ranked = decision.pick_decision_variable();
@@ -105,10 +105,10 @@ namespace kmx::sat::cdcl
     TEST_CASE("decision engine weights short learned clauses more aggressively", "[sat]")
     {
         engine::decision decision;
-        const std::array<literal, 5> broad_clause {literal {variable {41u}, false}, literal {variable {42u}, false},
+        const std::array<literal, 5u> broad_clause {literal {variable {41u}, false}, literal {variable {42u}, false},
                                                    literal {variable {43u}, false}, literal {variable {44u}, false},
                                                    literal {variable {45u}, false}};
-        const std::array<literal, 2> short_clause {literal {variable {61u}, false}, literal {variable {62u}, false}};
+        const std::array<literal, 2u> short_clause {literal {variable {61u}, false}, literal {variable {62u}, false}};
 
         decision.notify_learned_clause(broad_clause);
         decision.notify_learned_clause(short_clause);
@@ -123,7 +123,7 @@ namespace kmx::sat::cdcl
     TEST_CASE("decision engine prioritizes asserting literal from learned clause", "[sat]")
     {
         engine::decision decision;
-        const std::array<literal, 3> learned_clause {literal {variable {91u}, true}, literal {variable {92u}, false},
+        const std::array<literal, 3u> learned_clause {literal {variable {91u}, true}, literal {variable {92u}, false},
                                                      literal {variable {93u}, false}};
 
         decision.notify_learned_clause(learned_clause);
@@ -137,7 +137,7 @@ namespace kmx::sat::cdcl
     TEST_CASE("decision engine reuses asserting literal polarity as saved phase", "[sat]")
     {
         engine::decision decision;
-        const std::array<literal, 2> learned_clause {literal {variable {101u}, true}, literal {variable {102u}, false}};
+        const std::array<literal, 2u> learned_clause {literal {variable {101u}, true}, literal {variable {102u}, false}};
 
         decision.notify_learned_clause(learned_clause);
         decision.set_next_variable(0u);
@@ -153,7 +153,7 @@ namespace kmx::sat::cdcl
         engine::decision decision;
 
         decision.notify_assignment_literal(literal {variable {121u}, true});
-        decision.notify_propagated_variables(std::array<variable, 1> {variable {121u}});
+        decision.notify_propagated_variables(std::array<variable, 1u> {variable {121u}});
         decision.set_next_variable(0u);
 
         const auto branch = decision.pick_branch_literal();
@@ -184,7 +184,7 @@ namespace kmx::sat::cdcl
     TEST_CASE("decision engine reuses conflict clause polarity as saved phase", "[sat]")
     {
         engine::decision decision;
-        const std::array<literal, 2> conflict_clause {literal {variable {151u}, true}, literal {variable {152u}, false}};
+        const std::array<literal, 2u> conflict_clause {literal {variable {151u}, true}, literal {variable {152u}, false}};
 
         decision.notify_conflict_clause(conflict_clause);
         decision.set_next_variable(0u);
@@ -198,7 +198,7 @@ namespace kmx::sat::cdcl
     TEST_CASE("decision engine ignores duplicate variable literals in conflict clause feedback", "[sat]")
     {
         engine::decision decision;
-        const std::array<literal, 3> conflict_clause {literal {variable {201u}, true}, literal {variable {201u}, false},
+        const std::array<literal, 3u> conflict_clause {literal {variable {201u}, true}, literal {variable {201u}, false},
                                                       literal {variable {202u}, false}};
 
         decision.notify_conflict_clause(conflict_clause);
@@ -213,7 +213,7 @@ namespace kmx::sat::cdcl
     TEST_CASE("decision engine ignores duplicate variables in conflict candidate feedback", "[sat]")
     {
         engine::decision decision;
-        const std::array<variable, 3> conflict_candidates {variable {211u}, variable {211u}, variable {212u}};
+        const std::array<variable, 3u> conflict_candidates {variable {211u}, variable {211u}, variable {212u}};
 
         decision.notify_conflict_variables(conflict_candidates);
         decision.set_next_variable(0u);
@@ -226,7 +226,7 @@ namespace kmx::sat::cdcl
     TEST_CASE("decision engine ignores duplicate propagated variables", "[sat]")
     {
         engine::decision decision;
-        const std::array<variable, 3> propagated_variables {variable {221u}, variable {221u}, variable {222u}};
+        const std::array<variable, 3u> propagated_variables {variable {221u}, variable {221u}, variable {222u}};
 
         decision.notify_assignment_literal(literal {variable {221u}, true});
         decision.notify_propagated_variables(propagated_variables);
@@ -249,7 +249,7 @@ namespace kmx::sat::cdcl
         decision.notify_assignment_literal(literal {variable {242u}, false});
         decision.set_next_variable(0u);
 
-        const std::array<variable, 1> conflict_variables {variable {241u}};
+        const std::array<variable, 1u> conflict_variables {variable {241u}};
         decision.notify_conflict_variables(conflict_variables);
 
         const auto branch = decision.pick_branch_literal();
@@ -263,7 +263,7 @@ namespace kmx::sat::cdcl
     TEST_CASE("decision engine skips non-selectable heuristic candidates", "[sat]")
     {
         engine::decision decision;
-        const std::array<literal, 2> learned_clause {literal {variable {251u}, false}, literal {variable {252u}, false}};
+        const std::array<literal, 2u> learned_clause {literal {variable {251u}, false}, literal {variable {252u}, false}};
 
         decision.notify_learned_clause(learned_clause);
         decision.set_next_variable(0u);
@@ -309,10 +309,10 @@ namespace kmx::sat::cdcl
         engine::decision decision;
         REQUIRE_FALSE(decision.chb_enabled());
 
-        decision.notify_conflict_variables(std::array<variable, 1> {variable {301u}});
-        decision.notify_conflict_variables(std::array<variable, 1> {variable {302u}});
-        decision.notify_conflict_variables(std::array<variable, 1> {variable {302u}});
-        decision.notify_conflict_variables(std::array<variable, 1> {variable {302u}});
+        decision.notify_conflict_variables(std::array<variable, 1u> {variable {301u}});
+        decision.notify_conflict_variables(std::array<variable, 1u> {variable {302u}});
+        decision.notify_conflict_variables(std::array<variable, 1u> {variable {302u}});
+        decision.notify_conflict_variables(std::array<variable, 1u> {variable {302u}});
         decision.set_next_variable(0u);
         decision.set_chb_enabled(true);
 

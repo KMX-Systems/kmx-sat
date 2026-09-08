@@ -71,128 +71,26 @@ namespace kmx::sat::cdcl
 
         /// @brief Runs the CDCL main loop for one solve episode until a terminal outcome is reached.
         /// @throws None (noexcept).
-        void run_search_epoch() noexcept
-        {
-            if (outcome_ != outcome::in_progress)
-                return;
-
-            const auto assumption_conflict = propagator_.propagate_assumptions();
-            if (assumption_conflict.valid())
-            {
-                handle_unsat();
-                return;
-            }
-
-            for (;;)
-            {
-                const auto conflict = propagator_.propagate();
-                if (conflict.valid())
-                {
-                    handle_conflict();
-                    if (outcome_ != outcome::in_progress)
-                        return;
-                    continue;
-                }
-
-                if (restart_controller_.should_restart())
-                {
-                    handle_restart();
-                    continue;
-                }
-
-                if (reduce_controller_.should_reduce())
-                {
-                    if (clause_database_ != nullptr)
-                    {
-                        reduce_controller_.select_reduction_candidates(*clause_database_);
-                        reduce_controller_.reduce_clauses(*clause_database_);
-                        reduce_controller_.flush_redundant(*clause_database_);
-                    }
-                    else
-                    {
-                        reduce_controller_.select_reduction_candidates();
-                        reduce_controller_.reduce_clauses();
-                        reduce_controller_.flush_redundant();
-                    }
-                    if (clause_database_ != nullptr)
-                        reduce_controller_.update_tiers(*clause_database_);
-                    else
-                        reduce_controller_.update_tiers();
-                    if (clause_database_ != nullptr)
-                        clause_database_->decay_quality();
-                }
-
-                const auto branch_literal = decision_engine_.pick_branch_literal();
-                if (!branch_literal.has_value())
-                {
-                    handle_sat();
-                    return;
-                }
-
-                restart_controller_.tick_decision();
-                ++decision_count_;
-                if (decision_limit_ != 0 && decision_count_ >= decision_limit_)
-                {
-                    handle_termination(termination_cause::decision_limit);
-                    return;
-                }
-                if (restart_controller_.should_restart())
-                    handle_restart();
-                return;
-            }
-        }
+        void run_search_epoch() noexcept;
 
         /// @brief Seeds the episode's assumptions from the active solve request before the main loop begins.
         /// @param request Solve request describing this episode's assumptions, limits, and mode flags.
         /// @throws None (noexcept).
-        void apply_assumptions(const solve_request& request) noexcept
-        {
-            assumptions_.assign(request.assumptions.begin(), request.assumptions.end());
-            propagator_.reset_episode_state();
-            propagator_.set_pending_assumption_count(assumptions_.size());
-            restart_controller_.reset();
-            reduce_controller_.reset();
-            conflict_limit_ = request.conflict_limit;
-            decision_limit_ = request.decision_limit;
-            conflict_count_ = 0;
-            decision_count_ = 0;
-            lean_learned_clause_count_ = 0u;
-            inprocess_epoch_notifications_ = 0u;
-            low_yield_inprocess_epoch_count_ = 0u;
-            low_yield_inprocess_streak_ = 0u;
-            deferred_inprocess_resync_count_ = 0u;
-            deferred_inprocess_streak_ = 0u;
-            termination_cause_ = termination_cause::none;
-            outcome_ = outcome::in_progress;
-        }
+        void apply_assumptions(const solve_request& request) noexcept;
 
         /// @brief Records one conflict on the lean search path: schedules, glue average, episode counter, limit.
         /// @details The in-core search engine does its own analysis and learning; this is the bookkeeping half of
         /// `finish_conflict_handling` without the heuristic engine it drives.
         /// @param glue Glue of the clause learned from this conflict, fed to the adaptive restart trigger.
         /// @throws None (noexcept).
-        void note_conflict(const std::uint32_t glue) noexcept
-        {
-            restart_controller_.tick_conflict();
-            restart_controller_.observe_glue(glue);
-            reduce_controller_.tick_conflict();
-            ++conflict_count_;
-            if (conflict_limit_ != 0 && conflict_count_ >= conflict_limit_)
-                handle_termination(termination_cause::conflict_limit);
-        }
+        void note_conflict(const std::uint32_t glue) noexcept;
 
         /// @brief Records one learned clause produced by the lean search path.
         void note_learned_clause() noexcept { ++lean_learned_clause_count_; }
 
         /// @brief Records one branching decision on the lean search path.
         /// @throws None (noexcept).
-        void note_decision() noexcept
-        {
-            restart_controller_.tick_decision();
-            ++decision_count_;
-            if (decision_limit_ != 0 && decision_count_ >= decision_limit_)
-                handle_termination(termination_cause::decision_limit);
-        }
+        void note_decision() noexcept;
 
         /// @brief Records a performed restart on the lean search path: counts it and re-arms the schedule.
         void note_restart() noexcept { restart_controller_.reset_after_inprocess(); }
@@ -218,12 +116,7 @@ namespace kmx::sat::cdcl
 
         /// @brief Handles a detected conflict: analyze, learn, backjump, and resume propagation.
         /// @throws None (noexcept).
-        void handle_conflict() noexcept
-        {
-            conflict_analyzer_.analyze();
-            conflict_analyzer_.build_resolution_chain();
-            finish_conflict_handling();
-        }
+        void handle_conflict() noexcept;
 
         /// @brief Handles a detected conflict using real implication-graph first-UIP resolution.
         /// @param trail_in_order Full assignment trail (decisions and implied literals) in chronological order.
@@ -234,21 +127,11 @@ namespace kmx::sat::cdcl
         /// @throws None (noexcept).
         void handle_conflict_via_resolution(const std::span<const literal> trail_in_order, const std::uint32_t current_level,
                                             const conflict_analyzer::level_lookup_t level_of,
-                                            const conflict_analyzer::reason_lookup_t reason_of, const void* context) noexcept
-        {
-            conflict_analyzer_.analyze_via_resolution(trail_in_order, current_level, level_of, reason_of, context);
-            conflict_analyzer_.build_resolution_chain();
-            finish_conflict_handling();
-        }
+                                            const conflict_analyzer::reason_lookup_t reason_of, const void* context) noexcept;
 
         /// @brief Handles a triggered restart: unwind to decision level zero and resume branching.
         /// @throws None (noexcept).
-        void handle_restart() noexcept
-        {
-            backtrack_engine_.backtrack_to_level(0);
-            decision_engine_.notify_restart();
-            restart_controller_.reset_after_inprocess();
-        }
+        void handle_restart() noexcept;
 
         /// @brief Handles the satisfiable terminal case (every variable consistently assigned).
         /// @throws None (noexcept).
@@ -334,16 +217,10 @@ namespace kmx::sat::cdcl
         }
 
         /// @brief Seeds saved branching polarities from a local-search assignment.
-        void seed_saved_phases(const std::span<const std::uint8_t> assignment) noexcept
-        {
-            decision_engine_.seed_saved_phases(assignment);
-        }
+        void seed_saved_phases(const std::span<const std::uint8_t> assignment) noexcept { decision_engine_.seed_saved_phases(assignment); }
 
         /// @brief Returns the saved branching polarities, indexed by variable.
-        [[nodiscard]] std::span<const std::uint8_t> saved_phases_view() const noexcept
-        {
-            return decision_engine_.saved_phases_view();
-        }
+        [[nodiscard]] std::span<const std::uint8_t> saved_phases_view() const noexcept { return decision_engine_.saved_phases_view(); }
 
         /// @brief Enables or disables the research-track CHB candidate source.
         void set_chb_enabled(const bool enabled) noexcept { decision_engine_.set_chb_enabled(enabled); }
@@ -358,7 +235,7 @@ namespace kmx::sat::cdcl
         std::uint32_t decision_chb_decay_count() const noexcept { return decision_engine_.chb_decay_count(); }
 
         /// @brief Returns configured decision maintenance intervals in conflict/conflict/restart order.
-        std::array<std::uint32_t, 3> decision_maintenance_intervals() const noexcept
+        std::array<std::uint32_t, 3u> decision_maintenance_intervals() const noexcept
         {
             return {decision_engine_.conflict_maintenance_interval(), decision_engine_.chb_decay_interval(),
                     decision_engine_.restart_decay_interval()};
@@ -434,67 +311,13 @@ namespace kmx::sat::cdcl
         /// @param fallback_variable Variable index staged into the current lightweight heuristic path.
         /// @return Selected branch literal, or `std::nullopt` if no candidate remains.
         /// @throws None (noexcept).
-        std::optional<literal> next_branch_literal(const std::uint32_t fallback_variable) noexcept
-        {
-            if (fallback_variable != 0u)
-                decision_engine_.set_next_variable(fallback_variable);
-            return decision_engine_.pick_branch_literal();
-        }
+        std::optional<literal> next_branch_literal(const std::uint32_t fallback_variable) noexcept;
 
         /// @brief Advances restart/reduction/decision bookkeeping and returns the next branch literal.
         /// @param fallback_variable Variable index staged into the current lightweight heuristic path.
         /// @return Selected branch literal, or `std::nullopt` if the episode terminated or no candidate remains.
         /// @throws None (noexcept).
-        std::optional<literal> take_branch_literal(const std::uint32_t fallback_variable) noexcept
-        {
-            if (outcome_ != outcome::in_progress)
-                return {};
-
-            if (restart_controller_.should_restart())
-                handle_restart();
-
-            if (reduce_controller_.should_reduce())
-            {
-                if (clause_database_ != nullptr)
-                {
-                    reduce_controller_.select_reduction_candidates(*clause_database_);
-                    reduce_controller_.reduce_clauses(*clause_database_);
-                    reduce_controller_.flush_redundant(*clause_database_);
-                }
-                else
-                {
-                    reduce_controller_.select_reduction_candidates();
-                    reduce_controller_.reduce_clauses();
-                    reduce_controller_.flush_redundant();
-                }
-                if (clause_database_ != nullptr)
-                    reduce_controller_.update_tiers(*clause_database_);
-                else
-                    reduce_controller_.update_tiers();
-                if (clause_database_ != nullptr)
-                    clause_database_->decay_quality();
-            }
-
-            if (fallback_variable != 0u)
-                decision_engine_.set_next_variable(fallback_variable);
-            const auto branch_literal = decision_engine_.pick_branch_literal();
-            if (!branch_literal.has_value())
-            {
-                // Only an exhausted candidate source with no caller-supplied fallback means every variable is
-                // assigned. When the caller passed a fallback it has already found an unassigned variable, so
-                // an empty pick is heuristic exhaustion and must not be recorded as a satisfying assignment.
-                if (fallback_variable == 0u)
-                    handle_sat();
-                return {};
-            }
-
-            restart_controller_.tick_decision();
-            ++decision_count_;
-            if (decision_limit_ != 0 && decision_count_ >= decision_limit_)
-                handle_termination(termination_cause::decision_limit);
-
-            return branch_literal;
-        }
+        std::optional<literal> take_branch_literal(const std::uint32_t fallback_variable) noexcept;
 
         /// @brief Returns the number of assumption-propagation calls executed so far.
         /// @return Number of assumption propagation calls.
@@ -598,35 +421,7 @@ namespace kmx::sat::cdcl
         /// @brief Notifies the coordinator that an inprocessing epoch has completed and reports structural yield.
         /// @param structural_gain Clauses removed by the epoch (zero means no structural reduction).
         /// @throws None (noexcept).
-        void notify_inprocess_epoch_completed(const counter_t structural_gain) noexcept
-        {
-            ++inprocess_epoch_notifications_;
-            if (structural_gain == 0u)
-            {
-                ++low_yield_inprocess_epoch_count_;
-                ++low_yield_inprocess_streak_;
-                if (low_yield_inprocess_streak_ >= 2u)
-                {
-                    if (deferred_inprocess_streak_ < max_deferred_inprocess_resync_streak)
-                    {
-                        ++deferred_inprocess_resync_count_;
-                        ++deferred_inprocess_streak_;
-                        return;
-                    }
-
-                    // Safety guard: force an eventual restart-controller resync so deferrals cannot starve forever.
-                    deferred_inprocess_streak_ = 0u;
-                    low_yield_inprocess_streak_ = 0u;
-                }
-            }
-            else
-            {
-                low_yield_inprocess_streak_ = 0u;
-                deferred_inprocess_streak_ = 0u;
-            }
-
-            restart_controller_.resynchronize_after_inprocess();
-        }
+        void notify_inprocess_epoch_completed(const counter_t structural_gain) noexcept;
 
         /// @brief Returns how many inprocess epoch completion notifications were observed.
         /// @return Total number of notifications.
@@ -643,40 +438,7 @@ namespace kmx::sat::cdcl
     private:
         /// @brief Shared post-analysis conflict handling: learn, backjump, heuristic feedback, and limit checks.
         /// @throws None (noexcept).
-        void finish_conflict_handling() noexcept
-        {
-            const auto learned_clause = conflict_analyzer_.learned_clause();
-            bool learned_clause_registered = false;
-            if (!learned_clause.empty())
-            {
-                const auto learned_ref = clause_learner_.learn_clause(learned_clause);
-                if (learned_ref.valid())
-                {
-                    learned_clause_registered = true;
-                    decision_engine_.notify_learned_clause(clause_learner_.last_learned_clause());
-                }
-            }
-
-            const auto backjump_level = conflict_analyzer_.compute_backjump_level();
-            backtrack_engine_.backtrack_to_level(backjump_level);
-            backtrack_engine_.clear_transient_marks();
-
-            const auto asserting_literal = conflict_analyzer_.derive_first_uip();
-            if (learned_clause_registered && asserting_literal.raw() != 0)
-            {
-                clause_learner_.assign_asserting_literal(asserting_literal);
-                decision_engine_.notify_assignment_literal(asserting_literal);
-            }
-
-            decision_engine_.notify_conflict_variables(conflict_analyzer_.collect_bump_candidates());
-            decision_engine_.notify_conflict();
-
-            restart_controller_.tick_conflict();
-            reduce_controller_.tick_conflict();
-            ++conflict_count_;
-            if (conflict_limit_ != 0 && conflict_count_ >= conflict_limit_)
-                handle_termination(termination_cause::conflict_limit);
-        }
+        void finish_conflict_handling() noexcept;
 
         static constexpr counter_t max_deferred_inprocess_resync_streak {1u};
 

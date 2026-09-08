@@ -27,12 +27,12 @@ namespace kmx::sat::cdcl
         reconstructor.set_initial_model(initial_model);
 
         extension_record record;
-        record.payload = extension_record::factor_transformation {variable {6u}};
+        record.payload = extension_record::factor_transformation_t {variable {6u}};
         reconstructor.apply_extension_record(record);
 
         const model_view view = reconstructor.reconstruct_full_model();
         REQUIRE(view.values().size() == 1u);
-        REQUIRE(view.values()[0].variable_of().index() == 4u);
+        REQUIRE(view.values()[0u].variable_of().index() == 4u);
     }
 
     TEST_CASE("external frontend integration", "[sat]")
@@ -63,9 +63,9 @@ namespace kmx::sat::cdcl
         };
         frontend.push_clause(clause);
         REQUIRE(frontend.clauses().size() == 1u);
-        REQUIRE(frontend.clauses()[0].size() == 2u);
-        REQUIRE(frontend.clauses()[0][0] == mapper.to_internal_literal(clause[0]));
-        REQUIRE(frontend.clauses()[0][1] == mapper.to_internal_literal(clause[1]));
+        REQUIRE(frontend.clauses()[0u].size() == 2u);
+        REQUIRE(frontend.clauses()[0u][0u] == mapper.to_internal_literal(clause[0u]));
+        REQUIRE(frontend.clauses()[0u][1u] == mapper.to_internal_literal(clause[1u]));
         frontend.clear_clauses();
         REQUIRE(frontend.clauses().empty());
 
@@ -88,12 +88,12 @@ namespace kmx::sat::cdcl
         reconstructor.set_initial_model(initial_model);
         reconstructor.mark_internal_only_variable(variable {6u});
         extension_record record;
-        record.payload = extension_record::factor_transformation {variable {6u}};
+        record.payload = extension_record::factor_transformation_t {variable {6u}};
         reconstructor.apply_extension_record(record);
         reconstructor.drop_internal_only_variables();
         const model_view view = reconstructor.reconstruct_full_model();
         REQUIRE(view.values().size() == 1u);
-        REQUIRE(view.values()[0].variable_of().index() == 4u);
+        REQUIRE(view.values()[0u].variable_of().index() == 4u);
 
         failed_core_extractor core_extractor;
         core_extractor.mark_failed_assumption(literal {variable {2u}, true});
@@ -114,12 +114,12 @@ namespace kmx::sat::cdcl
         {
             stack::extension extension_stack;
             extension_record factor_record;
-            factor_record.payload = extension_record::factor_transformation {variable {6u}};
+            factor_record.payload = extension_record::factor_transformation_t {variable {6u}};
 
             extension_stack.push_factor_record(factor_record);
             REQUIRE(extension_stack.size() == 1u);
             REQUIRE(extension_stack.records().size() == 1u);
-            REQUIRE(std::holds_alternative<extension_record::factor_transformation>(extension_stack.records()[0].payload));
+            REQUIRE(std::holds_alternative<extension_record::factor_transformation_t>(extension_stack.records()[0u].payload));
 
             extension_stack.clear_all();
             REQUIRE(extension_stack.size() == 0u);

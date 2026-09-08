@@ -13,11 +13,11 @@ namespace kmx::sat
 {
     TEST_CASE("long incremental session preserves SAT/UNSAT and reset semantics", "[sat]")
     {
-        const std::array<literal, 1> unit_clause {literal {variable {1u}, false}};
+        const std::array<literal, 1u> unit_clause {literal {variable {1u}, false}};
         solver solver;
         solver.add_clause(unit_clause);
-        solver.set_option("chb_enabled", 1);
-        solver.set_option("reduction_fraction_percent", 25);
+        solver.set_option(option_id::chb_enabled, 1L);
+        solver.set_option(option_id::reduction_fraction_percent, 25L);
 
         for (std::uint32_t episode {}; episode < 256u; ++episode)
         {
@@ -50,12 +50,12 @@ namespace kmx::sat
 
     TEST_CASE("long incremental session isolates clauses, limits, and assumptions", "[sat]")
     {
-        const std::array<literal, 2> branching_clause {literal {variable {1u}, false}, literal {variable {2u}, false}};
-        const std::array<literal, 1> first_unit {literal {variable {1u}, false}};
-        const std::array<literal, 1> second_unit {literal {variable {3u}, false}};
+        const std::array<literal, 2u> branching_clause {literal {variable {1u}, false}, literal {variable {2u}, false}};
+        const std::array<literal, 1u> first_unit {literal {variable {1u}, false}};
+        const std::array<literal, 1u> second_unit {literal {variable {3u}, false}};
 
         solver solver;
-        solver.set_option("reduction_fraction_percent", 30);
+        solver.set_option(option_id::reduction_fraction_percent, 30L);
 
         for (std::uint32_t episode {}; episode < 256u; ++episode)
         {

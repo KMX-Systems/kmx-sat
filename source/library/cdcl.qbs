@@ -98,6 +98,86 @@ StaticLibrary {
             "solver_state_machine.hpp",
         ]
     }
+    Group {
+        name: "src-cdcl"
+        prefix: "src/kmx/sat/cdcl/"
+        files: [
+            "chb_tracker.cpp",
+            "compaction_service.cpp",
+            "conflict_analyzer.cpp",
+            "evsids_heap.cpp",
+            "external_frontend.cpp",
+            "garbage_collector.cpp",
+            "incremental_context.cpp",
+            "local_search.cpp",
+            "memory_governor.cpp",
+            "model_reconstructor.cpp",
+            "otf_strengthener.cpp",
+            "propagator.cpp",
+            "search_coordinator.cpp",
+            "solver_core.cpp",
+            "trail.cpp",
+            "var_heap.cpp",
+            "variable_mapper.cpp",
+            "vmtf_queue.cpp",
+            "witness_checker.cpp",
+        ]
+    }
+    Group {
+        name: "src-cdcl-bank"
+        prefix: "src/kmx/sat/cdcl/bank/"
+        files: [
+            "arena.cpp",
+            "watch_list.cpp",
+        ]
+    }
+    Group {
+        name: "src-cdcl-clause"
+        prefix: "src/kmx/sat/cdcl/clause/"
+        files: [
+            "database.cpp",
+            "header.cpp",
+            "learner.cpp",
+            "minimizer.cpp",
+            "storage.cpp",
+            "view.cpp",
+        ]
+    }
+    Group {
+        name: "src-cdcl-controller"
+        prefix: "src/kmx/sat/cdcl/controller/"
+        files: [
+            "reduce.cpp",
+            "rephase.cpp",
+            "restart.cpp",
+        ]
+    }
+    Group {
+        name: "src-cdcl-engine"
+        prefix: "src/kmx/sat/cdcl/engine/"
+        files: [
+            "backtrack.cpp",
+            "decision.cpp",
+        ]
+    }
+    Group {
+        name: "src-cdcl-stack"
+        prefix: "src/kmx/sat/cdcl/stack/"
+        files: [
+            "decision_frame.cpp",
+        ]
+    }
+    Group {
+        name: "src-cdcl-store"
+        prefix: "src/kmx/sat/cdcl/store/"
+        files: [
+            "assignment.cpp",
+            "assumption.cpp",
+            "clause_cold.cpp",
+            "constraint.cpp",
+            "phase.cpp",
+        ]
+    }
     cpp.cxxLanguageVersion: "c++26"
     cpp.enableRtti: false
     cpp.includePaths: ["api", "inc"]

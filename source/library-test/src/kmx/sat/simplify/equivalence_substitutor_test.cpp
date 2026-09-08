@@ -31,8 +31,8 @@ namespace kmx::sat::simplify
         const literal lit_five_pos {var_five, false};
         const literal lit_five_neg {var_five, true};
 
-        const std::array<literal, 2> irredundant_clause {lit_five_pos, lit_three_neg};
-        const std::array<literal, 2> redundant_clause {lit_five_neg, lit_three_pos};
+        const std::array<literal, 2u> irredundant_clause {lit_five_pos, lit_three_neg};
+        const std::array<literal, 2u> redundant_clause {lit_five_neg, lit_three_pos};
         const auto irredundant_ref = clause_database.add_clause(irredundant_clause, false);
         const auto redundant_ref = clause_database.add_clause(redundant_clause, true);
 
@@ -64,13 +64,13 @@ namespace kmx::sat::simplify
 
         const auto rewritten_irredundant = clause_database.storage_of().literals_of(irredundant_ref);
         REQUIRE(rewritten_irredundant.size() == 2u);
-        REQUIRE(rewritten_irredundant[0] == lit_three_pos);
-        REQUIRE(rewritten_irredundant[1] == lit_three_neg);
+        REQUIRE(rewritten_irredundant[0u] == lit_three_pos);
+        REQUIRE(rewritten_irredundant[1u] == lit_three_neg);
 
         const auto rewritten_redundant = clause_database.storage_of().literals_of(redundant_ref);
         REQUIRE(rewritten_redundant.size() == 2u);
-        REQUIRE(rewritten_redundant[0] == lit_three_neg);
-        REQUIRE(rewritten_redundant[1] == lit_three_pos);
+        REQUIRE(rewritten_redundant[0u] == lit_three_neg);
+        REQUIRE(rewritten_redundant[1u] == lit_three_pos);
 
         REQUIRE(watch_list.size_of(lit_five_pos) == 0u);
         REQUIRE(watch_list.size_of(lit_three_pos) == 1u);
@@ -78,9 +78,9 @@ namespace kmx::sat::simplify
         std::vector<watch> remapped_watches {};
         watch_list.iterate(lit_three_pos, [&](const watch& entry) noexcept { remapped_watches.push_back(entry); });
         REQUIRE(remapped_watches.size() == 1u);
-        REQUIRE(remapped_watches[0].clause_ref() == redundant_ref);
-        REQUIRE(remapped_watches[0].blocking_literal() == lit_three_neg);
-        REQUIRE(remapped_watches[0].binary_literal() == lit_three_neg);
+        REQUIRE(remapped_watches[0u].clause_ref() == redundant_ref);
+        REQUIRE(remapped_watches[0u].blocking_literal() == lit_three_neg);
+        REQUIRE(remapped_watches[0u].binary_literal() == lit_three_neg);
 
         const auto remapped_internal = mapper.to_internal_literal(literal {external_var, false});
         REQUIRE(remapped_internal.variable_of().index() == remapped_internal_target.index());

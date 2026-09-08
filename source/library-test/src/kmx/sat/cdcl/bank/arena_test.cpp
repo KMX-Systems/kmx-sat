@@ -14,7 +14,7 @@ namespace kmx::sat::cdcl
 
         const literal first {variable {1u}, false};
         const literal second {variable {2u}, true};
-        const std::array<literal, 2> literals {first, second};
+        const std::array<literal, 2u> literals {first, second};
 
         const auto ref = arena.allocate_clause(literals.size());
         arena.write_literals(ref, literals);
@@ -31,14 +31,14 @@ namespace kmx::sat::cdcl
 
         const auto restored = arena.read_literals(ref);
         REQUIRE(restored.size() == 2u);
-        REQUIRE(restored[0] == first);
-        REQUIRE(restored[1] == second);
+        REQUIRE(restored[0u] == first);
+        REQUIRE(restored[1u] == second);
     }
 
     TEST_CASE("arena grows across mapped pages without changing offsets", "[sat]")
     {
         bank::arena arena;
-        const std::array<literal, 2> literals {literal {variable {11u}, false}, literal {variable {12u}, true}};
+        const std::array<literal, 2u> literals {literal {variable {11u}, false}, literal {variable {12u}, true}};
 
         const auto first = arena.allocate_clause(2000u);
         arena.write_literals(first, std::span<const literal> {literals});

@@ -32,15 +32,15 @@ namespace kmx::sat
         proof::tracer::view sink {concrete_sink};
         solver solver;
         solver.attach_proof_sink(sink);
-        const std::array<std::array<literal, 3>, 8> clauses {
-            std::array<literal, 3> {literal {variable {1u}, true}, literal {variable {2u}, true}, literal {variable {3u}, true}},
-            std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, true}, literal {variable {3u}, true}},
-            std::array<literal, 3> {literal {variable {1u}, true}, literal {variable {2u}, false}, literal {variable {3u}, true}},
-            std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, true}},
-            std::array<literal, 3> {literal {variable {1u}, true}, literal {variable {2u}, true}, literal {variable {3u}, false}},
-            std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, true}, literal {variable {3u}, false}},
-            std::array<literal, 3> {literal {variable {1u}, true}, literal {variable {2u}, false}, literal {variable {3u}, false}},
-            std::array<literal, 3> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}},
+        const std::array<std::array<literal, 3u>, 8u> clauses {
+            std::array<literal, 3u> {literal {variable {1u}, true}, literal {variable {2u}, true}, literal {variable {3u}, true}},
+            std::array<literal, 3u> {literal {variable {1u}, false}, literal {variable {2u}, true}, literal {variable {3u}, true}},
+            std::array<literal, 3u> {literal {variable {1u}, true}, literal {variable {2u}, false}, literal {variable {3u}, true}},
+            std::array<literal, 3u> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, true}},
+            std::array<literal, 3u> {literal {variable {1u}, true}, literal {variable {2u}, true}, literal {variable {3u}, false}},
+            std::array<literal, 3u> {literal {variable {1u}, false}, literal {variable {2u}, true}, literal {variable {3u}, false}},
+            std::array<literal, 3u> {literal {variable {1u}, true}, literal {variable {2u}, false}, literal {variable {3u}, false}},
+            std::array<literal, 3u> {literal {variable {1u}, false}, literal {variable {2u}, false}, literal {variable {3u}, false}},
         };
         for (const auto& clause: clauses)
             solver.add_clause(std::span<const literal> {clause});
@@ -52,7 +52,7 @@ namespace kmx::sat
         const auto events = solver.buffered_proof_events();
         REQUIRE(!events.empty());
         REQUIRE(events.back().kind == proof::event_kind::conclusion);
-        std::size_t derived_count = 0u;
+        std::size_t derived_count {};
         for (std::size_t index {}; index < events.size(); ++index)
         {
             const auto& event = events[index];
@@ -62,10 +62,11 @@ namespace kmx::sat
             REQUIRE(!event.antecedent_ids.empty());
             for (const auto antecedent: event.antecedent_ids)
             {
-                bool appeared_earlier = false;
+                bool appeared_earlier {};
                 for (std::size_t prior {}; prior < index; ++prior)
                 {
-                    if ((events[prior].kind == proof::event_kind::add_original || events[prior].kind == proof::event_kind::add_derived) &&
+                    if (((events[prior].kind == proof::event_kind::add_original) ||
+                         (events[prior].kind == proof::event_kind::add_derived)) &&
                         events[prior].clause_id.equals(antecedent))
                     {
                         appeared_earlier = true;
@@ -92,22 +93,22 @@ namespace kmx::sat
         REQUIRE(!movement_manager.stable_id_for_clause(relocated_ref).valid());
         REQUIRE(movement_manager.validate_checkers());
 
-        if (const char* report_path = std::getenv("KMX_SAT_PROOF_REPORT"); report_path != nullptr && *report_path != '\0')
+        if (const char* report_path = std::getenv("KMX_SAT_PROOF_REPORT"); (report_path != nullptr) && (*report_path != '\0'))
         {
-            std::size_t original_count = 0u;
-            std::size_t derived_count_reported = 0u;
-            std::size_t conclusion_count = 0u;
-            std::size_t antecedent_count = 0u;
+            std::size_t original_count {};
+            std::size_t derived_count_reported {};
+            std::size_t conclusion_count {};
+            std::size_t antecedent_count {};
             for (const auto& event: events)
             {
-                original_count += event.kind == proof::event_kind::add_original ? 1u : 0u;
-                derived_count_reported += event.kind == proof::event_kind::add_derived ? 1u : 0u;
-                conclusion_count += event.kind == proof::event_kind::conclusion ? 1u : 0u;
+                original_count += (event.kind == proof::event_kind::add_original) ? 1u : 0u;
+                derived_count_reported += (event.kind == proof::event_kind::add_derived) ? 1u : 0u;
+                conclusion_count += (event.kind == proof::event_kind::conclusion) ? 1u : 0u;
                 antecedent_count += event.antecedent_ids.size();
             }
             std::ofstream report {report_path, std::ios::out | std::ios::trunc};
             report << "{\"schema\":1,\"status\":\""
-                   << (result.status_of() == solve_result::status::unsatisfiable ? "UNSATISFIABLE" : "OTHER")
+                   << ((result.status_of() == solve_result::status::unsatisfiable) ? "UNSATISFIABLE" : "OTHER")
                    << "\",\"proof_checked\":" << (result.proof_summary_of().proof_checked ? "true" : "false")
                    << ",\"original_events\":" << original_count << ",\"derived_events\":" << derived_count_reported
                    << ",\"conclusion_events\":" << conclusion_count << ",\"antecedent_ids\":" << antecedent_count
@@ -121,7 +122,7 @@ namespace kmx::sat
         proof::tracer::view sink {concrete_sink};
         solver solver;
         solver.attach_proof_sink(sink);
-        solver.add_clause(std::array<literal, 1> {literal {variable {1u}, false}});
+        solver.add_clause(std::array<literal, 1u> {literal {variable {1u}, false}});
         solver.assume(literal {variable {1u}, true});
         const auto result = solver.solve(solve_request {});
         REQUIRE(result.status_of() == solve_result::status::unsatisfiable);
@@ -136,12 +137,12 @@ namespace kmx::sat
         const auto internal_b = mapper.ensure_external_variable(variable {92u});
         mapper.mark_eliminated(internal_b);
         cdcl::clause::database database;
-        const std::array<literal, 2> literals {literal {internal_a, false}, literal {internal_a, true}};
+        const std::array<literal, 2u> literals {literal {internal_a, false}, literal {internal_a, true}};
         auto ref = database.add_clause(literals, true);
         cdcl::bank::watch_list watches;
-        watches.watch_literal(literals[0], cdcl::watch {literals[1], ref});
+        watches.watch_literal(literals[0u], cdcl::watch {literals[1u], ref});
         cdcl::store::assignment assignment;
-        assignment.assign(literals[0], ref);
+        assignment.assign(literals[0u], ref);
         proof_manager proof_manager;
         proof_manager.on_add_original(ref, literals);
         const auto stable_id = proof_manager.stable_id_for_clause(ref);
@@ -164,7 +165,7 @@ namespace kmx::sat
 
         for (std::uint32_t cycle {}; cycle < 8u; ++cycle)
         {
-            const auto garbage = database.add_clause(std::array<literal, 1> {literal {variable {200u + cycle}, false}}, true);
+            const auto garbage = database.add_clause(std::array<literal, 1u> {literal {variable {200u + cycle}, false}}, true);
             database.mark_garbage(garbage);
             collector.collect();
             collector.relocate_live_clause();

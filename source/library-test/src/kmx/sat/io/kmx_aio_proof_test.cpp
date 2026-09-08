@@ -10,7 +10,7 @@ namespace kmx::sat::io::writer
     TEST_CASE("kmx aio proof writer", "[sat]")
     {
         kmx_aio_proof writer;
-        std::array<std::byte, 2> bytes {std::byte {1}, std::byte {2}};
+        std::array<std::byte, 2u> bytes {std::byte {1}, std::byte {2}};
 
         writer.open_sink();
         writer.submit_buffer(bytes);

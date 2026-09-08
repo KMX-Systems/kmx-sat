@@ -13,6 +13,9 @@
 
 namespace kmx::sat::cdcl
 {
+    /// @brief Per-variable activity scores held as a flat, cache-friendly list.
+    using variable_score_list_t = std::vector<std::pair<variable, double>>;
+
     /// @brief EVSIDS heuristic for branching variables.
     /// @details
     /// EVSIDS (Exponential Variable State Independent Decaying Sum, the MiniSat/Kissat-style descendant of VSIDS)
@@ -35,26 +38,7 @@ namespace kmx::sat::cdcl
         /// @brief Bumps a variable's activity score, typically after conflict-analysis participation.
         /// @param var Variable to bump.
         /// @throws None (noexcept).
-        void increase_score(const variable var) noexcept
-        {
-            const auto index = static_cast<std::size_t>(var.index());
-            const auto activity = retained_activity(index) + bump_increment_;
-            set_retained_activity(index, activity);
-
-            const auto position = position_of(index);
-            if (position != npos)
-            {
-                scores_[position].second = activity;
-                sift_up(position);
-            }
-            else
-            {
-                scores_.emplace_back(var, activity);
-                const auto new_position = scores_.size() - 1u;
-                set_position(index, new_position);
-                sift_up(new_position);
-            }
-        }
+        void increase_score(const variable var) noexcept;
 
         /// @brief Re-inserts a variable at its retained activity, typically when backtracking unassigns it.
         /// @details `extract_best` pops the heap entry, so without a retained activity array a popped variable
@@ -63,16 +47,7 @@ namespace kmx::sat::cdcl
         /// variable, and the heap entry is a view onto it.
         /// @param var Variable to re-insert.
         /// @throws None (noexcept).
-        void insert(const variable var) noexcept
-        {
-            const auto index = static_cast<std::size_t>(var.index());
-            if (position_of(index) != npos)
-                return;
-            scores_.emplace_back(var, retained_activity(index));
-            const auto new_position = scores_.size() - 1u;
-            set_position(index, new_position);
-            sift_up(new_position);
-        }
+        void insert(const variable var) noexcept;
 
         /// @brief Renormalizes all activity scores and the shared bump increment to avoid floating-point overflow.
         /// @throws None (noexcept).
@@ -86,44 +61,21 @@ namespace kmx::sat::cdcl
         /// recency weighting, and `rescale` alone cannot supply that: halving scores and the increment together
         /// leaves the ordering identical.
         /// @throws None (noexcept).
-        void decay() noexcept
-        {
-            bump_increment_ /= variable_decay_;
-            if (bump_increment_ > rescale_threshold)
-                rescale_by(1.0 / rescale_threshold);
-        }
+        void decay() noexcept;
 
         /// @brief Sets the per-conflict decay factor; smaller values forget older conflicts faster.
         /// @param decay Factor in (0, 1]; values outside that range are ignored.
         /// @throws None (noexcept).
         void set_variable_decay(const double decay) noexcept
         {
-            if (decay > 0.0 && decay <= 1.0)
+            if ((decay > 0.0) && (decay <= 1.0))
                 variable_decay_ = decay;
         }
 
         /// @brief Pops and returns the currently unassigned variable with the highest activity score.
         /// @return Highest-activity variable, or `std::nullopt` if the heap is empty.
         /// @throws None (noexcept).
-        std::optional<variable> extract_best() noexcept
-        {
-            if (scores_.empty())
-                return {};
-
-            const variable best = scores_.front().first;
-            erase_position(static_cast<std::size_t>(best.index()));
-            if (scores_.size() == 1u)
-            {
-                scores_.pop_back();
-                return best;
-            }
-
-            scores_.front() = scores_.back();
-            scores_.pop_back();
-            set_position(static_cast<std::size_t>(scores_.front().first.index()), 0u);
-            sift_down(0u);
-            return best;
-        }
+        std::optional<variable> extract_best() noexcept;
 
         /// @brief Checks whether a variable is currently present in the heap.
         /// @param var Variable to query.
@@ -141,72 +93,26 @@ namespace kmx::sat::cdcl
 
     private:
         static constexpr std::size_t npos {static_cast<std::size_t>(~0u)};
-        static constexpr std::size_t direct_activity_limit {std::size_t {1} << 24};
+        static constexpr std::size_t direct_activity_limit {std::size_t {1u} << 24};
 
-        double retained_activity(const std::size_t index) const noexcept
-        {
-            if (index < direct_activity_limit)
-                return index < retained_activity_.size() ? retained_activity_[index] : 0.0;
-            const auto it = overflow_retained_activity_.find(index);
-            return it == overflow_retained_activity_.end() ? 0.0 : it->second;
-        }
+        double retained_activity(const std::size_t index) const noexcept;
 
-        void set_retained_activity(const std::size_t index, const double activity) noexcept
-        {
-            if (index < direct_activity_limit)
-            {
-                if (index >= retained_activity_.size())
-                    retained_activity_.resize(index + 1u, 0.0);
-                retained_activity_[index] = activity;
-                return;
-            }
-            overflow_retained_activity_[index] = activity;
-        }
+        void set_retained_activity(const std::size_t index, const double activity) noexcept;
 
         std::vector<double> retained_activity_ {};
         std::unordered_map<std::size_t, double> overflow_retained_activity_ {};
         /// Variable indices below this bound use the flat table; anything above falls back to the overflow map.
         static constexpr std::size_t direct_index_limit {std::size_t {1u} << 24};
 
-        std::size_t position_of(const std::size_t index) const noexcept
-        {
-            if (index < direct_index_limit)
-                return index < positions_.size() ? positions_[index] : npos;
-            const auto it = overflow_positions_.find(index);
-            return it == overflow_positions_.end() ? npos : it->second;
-        }
+        std::size_t position_of(const std::size_t index) const noexcept;
 
-        void set_position(const std::size_t index, const std::size_t position) noexcept
-        {
-            if (index < direct_index_limit)
-            {
-                if (index >= positions_.size())
-                    positions_.resize(index + 1u, npos);
-                positions_[index] = position;
-                return;
-            }
-            overflow_positions_[index] = position;
-        }
+        void set_position(const std::size_t index, const std::size_t position) noexcept;
 
-        void erase_position(const std::size_t index) noexcept
-        {
-            if (index < direct_index_limit)
-            {
-                if (index < positions_.size())
-                    positions_[index] = npos;
-                return;
-            }
-            overflow_positions_.erase(index);
-        }
+        void erase_position(const std::size_t index) noexcept;
 
         struct heap_compare final
         {
-            bool operator()(const std::pair<variable, double>& left, const std::pair<variable, double>& right) const noexcept
-            {
-                if (left.second != right.second)
-                    return left.second < right.second;
-                return left.first.index() > right.first.index();
-            }
+            bool operator()(const std::pair<variable, double>& left, const std::pair<variable, double>& right) const noexcept;
         };
 
         bool precedes(const std::size_t left, const std::size_t right) const noexcept
@@ -214,58 +120,15 @@ namespace kmx::sat::cdcl
             return heap_compare {}(scores_[right], scores_[left]);
         }
 
-        void swap_entries(const std::size_t left, const std::size_t right) noexcept
-        {
-            std::swap(scores_[left], scores_[right]);
-            set_position(static_cast<std::size_t>(scores_[left].first.index()), left);
-            set_position(static_cast<std::size_t>(scores_[right].first.index()), right);
-        }
+        void swap_entries(const std::size_t left, const std::size_t right) noexcept;
 
-        void sift_up(std::size_t position) noexcept
-        {
-            while (position != 0u)
-            {
-                const auto parent = (position - 1u) / 4u;
-                if (!precedes(position, parent))
-                    break;
-                swap_entries(position, parent);
-                position = parent;
-            }
-        }
+        void sift_up(std::size_t position) noexcept;
 
-        void sift_down(std::size_t position) noexcept
-        {
-            for (;;)
-            {
-                const auto first_child = position * 4u + 1u;
-                if (first_child >= scores_.size())
-                    return;
-                auto best = first_child;
-                const auto second_child = first_child + 1u;
-                if (second_child < scores_.size() && precedes(second_child, best))
-                    best = second_child;
-                const auto third_child = first_child + 2u;
-                if (third_child < scores_.size() && precedes(third_child, best))
-                    best = third_child;
-                const auto fourth_child = first_child + 3u;
-                if (fourth_child < scores_.size() && precedes(fourth_child, best))
-                    best = fourth_child;
-                if (!precedes(best, position))
-                    return;
-                swap_entries(position, best);
-                position = best;
-            }
-        }
+        void sift_down(std::size_t position) noexcept;
 
-        void rebuild_positions() noexcept
-        {
-            std::fill(positions_.begin(), positions_.end(), npos);
-            overflow_positions_.clear();
-            for (std::size_t index {}; index < scores_.size(); ++index)
-                set_position(static_cast<std::size_t>(scores_[index].first.index()), index);
-        }
+        void rebuild_positions() noexcept;
 
-        std::vector<std::pair<variable, double>> scores_ {};
+        variable_score_list_t scores_ {};
         std::vector<std::size_t> positions_ {};
         std::unordered_map<std::size_t, std::size_t> overflow_positions_ {};
         /// @brief Multiplicative factor applied per conflict; 0.95 matches the MiniSat-family default.
@@ -275,16 +138,7 @@ namespace kmx::sat::cdcl
 
         /// @brief Scales every score and the shared increment by `factor`, preserving their relative order.
         /// @throws None (noexcept).
-        void rescale_by(const double factor) noexcept
-        {
-            for (auto& entry: scores_)
-                entry.second *= factor;
-            for (auto& activity: retained_activity_)
-                activity *= factor;
-            for (auto& [index, activity]: overflow_retained_activity_)
-                activity *= factor;
-            bump_increment_ *= factor;
-        }
+        void rescale_by(const double factor) noexcept;
 
         double variable_decay_ {default_variable_decay};
         double bump_increment_ {1.0};

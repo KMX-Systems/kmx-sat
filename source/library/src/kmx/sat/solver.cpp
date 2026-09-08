@@ -122,7 +122,7 @@ namespace kmx::sat
         bool has_configured_cold_storage_enabled_ {};
         bool has_configured_strict_mode_ {};
         solver::statistics_report_detail statistics_report_detail_ {solver::statistics_report_detail::compact};
-        std::string active_configuration_profile_ {};
+        std::optional<configuration_profile_id> active_configuration_profile_ {};
         std::size_t last_consumed_proof_event_count_ {};
         std::vector<std::string> emitted_statistics_report_lines_ {};
         std::vector<telemetry::solver_statistics::snapshot> emitted_statistics_snapshots_ {};
@@ -132,7 +132,7 @@ namespace kmx::sat
         {
             io::writer::format formatter {};
             const auto snapshot = statistics_.snapshot_of();
-            const auto detail = statistics_report_detail_ == solver::statistics_report_detail::verbose ?
+            const auto detail = (statistics_report_detail_ == solver::statistics_report_detail::verbose) ?
                                     io::writer::format::statistics_detail::verbose :
                                     io::writer::format::statistics_detail::compact;
             formatter.write_statistics(snapshot, detail);
@@ -173,9 +173,8 @@ namespace kmx::sat
                    has_configured_decision_restart_decay_interval_ || has_configured_restart_interval_ ||
                    has_configured_decision_restart_interval_ || has_configured_reduction_fraction_percent_ || has_configured_chb_enabled_ ||
                    has_configured_reduction_interval_ || has_configured_inprocess_conflict_window_ ||
-                   has_configured_glue_restart_threshold_percent_ ||
-                   has_configured_cold_storage_enabled_ || has_configured_activity_retention_threshold_ || has_configured_strict_mode_ ||
-                   !active_configuration_profile_.empty();
+                   has_configured_glue_restart_threshold_percent_ || has_configured_cold_storage_enabled_ ||
+                   has_configured_activity_retention_threshold_ || has_configured_strict_mode_ || active_configuration_profile_.has_value();
         }
 
         void clear_persisted_configuration() noexcept
@@ -214,7 +213,7 @@ namespace kmx::sat
             has_configured_glue_restart_threshold_percent_ = false;
             has_configured_cold_storage_enabled_ = false;
             has_configured_strict_mode_ = false;
-            active_configuration_profile_.clear();
+            active_configuration_profile_ = {};
         }
 
         void apply_core_configuration() noexcept
@@ -229,20 +228,18 @@ namespace kmx::sat
                                                     default_decision_restart_decay_interval;
 
             core_.set_decision_maintenance_intervals(conflict_maintenance_interval, chb_decay_interval, restart_decay_interval);
-            core_.set_restart_interval(has_configured_restart_interval_ ? configured_restart_interval_
-                                                                        : default_restart_interval);
+            core_.set_restart_interval(has_configured_restart_interval_ ? configured_restart_interval_ : default_restart_interval);
             core_.set_decision_restart_interval(has_configured_decision_restart_interval_ ? configured_decision_restart_interval_ : 0u);
-            core_.set_reduction_interval(has_configured_reduction_interval_ ? configured_reduction_interval_
-                                                                             : default_reduction_interval);
+            core_.set_reduction_interval(has_configured_reduction_interval_ ? configured_reduction_interval_ : default_reduction_interval);
             if (has_configured_inprocess_conflict_window_)
                 core_.set_inprocess_trigger_windows(configured_inprocess_conflict_window_, 0u);
-            if (configured_local_search_flips_per_variable_ >= 0)
+            if (configured_local_search_flips_per_variable_ >= 0L)
                 core_.set_local_search_flips_per_variable(static_cast<std::size_t>(configured_local_search_flips_per_variable_));
-            if (configured_local_search_effort_percent_ >= 0)
+            if (configured_local_search_effort_percent_ >= 0L)
                 core_.set_local_search_effort_percent(static_cast<std::size_t>(configured_local_search_effort_percent_));
             core_.set_chb_enabled(configured_chb_enabled_);
-            core_.set_reduction_fraction_percent(has_configured_reduction_fraction_percent_ ? configured_reduction_fraction_percent_
-                                                                                            : default_reduction_fraction_percent);
+            core_.set_reduction_fraction_percent(has_configured_reduction_fraction_percent_ ? configured_reduction_fraction_percent_ :
+                                                                                              default_reduction_fraction_percent);
             core_.set_activity_retention_threshold(has_configured_activity_retention_threshold_ ? configured_activity_retention_threshold_ :
                                                                                                   2.0);
             core_.set_glue_restart_threshold_percent(
@@ -252,11 +249,11 @@ namespace kmx::sat
 
         void apply_persisted_configuration(solve_request& request) const noexcept
         {
-            if (request.conflict_limit == 0u && has_configured_conflict_limit_)
+            if ((request.conflict_limit == 0u) && has_configured_conflict_limit_)
                 request.conflict_limit = configured_conflict_limit_;
-            if (request.decision_limit == 0u && has_configured_decision_limit_)
+            if ((request.decision_limit == 0u) && has_configured_decision_limit_)
                 request.decision_limit = configured_decision_limit_;
-            if (request.enabled_pass_mask == 0u && has_configured_enabled_pass_mask_)
+            if ((request.enabled_pass_mask == 0u) && has_configured_enabled_pass_mask_)
                 request.enabled_pass_mask = configured_enabled_pass_mask_;
             if (!request.strict_mode && has_configured_strict_mode_)
                 request.strict_mode = configured_strict_mode_;
@@ -309,7 +306,7 @@ namespace kmx::sat
     /// @throws None (noexcept).
     void solver::add_literal(const literal lit) noexcept
     {
-        if (lit.raw() == 0)
+        if (lit.raw() == 0u)
         {
             if (impl_->pending_clause_.empty())
                 impl_->core_.add_problem_clause(std::span<const literal> {});
@@ -358,24 +355,25 @@ namespace kmx::sat
 
         if (impl_->terminate_callback_ && impl_->terminate_callback_())
         {
-            impl_->statistics_.inc("terminate_callback_calls");
+            impl_->statistics_.inc(telemetry::counter_id::terminate_callback_calls);
             impl_->emit_statistics_report_checkpoint();
             impl_->state_machine_.transition_to_steady();
             return solve_result {solve_result::status::terminated, model_view {}, failed_core_view {}, impl_->statistics_.snapshot_of(),
                                  solve_result::proof_summary {}};
         }
         if (impl_->terminate_callback_)
-            impl_->statistics_.inc("terminate_callback_calls");
+            impl_->statistics_.inc(telemetry::counter_id::terminate_callback_calls);
 
         if (impl_->external_propagator_hook_)
         {
             impl_->external_propagator_hook_();
-            impl_->statistics_.inc("external_propagator_calls");
+            impl_->statistics_.inc(telemetry::counter_id::external_propagator_calls);
         }
 
         const auto core_status = impl_->core_.solve(effective_request);
         const auto mapped_status = impl_->map_status(core_status);
-        impl_->statistics_.add("propagations", static_cast<std::uint64_t>(impl_->core_.propagation_assignment_count()));
+        impl_->statistics_.add(telemetry::counter_id::propagations,
+                               static_cast<std::uint64_t>(impl_->core_.propagation_assignment_count()));
 
         const auto internal_model = impl_->core_.extract_internal_model();
         impl_->last_model_.assign(internal_model.begin(), internal_model.end());
@@ -383,22 +381,23 @@ namespace kmx::sat
         const auto failed_core_span = impl_->core_.extract_failed_core();
         impl_->last_failed_core_.assign(failed_core_span.begin(), failed_core_span.end());
 
-        impl_->statistics_.add("conflicts", impl_->core_.conflict_event_count() + impl_->core_.raw_probe_conflict_count());
-        impl_->statistics_.add("decisions", impl_->core_.decision_event_count());
-        impl_->statistics_.add("restarts", impl_->core_.restart_count());
-        impl_->statistics_.add("learned_clauses", impl_->core_.episode_learned_clause_count());
-        impl_->statistics_.add("learned_clause_glue_total", impl_->core_.learned_clause_glue_total());
-        impl_->statistics_.add("learned_clause_glue_samples", impl_->core_.learned_clause_glue_sample_count());
-        impl_->statistics_.add("reduction_passes", impl_->core_.reduction_pass_count());
-        impl_->statistics_.add("probes", impl_->core_.probe_count());
-        impl_->statistics_.add("probe_units", impl_->core_.probe_unit_count());
-        impl_->statistics_.add("walk_flips", impl_->core_.walk_flip_count());
-        impl_->statistics_.add("reduced_clauses", impl_->core_.reduced_clause_count());
-        impl_->statistics_.add("deleted_clauses", impl_->core_.deleted_clause_count());
+        impl_->statistics_.add(telemetry::counter_id::conflicts,
+                               impl_->core_.conflict_event_count() + impl_->core_.raw_probe_conflict_count());
+        impl_->statistics_.add(telemetry::counter_id::decisions, impl_->core_.decision_event_count());
+        impl_->statistics_.add(telemetry::counter_id::restarts, impl_->core_.restart_count());
+        impl_->statistics_.add(telemetry::counter_id::learned_clauses, impl_->core_.episode_learned_clause_count());
+        impl_->statistics_.add(telemetry::counter_id::learned_clause_glue_total, impl_->core_.learned_clause_glue_total());
+        impl_->statistics_.add(telemetry::counter_id::learned_clause_glue_samples, impl_->core_.learned_clause_glue_sample_count());
+        impl_->statistics_.add(telemetry::counter_id::reduction_passes, impl_->core_.reduction_pass_count());
+        impl_->statistics_.add(telemetry::counter_id::probes, impl_->core_.probe_count());
+        impl_->statistics_.add(telemetry::counter_id::probe_units, impl_->core_.probe_unit_count());
+        impl_->statistics_.add(telemetry::counter_id::walk_flips, impl_->core_.walk_flip_count());
+        impl_->statistics_.add(telemetry::counter_id::reduced_clauses, impl_->core_.reduced_clause_count());
+        impl_->statistics_.add(telemetry::counter_id::deleted_clauses, impl_->core_.deleted_clause_count());
 
         if (impl_->learn_callback_)
         {
-            std::size_t learn_callback_count = 0u;
+            std::size_t learn_callback_count {};
 
             const auto buffered_events = impl_->core_.buffered_proof_events();
             if (impl_->last_consumed_proof_event_count_ > buffered_events.size())
@@ -407,7 +406,7 @@ namespace kmx::sat
             for (std::size_t index = impl_->last_consumed_proof_event_count_; index < buffered_events.size(); ++index)
             {
                 const auto& event = buffered_events[index];
-                if (event.kind != proof::event_kind::add_derived || event.literals.empty())
+                if ((event.kind != proof::event_kind::add_derived) || event.literals.empty())
                     continue;
 
                 impl_->learned_clause_literals_.clear();
@@ -424,16 +423,16 @@ namespace kmx::sat
 
                 impl_->learn_callback_(std::span<const literal> {impl_->learned_clause_literals_});
                 ++learn_callback_count;
-                impl_->statistics_.inc("learn_callback_calls");
+                impl_->statistics_.inc(telemetry::counter_id::learn_callback_calls);
             }
 
             impl_->last_consumed_proof_event_count_ = buffered_events.size();
 
-            if (learn_callback_count == 0u && mapped_status == solve_result::status::unsatisfiable && !impl_->last_failed_core_.empty())
+            if ((learn_callback_count == 0u) && (mapped_status == solve_result::status::unsatisfiable) && !impl_->last_failed_core_.empty())
             {
                 impl_->learn_callback_(std::span<const literal> {impl_->last_failed_core_});
                 ++learn_callback_count;
-                impl_->statistics_.inc("learn_callback_calls");
+                impl_->statistics_.inc(telemetry::counter_id::learn_callback_calls);
             }
         }
 
@@ -485,183 +484,138 @@ namespace kmx::sat
     /// @param name Input argument used by this operation.
     /// @param value Input argument used by this operation.
     /// @throws None (noexcept).
-    void solver::set_option(const std::string_view name, const std::int64_t value) noexcept
+    /// @brief Sets or updates subsystem configuration/state.
+    /// @param id Input argument used by this operation.
+    /// @param value Input argument used by this operation.
+    /// @throws None (noexcept).
+    void solver::set_option(const option_id id, const std::int64_t value) noexcept
     {
-        bool recognized_option = false;
-        if (name == "conflict_limit")
+        switch (id)
         {
-            recognized_option = true;
-            impl_->has_configured_conflict_limit_ = value >= 0;
-            impl_->configured_conflict_limit_ = value >= 0 ? static_cast<counter_t>(value) : 0u;
-        }
-        else if (name == "decision_limit")
-        {
-            recognized_option = true;
-            impl_->has_configured_decision_limit_ = value >= 0;
-            impl_->configured_decision_limit_ = value >= 0 ? static_cast<counter_t>(value) : 0u;
-        }
-        else if (name == "enabled_pass_mask")
-        {
-            recognized_option = true;
-            impl_->has_configured_enabled_pass_mask_ = value >= 0;
-            impl_->configured_enabled_pass_mask_ = value >= 0 ? static_cast<std::uint64_t>(value) : 0u;
-        }
-        else if (name == "strict_mode")
-        {
-            recognized_option = true;
-            impl_->has_configured_strict_mode_ = true;
-            impl_->configured_strict_mode_ = value != 0;
-        }
-        else if (name == "statistics_verbose_reporting")
-        {
-            recognized_option = true;
-            impl_->statistics_report_detail_ = value == 0 ? statistics_report_detail::compact : statistics_report_detail::verbose;
-        }
-        else if (name == "decision_conflict_maintenance_interval")
-        {
-            recognized_option = true;
-            impl_->has_configured_decision_conflict_maintenance_interval_ = value >= 0;
-            impl_->configured_decision_conflict_maintenance_interval_ = value >= 0 ? static_cast<std::uint32_t>(value) : 0u;
-        }
-        else if (name == "decision_chb_decay_interval")
-        {
-            recognized_option = true;
-            impl_->has_configured_decision_chb_decay_interval_ = value >= 0;
-            impl_->configured_decision_chb_decay_interval_ = value >= 0 ? static_cast<std::uint32_t>(value) : 0u;
-        }
-        else if (name == "decision_restart_decay_interval")
-        {
-            recognized_option = true;
-            impl_->has_configured_decision_restart_decay_interval_ = value >= 0;
-            impl_->configured_decision_restart_decay_interval_ = value >= 0 ? static_cast<std::uint32_t>(value) : 0u;
-        }
-        else if (name == "restart_interval")
-        {
-            recognized_option = true;
-            impl_->has_configured_restart_interval_ = value >= 0;
-            impl_->configured_restart_interval_ = value >= 0 ? static_cast<counter_t>(value) : 0u;
-        }
-        else if (name == "decision_restart_interval")
-        {
-            recognized_option = true;
-            impl_->has_configured_decision_restart_interval_ = value >= 0;
-            impl_->configured_decision_restart_interval_ = value >= 0 ? static_cast<counter_t>(value) : 0u;
-        }
-        else if (name == "reduction_interval")
-        {
-            recognized_option = true;
-            impl_->has_configured_reduction_interval_ = value >= 0;
-            impl_->configured_reduction_interval_ = value >= 0 ? static_cast<counter_t>(value) : 0u;
-        }
-        else if (name == "local_search_flips_per_variable")
-        {
-            recognized_option = true;
-            impl_->configured_local_search_flips_per_variable_ = value >= 0 ? value : -1;
-        }
-        else if (name == "local_search_effort_percent")
-        {
-            recognized_option = true;
-            impl_->configured_local_search_effort_percent_ = value >= 0 ? value : -1;
-        }
-        else if (name == "inprocess_conflict_window")
-        {
-            recognized_option = true;
-            impl_->has_configured_inprocess_conflict_window_ = value > 0;
-            impl_->configured_inprocess_conflict_window_ = value > 0 ? static_cast<counter_t>(value) : 0u;
-        }
-        else if (name == "chb_enabled")
-        {
-            recognized_option = true;
-            impl_->has_configured_chb_enabled_ = true;
-            impl_->configured_chb_enabled_ = value != 0;
-        }
-        else if (name == "reduction_fraction_percent")
-        {
-            recognized_option = true;
-            impl_->has_configured_reduction_fraction_percent_ = value >= 1 && value <= 100;
-            if (impl_->has_configured_reduction_fraction_percent_)
-                impl_->configured_reduction_fraction_percent_ = static_cast<std::uint32_t>(value);
-        }
-        else if (name == "glue_restart_threshold_percent")
-        {
-            recognized_option = true;
-            impl_->has_configured_glue_restart_threshold_percent_ = value == 0 || value >= 101;
-            if (impl_->has_configured_glue_restart_threshold_percent_)
-                impl_->configured_glue_restart_threshold_percent_ = value >= 0 ? static_cast<std::uint32_t>(value) : 0u;
-        }
-        else if (name == "cold_storage_enabled")
-        {
-            recognized_option = true;
-            impl_->has_configured_cold_storage_enabled_ = true;
-            impl_->configured_cold_storage_enabled_ = value != 0;
-        }
-        else if (name == "activity_retention_threshold_percent")
-        {
-            recognized_option = true;
-            impl_->has_configured_activity_retention_threshold_ = value >= 0;
-            impl_->configured_activity_retention_threshold_ = value >= 0 ? static_cast<double>(value) / 100.0 : 2.0;
+            case option_id::conflict_limit:
+                impl_->has_configured_conflict_limit_ = value >= 0L;
+                impl_->configured_conflict_limit_ = (value >= 0L) ? static_cast<counter_t>(value) : 0u;
+                break;
+            case option_id::decision_limit:
+                impl_->has_configured_decision_limit_ = value >= 0L;
+                impl_->configured_decision_limit_ = (value >= 0L) ? static_cast<counter_t>(value) : 0u;
+                break;
+            case option_id::enabled_pass_mask:
+                impl_->has_configured_enabled_pass_mask_ = value >= 0L;
+                impl_->configured_enabled_pass_mask_ = (value >= 0L) ? static_cast<std::uint64_t>(value) : 0u;
+                break;
+            case option_id::strict_mode:
+                impl_->has_configured_strict_mode_ = true;
+                impl_->configured_strict_mode_ = value != 0L;
+                break;
+            case option_id::statistics_verbose_reporting:
+                impl_->statistics_report_detail_ = (value == 0L) ? statistics_report_detail::compact : statistics_report_detail::verbose;
+                break;
+            case option_id::decision_conflict_maintenance_interval:
+                impl_->has_configured_decision_conflict_maintenance_interval_ = value >= 0L;
+                impl_->configured_decision_conflict_maintenance_interval_ = (value >= 0L) ? static_cast<std::uint32_t>(value) : 0u;
+                break;
+            case option_id::decision_chb_decay_interval:
+                impl_->has_configured_decision_chb_decay_interval_ = value >= 0L;
+                impl_->configured_decision_chb_decay_interval_ = (value >= 0L) ? static_cast<std::uint32_t>(value) : 0u;
+                break;
+            case option_id::decision_restart_decay_interval:
+                impl_->has_configured_decision_restart_decay_interval_ = value >= 0L;
+                impl_->configured_decision_restart_decay_interval_ = (value >= 0L) ? static_cast<std::uint32_t>(value) : 0u;
+                break;
+            case option_id::restart_interval:
+                impl_->has_configured_restart_interval_ = value >= 0L;
+                impl_->configured_restart_interval_ = (value >= 0L) ? static_cast<counter_t>(value) : 0u;
+                break;
+            case option_id::decision_restart_interval:
+                impl_->has_configured_decision_restart_interval_ = value >= 0L;
+                impl_->configured_decision_restart_interval_ = (value >= 0L) ? static_cast<counter_t>(value) : 0u;
+                break;
+            case option_id::reduction_interval:
+                impl_->has_configured_reduction_interval_ = value >= 0L;
+                impl_->configured_reduction_interval_ = (value >= 0L) ? static_cast<counter_t>(value) : 0u;
+                break;
+            case option_id::local_search_flips_per_variable:
+                impl_->configured_local_search_flips_per_variable_ = (value >= 0L) ? value : -1;
+                break;
+            case option_id::local_search_effort_percent:
+                impl_->configured_local_search_effort_percent_ = (value >= 0L) ? value : -1;
+                break;
+            case option_id::inprocess_conflict_window:
+                impl_->has_configured_inprocess_conflict_window_ = value > 0L;
+                impl_->configured_inprocess_conflict_window_ = (value > 0L) ? static_cast<counter_t>(value) : 0u;
+                break;
+            case option_id::chb_enabled:
+                impl_->has_configured_chb_enabled_ = true;
+                impl_->configured_chb_enabled_ = value != 0L;
+                break;
+            case option_id::reduction_fraction_percent:
+                impl_->has_configured_reduction_fraction_percent_ = (value >= 1L) && (value <= 100L);
+                if (impl_->has_configured_reduction_fraction_percent_)
+                    impl_->configured_reduction_fraction_percent_ = static_cast<std::uint32_t>(value);
+                break;
+            case option_id::glue_restart_threshold_percent:
+                impl_->has_configured_glue_restart_threshold_percent_ = (value == 0L) || (value >= 101L);
+                if (impl_->has_configured_glue_restart_threshold_percent_)
+                    impl_->configured_glue_restart_threshold_percent_ = (value >= 0L) ? static_cast<std::uint32_t>(value) : 0u;
+                break;
+            case option_id::cold_storage_enabled:
+                impl_->has_configured_cold_storage_enabled_ = true;
+                impl_->configured_cold_storage_enabled_ = value != 0L;
+                break;
+            case option_id::activity_retention_threshold_percent:
+                impl_->has_configured_activity_retention_threshold_ = value >= 0L;
+                impl_->configured_activity_retention_threshold_ = (value >= 0L) ? static_cast<double>(value) / 100.0 : 2.0;
+                break;
         }
 
-        if (recognized_option)
-        {
-            impl_->apply_core_configuration();
-            impl_->core_.persist_option_subset();
-            impl_->statistics_.inc("option_updates");
-        }
+        impl_->apply_core_configuration();
+        impl_->core_.persist_option_subset();
+        impl_->statistics_.inc(telemetry::counter_id::option_updates);
     }
 
     /// @brief Sets or updates subsystem configuration/state.
-    /// @param profile_name Input argument used by this operation.
+    /// @param id Input argument used by this operation.
     /// @throws None (noexcept).
-    void solver::set_configuration(const std::string_view profile_name) noexcept
+    void solver::set_configuration(const configuration_profile_id id) noexcept
     {
         impl_->clear_persisted_configuration();
+        impl_->active_configuration_profile_ = id;
 
-        if (profile_name == "safe")
+        switch (id)
         {
-            impl_->active_configuration_profile_ = "safe";
-            impl_->has_configured_strict_mode_ = true;
-            impl_->configured_strict_mode_ = true;
-            impl_->has_configured_enabled_pass_mask_ = true;
-            impl_->configured_enabled_pass_mask_ = 0u;
-            impl_->core_.persist_option_subset();
-            impl_->statistics_.inc("configuration_updates");
-        }
-        else if (profile_name == "balanced")
-        {
-            impl_->active_configuration_profile_ = "balanced";
-            impl_->has_configured_strict_mode_ = true;
-            impl_->configured_strict_mode_ = false;
-            impl_->has_configured_enabled_pass_mask_ = true;
-            impl_->configured_enabled_pass_mask_ = ~0ull;
-            impl_->core_.persist_option_subset();
-            impl_->statistics_.inc("configuration_updates");
-        }
-        else if (profile_name == "bounded")
-        {
-            impl_->active_configuration_profile_ = "bounded";
-            impl_->has_configured_conflict_limit_ = true;
-            impl_->configured_conflict_limit_ = 1000u;
-            impl_->has_configured_decision_limit_ = true;
-            impl_->configured_decision_limit_ = 10000u;
-            impl_->core_.persist_option_subset();
-            impl_->statistics_.inc("configuration_updates");
-        }
-        else if (profile_name == "aggressive")
-        {
-            impl_->active_configuration_profile_ = "aggressive";
-            impl_->has_configured_strict_mode_ = true;
-            impl_->configured_strict_mode_ = false;
-            impl_->has_configured_enabled_pass_mask_ = true;
-            impl_->configured_enabled_pass_mask_ = ~0ull;
-            impl_->has_configured_conflict_limit_ = true;
-            impl_->configured_conflict_limit_ = 0u;
-            impl_->has_configured_decision_limit_ = true;
-            impl_->configured_decision_limit_ = 0u;
-            impl_->core_.persist_option_subset();
-            impl_->statistics_.inc("configuration_updates");
+            case configuration_profile_id::safe:
+                impl_->has_configured_strict_mode_ = true;
+                impl_->configured_strict_mode_ = true;
+                impl_->has_configured_enabled_pass_mask_ = true;
+                impl_->configured_enabled_pass_mask_ = 0u;
+                break;
+            case configuration_profile_id::balanced:
+                impl_->has_configured_strict_mode_ = true;
+                impl_->configured_strict_mode_ = false;
+                impl_->has_configured_enabled_pass_mask_ = true;
+                impl_->configured_enabled_pass_mask_ = ~0ull;
+                break;
+            case configuration_profile_id::bounded:
+                impl_->has_configured_conflict_limit_ = true;
+                impl_->configured_conflict_limit_ = 1000u;
+                impl_->has_configured_decision_limit_ = true;
+                impl_->configured_decision_limit_ = 10000u;
+                break;
+            case configuration_profile_id::aggressive:
+                impl_->has_configured_strict_mode_ = true;
+                impl_->configured_strict_mode_ = false;
+                impl_->has_configured_enabled_pass_mask_ = true;
+                impl_->configured_enabled_pass_mask_ = ~0ull;
+                impl_->has_configured_conflict_limit_ = true;
+                impl_->configured_conflict_limit_ = 0u;
+                impl_->has_configured_decision_limit_ = true;
+                impl_->configured_decision_limit_ = 0u;
+                break;
         }
 
+        impl_->core_.persist_option_subset();
+        impl_->statistics_.inc(telemetry::counter_id::configuration_updates);
         impl_->apply_core_configuration();
     }
 
@@ -719,7 +673,7 @@ namespace kmx::sat
     std::string solver::statistics_report_line() const
     {
         io::writer::format formatter {};
-        const auto detail = impl_->statistics_report_detail_ == statistics_report_detail::verbose ?
+        const auto detail = (impl_->statistics_report_detail_ == statistics_report_detail::verbose) ?
                                 io::writer::format::statistics_detail::verbose :
                                 io::writer::format::statistics_detail::compact;
         formatter.write_statistics(impl_->statistics_.snapshot_of(), detail);
@@ -823,7 +777,7 @@ namespace kmx::sat
 
     std::size_t solver::proof_buffered_payload_bytes() const noexcept
     {
-        std::size_t bytes = 0u;
+        std::size_t bytes {};
         for (const auto& event: impl_->core_.buffered_proof_events())
         {
             bytes += sizeof(proof::proof_event);
@@ -843,7 +797,7 @@ namespace kmx::sat
         return impl_->has_persisted_configuration();
     }
 
-    std::array<std::uint32_t, 3> solver::decision_maintenance_intervals() const noexcept
+    std::array<std::uint32_t, 3u> solver::decision_maintenance_intervals() const noexcept
     {
         return impl_->core_.decision_maintenance_intervals();
     }
@@ -906,7 +860,7 @@ namespace kmx::sat
         return impl_->configured_strict_mode_;
     }
 
-    std::string_view solver::configuration_profile_name() const noexcept
+    std::optional<configuration_profile_id> solver::configuration_profile() const noexcept
     {
         return impl_->active_configuration_profile_;
     }

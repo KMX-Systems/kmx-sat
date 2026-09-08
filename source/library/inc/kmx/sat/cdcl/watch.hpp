@@ -42,7 +42,7 @@ namespace kmx::sat::cdcl
         [[nodiscard]] constexpr clause::ref_t clause_ref() const noexcept
         {
             const auto raw = tagged_ref_ & ~binary_tag;
-            return clause::ref_t {raw == untagged_invalid ? clause::ref_t::invalid_offset : raw};
+            return clause::ref_t {(raw == untagged_invalid) ? clause::ref_t::invalid_offset : raw};
         }
 
         /// @brief Returns the clause offset without the invalid-sentinel fix-up; only for entries known to be valid.

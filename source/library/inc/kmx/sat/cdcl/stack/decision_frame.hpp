@@ -30,35 +30,16 @@ namespace kmx::sat::cdcl::stack
         void push_frame(const literal decision) noexcept
         {
             frames_.push_back(frame {decision, current_trail_base_});
-            current_trail_base_ = 0;
+            current_trail_base_ = 0u;
         }
 
-        void pop_to_level(const std::uint32_t level) noexcept
-        {
-            if (level >= frames_.size())
-            {
-                frames_.clear();
-                current_trail_base_ = 0;
-                return;
-            }
-            frames_.resize(level);
-        }
+        void pop_to_level(const std::uint32_t level) noexcept;
 
         std::uint32_t current_level() const noexcept { return static_cast<std::uint32_t>(frames_.size()); }
 
-        literal decision_literal(const std::uint32_t level) const noexcept
-        {
-            if (level == 0 || level > frames_.size())
-                return {};
-            return frames_[level - 1].decision;
-        }
+        literal decision_literal(const std::uint32_t level) const noexcept;
 
-        std::uint32_t trail_base_of_level(const std::uint32_t level) const noexcept
-        {
-            if (level == 0 || level > frames_.size())
-                return 0;
-            return frames_[level - 1].trail_base;
-        }
+        std::uint32_t trail_base_of_level(const std::uint32_t level) const noexcept;
 
         void reuse_trail_metadata() noexcept
         {

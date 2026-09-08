@@ -4,12 +4,23 @@
 #pragma once
 #ifndef PCH
     #include <cstdint>
+    #include <optional>
     #include <string>
     #include <string_view>
 #endif
 
 namespace kmx::sat::io::fixture
 {
+    /// @brief Clause-normalization policy a fixture was created under.
+    enum class normalization_profile_id : std::uint8_t
+    {
+        /// @brief Clauses recorded exactly as supplied, with no normalization.
+        none,
+        /// @brief Duplicate literals dropped and tautological clauses discarded, matching the policy every
+        /// ingestion path applies before a clause reaches the clause database.
+        dedup_tautology_drop,
+    };
+
     /// @brief Reproducibility and provenance for CI and benchmark artifacts.
     /// @details
     /// `manifest` records provenance metadata alongside a binary fixture so CI and benchmark tooling can trace a
@@ -37,9 +48,9 @@ namespace kmx::sat::io::fixture
         void set_source_origin(const std::string_view value) noexcept { source_origin_.assign(value.begin(), value.end()); }
 
         /// @brief Records the normalization policy applied when this fixture was created.
-        /// @param value Normalization profile identifier.
+        /// @param id Normalization profile applied.
         /// @throws None (noexcept).
-        void set_normalization_profile(const std::string_view value) noexcept { normalization_profile_.assign(value.begin(), value.end()); }
+        void set_normalization_profile(const normalization_profile_id id) noexcept { normalization_profile_ = id; }
 
         /// @brief Records the solver build fingerprint used to generate this fixture.
         /// @param value Build fingerprint string.
@@ -62,9 +73,9 @@ namespace kmx::sat::io::fixture
         std::string_view source_origin() const noexcept { return source_origin_; }
 
         /// @brief Returns the normalization policy applied when this fixture was created.
-        /// @return Normalization profile identifier.
+        /// @return Normalization profile, or an empty optional when none was recorded.
         /// @throws None (noexcept).
-        std::string_view normalization_profile() const noexcept { return normalization_profile_; }
+        std::optional<normalization_profile_id> normalization_profile() const noexcept { return normalization_profile_; }
 
         /// @brief Returns the solver build fingerprint used to generate this fixture.
         /// @return Build fingerprint string.
@@ -81,14 +92,14 @@ namespace kmx::sat::io::fixture
         /// @throws None (noexcept).
         bool has_provenance() const noexcept
         {
-            return fixture_id_ != 0u || !source_origin_.empty() || !normalization_profile_.empty() || !build_fingerprint_.empty() ||
+            return (fixture_id_ != 0u) || !source_origin_.empty() || normalization_profile_.has_value() || !build_fingerprint_.empty() ||
                    !toolchain_fingerprint_.empty();
         }
 
     private:
         std::uint64_t fixture_id_ {};
         std::string source_origin_ {};
-        std::string normalization_profile_ {};
+        std::optional<normalization_profile_id> normalization_profile_ {};
         std::string build_fingerprint_ {};
         std::string toolchain_fingerprint_ {};
     };

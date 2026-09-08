@@ -12,6 +12,7 @@ StaticLibrary {
             "failed_core_view.hpp",
             "literal.hpp",
             "model_view.hpp",
+            "option_id.hpp",
             "solve_request.hpp",
             "variable.hpp",
         ]

@@ -19,7 +19,7 @@ namespace kmx::sat::cdcl
 
         clause::database database;
         const auto reason_ref =
-            database.add_clause(std::array<literal, 2> {literal {internal_v1, false}, literal {internal_v2, true}}, false);
+            database.add_clause(std::array<literal, 2u> {literal {internal_v1, false}, literal {internal_v2, true}}, false);
 
         store::assignment assignment;
         assignment.set_current_level(1u);

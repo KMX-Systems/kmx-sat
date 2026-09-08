@@ -32,17 +32,11 @@ namespace kmx::sat::cdcl::clause
 
         [[nodiscard]] header header_data() const noexcept { return header_; }
 
-        bool contains(const literal lit) const noexcept
-        {
-            for (const auto& entry: literals_)
-                if (entry == lit)
-                    return true;
-            return false;
-        }
+        bool contains(const literal lit) const noexcept;
 
-        bool is_binary() const noexcept { return literals_.size() == 2; }
+        bool is_binary() const noexcept { return literals_.size() == 2u; }
 
-        bool is_unit() const noexcept { return literals_.size() == 1; }
+        bool is_unit() const noexcept { return literals_.size() == 1u; }
 
         bool is_redundant() const noexcept { return header_.is_redundant(); }
 

@@ -11,6 +11,9 @@
 
 namespace kmx::sat::cdcl::store
 {
+    /// @brief A view over a constraint's literals, absent when the constraint is unknown.
+    using optional_literal_span_t = std::optional<std::span<const literal>>;
+
     /// @brief Support for temporary constraints or incremental clauses.
     /// @details
     /// Some incremental workflows (for example IPASIR-UP-style external propagators, or CaDiCaL's single "constraint"
@@ -52,12 +55,7 @@ namespace kmx::sat::cdcl::store
         /// @brief Returns a read-only reference to the currently active constraint clause, if any.
         /// @return The constraint clause literals, or `std::nullopt` when none is active.
         /// @throws None (noexcept).
-        std::optional<std::span<const literal>> constraint_clause_ref() const noexcept
-        {
-            if (!has_clause_)
-                return {};
-            return std::span<const literal> {clause_};
-        }
+        optional_literal_span_t constraint_clause_ref() const noexcept;
 
     private:
         std::vector<literal> clause_ {};

@@ -28,15 +28,15 @@ namespace kmx::sat
         REQUIRE(neg.variable_of().index() == 7u);
         REQUIRE(pos.index_in_watch_bank() != neg.index_in_watch_bank());
 
-        const std::array<literal, 2> model_literals {pos, literal {variable {8u}, true}};
+        const std::array<literal, 2u> model_literals {pos, literal {variable {8u}, true}};
         const model_view model {std::span<const literal> {model_literals}};
         REQUIRE(model.values().size() == 2u);
-        REQUIRE(model.values()[0].raw() == pos.raw());
+        REQUIRE(model.values()[0u].raw() == pos.raw());
 
-        const std::array<literal, 1> failed_assumptions {neg};
+        const std::array<literal, 1u> failed_assumptions {neg};
         const failed_core_view failed_core {std::span<const literal> {failed_assumptions}};
         REQUIRE(failed_core.assumptions().size() == 1u);
-        REQUIRE(failed_core.assumptions()[0].raw() == neg.raw());
+        REQUIRE(failed_core.assumptions()[0u].raw() == neg.raw());
 
         solve_request request {};
         request.assumptions.assign(failed_core.assumptions().begin(), failed_core.assumptions().end());

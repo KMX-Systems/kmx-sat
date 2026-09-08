@@ -52,48 +52,19 @@ namespace kmx::sat::cdcl::clause
         /// @brief Physically destroys a clause, retiring its `proof::clause::id` if one was assigned.
         /// @param ref Reference to the clause to destroy; must not currently be a reason clause.
         /// @throws None (noexcept).
-        void destroy_clause(const ref_t ref) noexcept
-        {
-            const auto resolved = resolve_ref(ref);
-            if (!arena_.contains(resolved))
-                return;
-            if (proof_ids_enabled_)
-                id_allocator_.retire_on_delete(resolved);
-            auto& header = arena_.header_at(resolved);
-            header.flags &= bank::redundant_flag;
-        }
+        void destroy_clause(const ref_t ref) noexcept;
 
         /// @brief Relocates a clause to a new arena position by copying, for example during evacuation.
         /// @param ref Reference to the clause to relocate.
         /// @return Updated reference valid in the current arena generation.
         /// @throws None (noexcept).
-        ref_t relocate_clause(const ref_t ref) noexcept
-        {
-            const auto resolved = resolve_ref(ref);
-            if (!is_alive(resolved))
-                return {};
-
-            const auto relocated = arena_.copy_clause(resolved);
-            if (!relocated.valid())
-                return {};
-
-            arena_.header_at(resolved).flags &= static_cast<std::uint8_t>(~bank::alive_flag);
-            set_redirect(resolved.offset(), relocated.offset());
-            if (proof_ids_enabled_)
-                id_allocator_.preserve_on_relocation(resolved, relocated);
-            return relocated;
-        }
+        ref_t relocate_clause(const ref_t ref) noexcept;
 
         /// @brief Shrinks a clause in place to a smaller literal count, for example after strengthening.
         /// @param ref Reference to the clause to shrink.
         /// @param new_size New literal count, which must not exceed the clause's current size.
         /// @throws None (noexcept).
-        void shrink_clause(const ref_t ref, const std::uint32_t new_size) noexcept
-        {
-            const auto resolved = resolve_ref(ref);
-            arena_.truncate_literals(resolved, new_size);
-            arena_.header_at(resolved).flags &= static_cast<std::uint8_t>(~bank::subsumption_checked_flag);
-        }
+        void shrink_clause(const ref_t ref, const std::uint32_t new_size) noexcept;
 
         /// @brief Re-validates a reference against the current arena generation, updating it if relocated.
         /// @param ref Reference to resolve.
@@ -114,15 +85,7 @@ namespace kmx::sat::cdcl::clause
 
         /// @brief Starts allocating proof identities, assigning one to every clause in `existing` first.
         /// @details Called when a proof consumer attaches. Clauses created afterwards get an identity at creation.
-        void enable_proof_ids(const std::span<const ref_t> existing) noexcept
-        {
-            if (proof_ids_enabled_)
-                return;
-            proof_ids_enabled_ = true;
-            for (const auto ref: existing)
-                if (is_alive(ref))
-                    (void) id_allocator_.allocate_for_new_clause(resolve_ref(ref));
-        }
+        void enable_proof_ids(const std::span<const ref_t> existing) noexcept;
 
         [[nodiscard]] bool proof_ids_enabled() const noexcept { return proof_ids_enabled_; }
 
@@ -140,12 +103,7 @@ namespace kmx::sat::cdcl::clause
         /// @param ref Reference to the clause to query.
         /// @return Bound proof identity, or invalid if none is assigned.
         /// @throws None (noexcept).
-        [[nodiscard]] proof::clause::id proof_id_of(const ref_t ref) const noexcept
-        {
-            if (!proof_ids_enabled_)
-                return {};
-            return id_allocator_.id_for_clause_ref(resolve_ref(ref));
-        }
+        [[nodiscard]] proof::clause::id proof_id_of(const ref_t ref) const noexcept;
 
         /// @brief Reads back a clause's current literal payload as a copy.
         [[nodiscard]] std::vector<literal> literals_of(const ref_t ref) const noexcept { return arena_.read_literals(resolve_ref(ref)); }
@@ -155,10 +113,7 @@ namespace kmx::sat::cdcl::clause
             return arena_.view_literals(resolve_ref(ref));
         }
 
-        [[nodiscard]] std::span<literal> mutable_literals(const ref_t ref) noexcept
-        {
-            return arena_.mutable_literals(resolve_ref(ref));
-        }
+        [[nodiscard]] std::span<literal> mutable_literals(const ref_t ref) noexcept { return arena_.mutable_literals(resolve_ref(ref)); }
 
         /// @brief Unchecked in-place header access; `ref` must be a valid, current, in-range reference.
         [[nodiscard]] [[gnu::always_inline]] inline bank::clause_header& header_at(const ref_t ref) noexcept
@@ -211,15 +166,7 @@ namespace kmx::sat::cdcl::clause
         /// @param ref Reference to the clause whose literal payload should be replaced.
         /// @param literals New literals to store; the replacement may preserve or reduce the current size.
         /// @throws None (noexcept).
-        void rewrite_clause_literals(const ref_t ref, const std::span<const literal> literals) noexcept
-        {
-            const auto resolved = resolve_ref(ref);
-            if (!resolved.valid() || literals.size() > arena_.literal_count(resolved))
-                return;
-            arena_.write_literals(resolved, literals);
-            arena_.truncate_literals(resolved, static_cast<std::uint32_t>(literals.size()));
-            arena_.header_at(resolved).flags &= static_cast<std::uint8_t>(~bank::subsumption_checked_flag);
-        }
+        void rewrite_clause_literals(const ref_t ref, const std::span<const literal> literals) noexcept;
 
         /// @brief Checks whether a clause was created as a learned (redundant) clause.
         [[nodiscard]] bool is_redundant(const ref_t ref) const noexcept
@@ -235,7 +182,7 @@ namespace kmx::sat::cdcl::clause
         [[nodiscard]] [[gnu::always_inline]] inline bool is_alive(const ref_t ref) const noexcept
         {
             const auto resolved = resolve_ref(ref);
-            return arena_.contains(resolved) && (arena_.header_of(resolved).flags & bank::alive_flag) != 0u;
+            return arena_.contains(resolved) && ((arena_.header_of(resolved).flags & bank::alive_flag) != 0u);
         }
 
         /// @brief Returns the number of arena bytes currently in use, live and dead clauses included.
@@ -261,81 +208,19 @@ namespace kmx::sat::cdcl::clause
         /// listed clause, moved or not, so the caller can rewrite the references it keeps elsewhere (watch lists,
         /// reasons). Any relocation redirects from `relocate_clause` are dropped, since nothing they pointed at
         /// survives.
-        template <typename forward_t>
-        void compact(const std::span<ref_t* const> ordered_slots, forward_t&& forward) noexcept
-        {
-            std::size_t write {};
-            for (auto* const slot: ordered_slots)
-            {
-                const auto old_ref = resolve_ref(*slot);
-                const auto old_offset = static_cast<std::size_t>(old_ref.offset());
-                const auto byte_count = arena_.clause_byte_count(old_ref);
-                arena_.move_clause_bytes(old_offset, write, byte_count);
-                const ref_t new_ref {static_cast<ref_t::offset_t>(write)};
-                if (proof_ids_enabled_ && write != old_offset)
-                    id_allocator_.preserve_on_relocation(old_ref, new_ref);
-                forward(old_ref, new_ref);
-                *slot = new_ref;
-                write += byte_count;
-            }
-            arena_.shrink_active(write);
-            relocated_refs_.clear();
-            has_relocations_ = false;
-        }
+        template <typename Forward>
+        void compact(const std::span<ref_t* const> ordered_slots, Forward&& forward) noexcept;
 
     private:
-        ref_t create_clause(const std::span<const literal> literals, const bool redundant) noexcept
-        {
-            const auto ref = arena_.allocate_clause(literals.size());
-            if (!ref.valid())
-                return ref;
-            arena_.write_literals(ref, literals);
-            auto& header = arena_.header_at(ref);
-            header.flags = static_cast<std::uint8_t>(bank::alive_flag | (redundant ? bank::redundant_flag : 0u));
-            if (proof_ids_enabled_)
-                (void) id_allocator_.allocate_for_new_clause(ref);
-            return ref;
-        }
+        ref_t create_clause(const std::span<const literal> literals, const bool redundant) noexcept;
 
         /// @brief Follows a relocation chain to the reference's current home.
         /// @details Kept out of line: it only runs once `relocate_clause` has moved a clause, and inlining it would
         /// push the common case -- no relocations at all -- out of the caller.
-        [[gnu::noinline]] ref_t resolve_relocated_ref(const ref_t ref) const noexcept
-        {
-            if (!ref.valid())
-                return ref;
-            const auto original = ref.offset();
-            const auto slot = redirect_slot_of(original);
-            if (slot >= relocated_refs_.size() || relocated_refs_[slot] == no_redirect)
-                return ref;
-
-            auto resolved = ref;
-            while (resolved.valid())
-            {
-                const auto current = redirect_slot_of(resolved.offset());
-                if (current >= relocated_refs_.size())
-                    break;
-                const auto target = relocated_refs_[current];
-                if (target == no_redirect || target == resolved.offset())
-                    break;
-                resolved = ref_t {target};
-            }
-            // Path compression: a chain of relocations is collapsed to its endpoint so the next lookup of the
-            // same reference is a single step regardless of how many collection cycles it has survived.
-            if (resolved.offset() != original)
-                relocated_refs_[slot] = resolved.offset();
-            return resolved;
-        }
+        [[gnu::noinline]] ref_t resolve_relocated_ref(const ref_t ref) const noexcept;
 
         /// @brief Records that a clause has moved, so later references to the old offset resolve to the new one.
-        void set_redirect(const ref_t::offset_t from, const ref_t::offset_t to) noexcept
-        {
-            const auto slot = redirect_slot_of(from);
-            if (slot >= relocated_refs_.size())
-                relocated_refs_.resize(slot + 1u, no_redirect);
-            relocated_refs_[slot] = to;
-            has_relocations_ = true;
-        }
+        void set_redirect(const ref_t::offset_t from, const ref_t::offset_t to) noexcept;
 
         /// Arena offsets are 4-byte aligned, so `offset / 4` indexes the redirection table densely.
         static std::size_t redirect_slot_of(const ref_t::offset_t offset) noexcept
@@ -352,4 +237,26 @@ namespace kmx::sat::cdcl::clause
         bool has_relocations_ {};
         bool proof_ids_enabled_ {true};
     };
+
+    template <typename Forward>
+    void storage::compact(const std::span<ref_t* const> ordered_slots, Forward&& forward) noexcept
+    {
+        std::size_t write {};
+        for (auto* const slot: ordered_slots)
+        {
+            const auto old_ref = resolve_ref(*slot);
+            const auto old_offset = static_cast<std::size_t>(old_ref.offset());
+            const auto byte_count = arena_.clause_byte_count(old_ref);
+            arena_.move_clause_bytes(old_offset, write, byte_count);
+            const ref_t new_ref {static_cast<ref_t::offset_t>(write)};
+            if (proof_ids_enabled_ && (write != old_offset))
+                id_allocator_.preserve_on_relocation(old_ref, new_ref);
+            forward(old_ref, new_ref);
+            *slot = new_ref;
+            write += byte_count;
+        }
+        arena_.shrink_active(write);
+        relocated_refs_.clear();
+        has_relocations_ = false;
+    }
 }

@@ -21,8 +21,8 @@ namespace kmx::sat::cdcl
         REQUIRE(ref.valid() == true);
         REQUIRE(learner.learned_clause_count() == 1u);
         REQUIRE(learner.last_learned_clause().size() == 2u);
-        REQUIRE(learner.last_learned_clause()[0].raw() == literals[0].raw());
-        REQUIRE(learner.last_learned_clause()[1].raw() == literals[1].raw());
+        REQUIRE(learner.last_learned_clause()[0u].raw() == literals[0u].raw());
+        REQUIRE(learner.last_learned_clause()[1u].raw() == literals[1u].raw());
         REQUIRE(learner.clause_count_for_size(2u) == 1u);
 
         learner.assign_asserting_literal(literal {variable {2u}, false});
@@ -37,8 +37,8 @@ namespace kmx::sat::cdcl
         REQUIRE(dedup_ref.valid() == true);
         REQUIRE(learner.learned_clause_count() == 2u);
         REQUIRE(learner.last_learned_clause().size() == 2u);
-        REQUIRE(learner.last_learned_clause()[0].raw() == literal {variable {3u}, false}.raw());
-        REQUIRE(learner.last_learned_clause()[1].raw() == literal {variable {4u}, true}.raw());
+        REQUIRE(learner.last_learned_clause()[0u].raw() == literal {variable {3u}, false}.raw());
+        REQUIRE(learner.last_learned_clause()[1u].raw() == literal {variable {4u}, true}.raw());
 
         const std::array tautological_literals {
             literal {variable {5u}, false},

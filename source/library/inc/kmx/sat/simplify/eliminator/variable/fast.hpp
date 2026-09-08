@@ -33,42 +33,23 @@ namespace kmx::sat::simplify::eliminator::variable
         fast() noexcept = default;
 
         /// @brief Supplies the clause set to evaluate for elimination.
-        void set_clauses(const std::vector<std::vector<literal>>& clauses) noexcept { clauses_ = clauses; }
+        void set_clauses(const clause_list_t& clauses) noexcept { clauses_ = clauses; }
 
         /// @brief Runs one abbreviated, cheaply-scored elimination round.
         /// @throws None (noexcept).
-        void run_fast_round() noexcept
-        {
-            ++fast_round_count_;
-            if (cheap_can_eliminate(kmx::sat::variable {1u}))
-            {
-                ++elimination_count_;
-                bounded_.run();
-            }
-        }
+        void run_fast_round() noexcept;
 
         /// @brief Computes a cheap, approximate elimination-cost estimate for a variable.
         /// @param var Variable to score.
         /// @return Approximate elimination cost.
         /// @throws None (noexcept).
-        std::int64_t cheap_score_variable(const kmx::sat::variable var) const noexcept
-        {
-            std::int64_t score {};
-            for (const auto& clause: clauses_)
-            {
-                const auto occurrences = std::count_if(clause.begin(), clause.end(), [var](const literal lit) noexcept
-                                                       { return lit.variable_of().index() == var.index(); });
-                if (occurrences > 0)
-                    ++score;
-            }
-            return score - 2;
-        }
+        std::int64_t cheap_score_variable(const kmx::sat::variable var) const noexcept;
 
         /// @brief Performs a cheap, approximate eligibility check for eliminating a variable.
         /// @param var Variable to check.
         /// @return True if the cheap check accepts the variable for elimination.
         /// @throws None (noexcept).
-        bool cheap_can_eliminate(const kmx::sat::variable var) const noexcept { return cheap_score_variable(var) <= 0; }
+        bool cheap_can_eliminate(const kmx::sat::variable var) const noexcept { return cheap_score_variable(var) <= 0L; }
 
         /// @brief Returns how many fast rounds have been executed.
         std::uint64_t fast_round_count() const noexcept { return fast_round_count_; }
@@ -78,7 +59,7 @@ namespace kmx::sat::simplify::eliminator::variable
 
     private:
         bounded bounded_ {};
-        std::vector<std::vector<literal>> clauses_ {};
+        clause_list_t clauses_ {};
         std::uint64_t fast_round_count_ {};
         std::uint64_t elimination_count_ {};
     };

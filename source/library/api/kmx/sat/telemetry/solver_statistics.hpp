@@ -3,20 +3,93 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <array>
+    #include <cstddef>
     #include <cstdint>
-    #include <string>
+    #include <optional>
     #include <string_view>
 #endif
 #include <kmx/sat/counter.hpp>
 
 namespace kmx::sat::telemetry
 {
+    /// @brief Identifies one counter tracked by `solver_statistics`.
+    /// @details Every enumerator names exactly one field of `solver_statistics::snapshot`, so a reporting subsystem
+    /// selects a counter by identity rather than by a spelled-out name that no compiler can check.
+    enum class counter_id : std::uint8_t
+    {
+        conflicts,
+        decisions,
+        propagations,
+        restarts,
+        learned_clauses,
+        learned_clause_glue_total,
+        learned_clause_glue_samples,
+        reduction_passes,
+        reduced_clauses,
+        deleted_clauses,
+        probes,
+        probe_units,
+        walk_flips,
+        terminate_callback_calls,
+        learn_callback_calls,
+        external_propagator_calls,
+        option_updates,
+        configuration_updates,
+    };
+
+    /// @brief Number of counters in `counter_id`, and the size of any per-counter table.
+    inline constexpr std::size_t counter_count {static_cast<std::size_t>(counter_id::configuration_updates) + 1u};
+
+    /// @brief Field name each counter is reported under, indexed by `counter_id`.
+    /// @details This is the only place a counter is spelled out: `report_formatter` emits these names and the
+    /// report parsers resolve them back to a `counter_id`, so the emitted and expected vocabularies cannot drift.
+    inline constexpr std::array<std::string_view, counter_count> counter_names {"conflicts",
+                                                                                "decisions",
+                                                                                "propagations",
+                                                                                "restarts",
+                                                                                "learned_clauses",
+                                                                                "learned_clause_glue_total",
+                                                                                "learned_clause_glue_samples",
+                                                                                "reduction_passes",
+                                                                                "reduced_clauses",
+                                                                                "deleted_clauses",
+                                                                                "probes",
+                                                                                "probe_units",
+                                                                                "walk_flips",
+                                                                                "terminate_callback_calls",
+                                                                                "learn_callback_calls",
+                                                                                "external_propagator_calls",
+                                                                                "option_updates",
+                                                                                "configuration_updates"};
+
+    /// @brief Returns the reporting field name of one counter.
+    /// @param id Counter to name.
+    /// @return Field name used in statistics report lines.
+    /// @throws None (noexcept).
+    constexpr std::string_view name_of(const counter_id id) noexcept
+    {
+        return counter_names[static_cast<std::uint8_t>(id)];
+    }
+
+    /// @brief Maps a field name read back from a statistics report onto its counter.
+    /// @param name Field name to resolve.
+    /// @return Resolved counter, or an empty optional when the field is not a counter.
+    /// @throws None (noexcept).
+    constexpr std::optional<counter_id> parse_counter_id(const std::string_view name) noexcept
+    {
+        for (std::size_t index {}; index < counter_names.size(); ++index)
+            if (counter_names[index] == name)
+                return static_cast<counter_id>(index);
+        return {};
+    }
+
     /// @brief All operational counters and metrics collected during search.
     ///
     /// @details
-    /// `solver_statistics` is the single accumulator every hot-path subsystem reports through: `inc`/`add` update a
-    /// named counter (conflicts, decisions, propagations, restarts, learned clauses, and any other metric a
-    /// subsystem chooses to name), `snapshot_of` captures an immutable `snapshot` for exposure through
+    /// `solver_statistics` is the single accumulator every hot-path subsystem reports through: `inc`/`add` update
+    /// one `counter_id` (conflicts, decisions, propagations, restarts, learned clauses, and every other tracked
+    /// metric), `snapshot_of` captures an immutable `snapshot` for exposure through
     /// `solve_result::statistics_snapshot`/`solver::statistics`, `merge_phase_statistics` combines counters from a
     /// sub-phase (for example a portfolio worker or a parallel preprocessing sub-task) into a parent accumulator, and
     /// `reset_epoch_counters` clears per-epoch counters at incremental session boundaries without necessarily
@@ -66,87 +139,16 @@ namespace kmx::sat::telemetry
         /// @throws None (noexcept).
         solver_statistics() noexcept = default;
 
-        /// @brief Increments a named counter by one.
-        /// @param counter_name Identifier of the counter to increment.
+        /// @brief Increments one counter by one.
+        /// @param id Counter to increment.
         /// @throws None (noexcept).
-        void inc(const std::string_view counter_name) noexcept { add(counter_name, 1u); }
+        void inc(const counter_id id) noexcept { add(id, 1u); }
 
-        /// @brief Adds a given amount to a named counter.
-        /// @param counter_name Identifier of the counter to update.
+        /// @brief Adds a given amount to one counter.
+        /// @param id Counter to update.
         /// @param amount Amount to add.
         /// @throws None (noexcept).
-        void add(const std::string_view counter_name, const counter_t amount) noexcept
-        {
-            switch (counter_name.size())
-            {
-                case 6u:
-                    if (counter_name == "probes")
-                        snapshot_.probes += amount;
-                    break;
-                case 8u:
-                    if (counter_name == "restarts")
-                        snapshot_.restarts += amount;
-                    break;
-                case 10u:
-                    if (counter_name == "walk_flips")
-                        snapshot_.walk_flips += amount;
-                    break;
-                case 11u:
-                    if (counter_name == "probe_units")
-                        snapshot_.probe_units += amount;
-                    break;
-                case 9u:
-                    if (counter_name == "conflicts")
-                        snapshot_.conflicts += amount;
-                    else if (counter_name == "decisions")
-                        snapshot_.decisions += amount;
-                    break;
-                case 12u:
-                    if (counter_name == "propagations")
-                        snapshot_.propagations += amount;
-                    break;
-                case 14u:
-                    if (counter_name == "option_updates")
-                        snapshot_.option_updates += amount;
-                    break;
-                case 15u:
-                    if (counter_name == "learned_clauses")
-                        snapshot_.learned_clauses += amount;
-                    else if (counter_name == "reduced_clauses")
-                        snapshot_.reduced_clauses += amount;
-                    else if (counter_name == "deleted_clauses")
-                        snapshot_.deleted_clauses += amount;
-                    break;
-                case 16u:
-                    if (counter_name == "reduction_passes")
-                        snapshot_.reduction_passes += amount;
-                    break;
-                case 20u:
-                    if (counter_name == "learn_callback_calls")
-                        snapshot_.learn_callback_calls += amount;
-                    break;
-                case 21u:
-                    if (counter_name == "configuration_updates")
-                        snapshot_.configuration_updates += amount;
-                    break;
-                case 24u:
-                    if (counter_name == "terminate_callback_calls")
-                        snapshot_.terminate_callback_calls += amount;
-                    break;
-                case 25u:
-                    if (counter_name == "learned_clause_glue_total")
-                        snapshot_.learned_clause_glue_total += amount;
-                    else if (counter_name == "external_propagator_calls")
-                        snapshot_.external_propagator_calls += amount;
-                    break;
-                case 27u:
-                    if (counter_name == "learned_clause_glue_samples")
-                        snapshot_.learned_clause_glue_samples += amount;
-                    break;
-                default:
-                    break;
-            }
-        }
+        void add(const counter_id id, const counter_t amount) noexcept;
 
         /// @brief Captures an immutable snapshot of the currently tracked counters.
         /// @return Point-in-time copy of every tracked counter.
@@ -158,100 +160,23 @@ namespace kmx::sat::telemetry
         /// @param after Candidate snapshot.
         /// @return True when all counters in @p after are greater-than-or-equal to @p before.
         /// @throws None (noexcept).
-        static bool snapshot_monotonic(const snapshot& before, const snapshot& after) noexcept
-        {
-            return after.conflicts >= before.conflicts && after.decisions >= before.decisions &&
-                   after.propagations >= before.propagations && after.restarts >= before.restarts &&
-                   after.learned_clauses >= before.learned_clauses && after.learned_clause_glue_total >= before.learned_clause_glue_total &&
-                   after.learned_clause_glue_samples >= before.learned_clause_glue_samples &&
-                   after.reduction_passes >= before.reduction_passes && after.reduced_clauses >= before.reduced_clauses &&
-                   after.deleted_clauses >= before.deleted_clauses && after.terminate_callback_calls >= before.terminate_callback_calls &&
-                   after.learn_callback_calls >= before.learn_callback_calls &&
-                   after.external_propagator_calls >= before.external_propagator_calls && after.option_updates >= before.option_updates &&
-                   after.configuration_updates >= before.configuration_updates;
-        }
+        static bool snapshot_monotonic(const snapshot& before, const snapshot& after) noexcept;
 
         /// @brief Computes the non-negative per-counter delta between two snapshots.
         /// @param before Baseline snapshot.
         /// @param after Candidate snapshot.
         /// @return Snapshot containing `after - before` for each counter (saturating at zero).
         /// @throws None (noexcept).
-        static snapshot snapshot_delta_between(const snapshot& before, const snapshot& after) noexcept
-        {
-            return snapshot {
-                .conflicts = after.conflicts >= before.conflicts ? after.conflicts - before.conflicts : 0u,
-                .decisions = after.decisions >= before.decisions ? after.decisions - before.decisions : 0u,
-                .propagations = after.propagations >= before.propagations ? after.propagations - before.propagations : 0u,
-                .restarts = after.restarts >= before.restarts ? after.restarts - before.restarts : 0u,
-                .learned_clauses = after.learned_clauses >= before.learned_clauses ? after.learned_clauses - before.learned_clauses : 0u,
-                .learned_clause_glue_total = after.learned_clause_glue_total >= before.learned_clause_glue_total ?
-                                                 after.learned_clause_glue_total - before.learned_clause_glue_total :
-                                                 0u,
-                .learned_clause_glue_samples = after.learned_clause_glue_samples >= before.learned_clause_glue_samples ?
-                                                   after.learned_clause_glue_samples - before.learned_clause_glue_samples :
-                                                   0u,
-                .reduction_passes =
-                    after.reduction_passes >= before.reduction_passes ? after.reduction_passes - before.reduction_passes : 0u,
-                .reduced_clauses = after.reduced_clauses >= before.reduced_clauses ? after.reduced_clauses - before.reduced_clauses : 0u,
-                .deleted_clauses = after.deleted_clauses >= before.deleted_clauses ? after.deleted_clauses - before.deleted_clauses : 0u,
-                .terminate_callback_calls = after.terminate_callback_calls >= before.terminate_callback_calls ?
-                                                after.terminate_callback_calls - before.terminate_callback_calls :
-                                                0u,
-                .learn_callback_calls = after.learn_callback_calls >= before.learn_callback_calls ?
-                                            after.learn_callback_calls - before.learn_callback_calls :
-                                            0u,
-                .external_propagator_calls = after.external_propagator_calls >= before.external_propagator_calls ?
-                                                 after.external_propagator_calls - before.external_propagator_calls :
-                                                 0u,
-                .option_updates = after.option_updates >= before.option_updates ? after.option_updates - before.option_updates : 0u,
-                .configuration_updates = after.configuration_updates >= before.configuration_updates ?
-                                             after.configuration_updates - before.configuration_updates :
-                                             0u,
-            };
-        }
+        static snapshot snapshot_delta_between(const snapshot& before, const snapshot& after) noexcept;
 
         /// @brief Merges counters accumulated by a sub-phase (portfolio worker, parallel sub-task) into this instance.
         /// @param other Statistics accumulator whose counters should be merged in.
         /// @throws None (noexcept).
-        void merge_phase_statistics(const solver_statistics& other) noexcept
-        {
-            snapshot_.conflicts += other.snapshot_.conflicts;
-            snapshot_.decisions += other.snapshot_.decisions;
-            snapshot_.propagations += other.snapshot_.propagations;
-            snapshot_.restarts += other.snapshot_.restarts;
-            snapshot_.learned_clauses += other.snapshot_.learned_clauses;
-            snapshot_.learned_clause_glue_total += other.snapshot_.learned_clause_glue_total;
-            snapshot_.learned_clause_glue_samples += other.snapshot_.learned_clause_glue_samples;
-            snapshot_.reduction_passes += other.snapshot_.reduction_passes;
-            snapshot_.reduced_clauses += other.snapshot_.reduced_clauses;
-            snapshot_.deleted_clauses += other.snapshot_.deleted_clauses;
-            snapshot_.terminate_callback_calls += other.snapshot_.terminate_callback_calls;
-            snapshot_.learn_callback_calls += other.snapshot_.learn_callback_calls;
-            snapshot_.external_propagator_calls += other.snapshot_.external_propagator_calls;
-            snapshot_.option_updates += other.snapshot_.option_updates;
-            snapshot_.configuration_updates += other.snapshot_.configuration_updates;
-        }
+        void merge_phase_statistics(const solver_statistics& other) noexcept;
 
         /// @brief Resets per-epoch counters at an incremental session boundary.
         /// @throws None (noexcept).
-        void reset_epoch_counters() noexcept
-        {
-            snapshot_.conflicts = 0u;
-            snapshot_.decisions = 0u;
-            snapshot_.propagations = 0u;
-            snapshot_.restarts = 0u;
-            snapshot_.learned_clauses = 0u;
-            snapshot_.learned_clause_glue_total = 0u;
-            snapshot_.learned_clause_glue_samples = 0u;
-            snapshot_.reduction_passes = 0u;
-            snapshot_.reduced_clauses = 0u;
-            snapshot_.deleted_clauses = 0u;
-            snapshot_.terminate_callback_calls = 0u;
-            snapshot_.learn_callback_calls = 0u;
-            snapshot_.external_propagator_calls = 0u;
-            snapshot_.option_updates = 0u;
-            snapshot_.configuration_updates = 0u;
-        }
+        void reset_epoch_counters() noexcept;
 
     private:
         snapshot snapshot_ {};

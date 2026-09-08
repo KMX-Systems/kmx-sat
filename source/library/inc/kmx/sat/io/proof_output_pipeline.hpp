@@ -37,29 +37,12 @@ namespace kmx::sat::io
 
         /// @brief Submits the current buffered batch from the pipeline's internal stream for output.
         /// @throws None (noexcept).
-        void submit() noexcept
-        {
-            if (!active_)
-                return;
-            ++submitted_count_;
-            const auto buffered = event_stream_.buffered_count();
-            if (buffered > 0u)
-                submitted_count_ += buffered;
-            event_stream_.drain();
-        }
+        void submit() noexcept;
 
         /// @brief Submits an external batch of proof events for output.
         /// @param stream Event stream whose buffered events should be submitted.
         /// @throws None (noexcept).
-        void submit(const proof::event_stream& stream) noexcept
-        {
-            if (!active_)
-                return;
-            ++submitted_count_;
-            submitted_count_ += stream.buffered_count();
-            if (backpressure_policy_enabled_)
-                submitted_count_ += 1u;
-        }
+        void submit(const proof::event_stream& stream) noexcept;
 
         /// @brief Blocks until all currently submitted data has been written.
         /// @throws None (noexcept).

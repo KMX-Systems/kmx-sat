@@ -14,6 +14,15 @@
 
 namespace kmx::sat::cdcl::bank
 {
+    /// @brief The watches registered for one literal.
+    using literal_watches_t = std::vector<watch>;
+
+    /// @brief Dense watch table indexed directly by literal, for the low literal range.
+    using direct_watch_table_t = std::vector<literal_watches_t>;
+
+    /// @brief Sparse watch table for literals beyond the dense range.
+    using overflow_watch_map_t = std::unordered_map<literal::raw_t, literal_watches_t>;
+
     /// @brief All watch lists, partitioned by literal.
     /// @details
     /// `bank::watch_list` holds one list of `watch` entries per literal (positive and negative occurrence of every
@@ -37,13 +46,13 @@ namespace kmx::sat::cdcl::bank
         /// @throws None (noexcept).
         void reserve(const std::size_t literal_count) noexcept
         {
-            if (literal_count < direct_index_limit && literal_count > direct_lists_.size())
+            if ((literal_count < direct_index_limit) && (literal_count > direct_lists_.size()))
                 direct_lists_.resize(literal_count);
         }
 
         /// @brief Returns the watch list of a literal whose index is below the reserved bound; no range check.
         /// @param literal_index Dense literal index (`literal::index_in_watch_bank`).
-        [[nodiscard]] [[gnu::always_inline]] inline std::vector<watch>& list_at(const std::size_t literal_index) noexcept
+        [[nodiscard]] [[gnu::always_inline]] inline literal_watches_t& list_at(const std::size_t literal_index) noexcept
         {
             return direct_lists_[literal_index];
         }
@@ -52,7 +61,7 @@ namespace kmx::sat::cdcl::bank
         /// @param lit Literal whose watch list is accessed.
         /// @return Mutable reference to the watch list.
         /// @throws None (noexcept).
-        [[nodiscard]] std::vector<watch>& watches_of(const literal lit) noexcept
+        [[nodiscard]] literal_watches_t& watches_of(const literal lit) noexcept
         {
             ++iterate_call_count_;
             return ensure_list(lit);
@@ -63,19 +72,7 @@ namespace kmx::sat::cdcl::bank
         /// @param lit Literal whose list receives the new entry.
         /// @param entry Watch entry to add.
         /// @throws None (noexcept).
-        void watch_literal(const literal lit, const watch entry) noexcept
-        {
-            auto& list = ensure_list(lit);
-            for (auto& existing: list)
-            {
-                if (existing == entry)
-                {
-                    existing = entry;
-                    return;
-                }
-            }
-            list.push_back(entry);
-        }
+        void watch_literal(const literal lit, const watch entry) noexcept;
 
         /// @brief Appends a watch entry without checking whether the clause is already watched on this literal.
         /// @details `watch_literal` scans the whole target list to deduplicate. Watch replacement during propagation
@@ -84,18 +81,9 @@ namespace kmx::sat::cdcl::bank
         /// @param lit Literal whose list receives the new entry.
         /// @param entry Watch entry to append.
         /// @throws None (noexcept).
-        void push_watch(const literal lit, const watch entry) noexcept
-        {
-            auto& list = ensure_list(lit);
-            // Growth is rare (a learned clause's first watches, a list a moved watch lands on for the first time);
-            // kept in a cold routine so the reallocation never sits inside the propagation loop.
-            if (list.size() == list.capacity()) [[unlikely]]
-                push_growing(list, entry);
-            else
-                list.push_back(entry);
-        }
+        void push_watch(const literal lit, const watch entry) noexcept;
 
-        [[gnu::noinline, gnu::cold]] static void push_growing(std::vector<watch>& list, const watch entry) noexcept
+        [[gnu::noinline, gnu::cold]] static void push_growing(literal_watches_t& list, const watch entry) noexcept
         {
             list.push_back(entry);
         }
@@ -114,38 +102,14 @@ namespace kmx::sat::cdcl::bank
         /// @param lit Literal whose list loses the entry.
         /// @param entry Watch entry to remove.
         /// @throws None (noexcept).
-        void unwatch_literal(const literal lit, const watch entry) noexcept
-        {
-            const auto index = static_cast<std::size_t>(lit.index_in_watch_bank());
-            if (index < direct_index_limit)
-            {
-                if (index >= direct_lists_.size())
-                    return;
-                auto& list = direct_lists_[index];
-                list.erase(std::remove(list.begin(), list.end(), entry), list.end());
-                return;
-            }
-            const auto it = overflow_lists_.find(static_cast<literal::raw_t>(index));
-            if (it == overflow_lists_.end())
-                return;
-            auto& list = it->second;
-            list.erase(std::remove(list.begin(), list.end(), entry), list.end());
-            if (list.empty())
-                overflow_lists_.erase(it);
-        }
+        void unwatch_literal(const literal lit, const watch entry) noexcept;
 
         /// @brief Checks whether the given watch entry is currently registered for the given literal.
-        [[nodiscard]] bool contains(const literal lit, const watch entry) const noexcept
-        {
-            const auto* list = list_of(lit);
-            if (list == nullptr)
-                return false;
-            return std::find(list->begin(), list->end(), entry) != list->end();
-        }
+        [[nodiscard]] bool contains(const literal lit, const watch entry) const noexcept;
 
         /// @brief Visits every watch entry currently registered for the given literal.
-        template <typename visitor_t>
-        void iterate(const literal lit, visitor_t&& visitor) const noexcept
+        template <typename Visitor>
+        void iterate(const literal lit, Visitor&& visitor) const noexcept
         {
             ++iterate_call_count_;
             const auto* list = list_of(lit);
@@ -159,7 +123,7 @@ namespace kmx::sat::cdcl::bank
         [[nodiscard]] std::size_t size_of(const literal lit) const noexcept
         {
             const auto* list = list_of(lit);
-            return list != nullptr ? list->size() : 0u;
+            return (list != nullptr) ? list->size() : 0u;
         }
 
         /// @brief Returns how many watch partitions have been iterated since construction/reset.
@@ -172,136 +136,29 @@ namespace kmx::sat::cdcl::bank
         void reset_diagnostics() noexcept { iterate_call_count_ = 0u; }
 
         /// @brief Drops every watch entry while keeping the per-literal partition allocated.
-        void clear_entries() noexcept
-        {
-            for (auto& list: direct_lists_)
-                list.clear();
-            overflow_lists_.clear();
-        }
+        void clear_entries() noexcept;
 
         /// @brief Re-targets every entry after an arena compaction, dropping entries of clauses that did not survive.
         /// @param forward Callable `(clause::ref_t old_ref) -> clause::ref_t` returning the clause's new reference,
         /// or an invalid reference when the clause is gone.
         /// @throws None (noexcept).
-        template <typename forward_t>
-        void rewrite_refs(forward_t&& forward) noexcept
-        {
-            const auto rewrite_list = [&](std::vector<watch>& list) noexcept
-            {
-                std::size_t write {};
-                for (const auto entry: list)
-                {
-                    const auto new_ref = forward(entry.clause_ref());
-                    if (!new_ref.valid())
-                        continue;
-                    list[write++] = watch {entry.blocking_literal(), new_ref, entry.is_binary()};
-                }
-                list.resize(write);
-            };
-            for (auto& list: direct_lists_)
-                rewrite_list(list);
-            for (auto& [index, list]: overflow_lists_)
-                rewrite_list(list);
-        }
+        template <typename Forward>
+        void rewrite_refs(Forward&& forward) noexcept;
 
         /// @brief Rewrites every stored clause reference after a garbage-collection cycle relocates one clause.
-        void replace_clause_ref_after_gc(const clause::ref_t old_ref, const clause::ref_t new_ref) noexcept
-        {
-            if (!old_ref.valid() || !new_ref.valid() || old_ref == new_ref)
-                return;
-            auto rewrite_list = [&](std::vector<watch>& list) noexcept
-            {
-                for (auto& entry: list)
-                    if (entry.clause_ref() == old_ref)
-                        entry.set_clause_ref(new_ref);
-                std::vector<watch> unique_entries {};
-                unique_entries.reserve(list.size());
-                for (const auto& entry: list)
-                    if (std::find(unique_entries.begin(), unique_entries.end(), entry) == unique_entries.end())
-                        unique_entries.push_back(entry);
-                list.swap(unique_entries);
-            };
-            for (auto& list: direct_lists_)
-                rewrite_list(list);
-            for (auto& [index, list]: overflow_lists_)
-                rewrite_list(list);
-        }
+        void replace_clause_ref_after_gc(const clause::ref_t old_ref, const clause::ref_t new_ref) noexcept;
 
         /// @brief Rebuilds the per-literal partition after a pass renumbers variables.
         /// @param remap Callable mapping an old literal to its new, post-compaction literal.
-        template <typename remap_fn>
-        void reindex_after_compaction(remap_fn&& remap) noexcept
-        {
-            std::vector<std::vector<watch>> rebuilt_direct {};
-            std::unordered_map<literal::raw_t, std::vector<watch>> rebuilt_overflow {};
-
-            auto insert_remapped = [&](const literal old_lit, const std::vector<watch>& list) noexcept
-            {
-                if (list.empty())
-                    return;
-                const auto new_lit = remap(old_lit);
-                const auto new_index = static_cast<std::size_t>(new_lit.index_in_watch_bank());
-                auto& target = (new_index < direct_index_limit) ?
-                                   ([&]() noexcept -> std::vector<watch>& {
-                                       if (new_index >= rebuilt_direct.size())
-                                           rebuilt_direct.resize(new_index + 1u);
-                                       return rebuilt_direct[new_index];
-                                   })() :
-                                   rebuilt_overflow[static_cast<literal::raw_t>(new_index)];
-
-                for (const auto& entry: list)
-                {
-                    const watch remapped_entry {remap(entry.blocking_literal()), entry.clause_ref(), entry.is_binary()};
-                    if (std::find(target.begin(), target.end(), remapped_entry) == target.end())
-                        target.push_back(remapped_entry);
-                }
-            };
-
-            for (std::size_t index {}; index < direct_lists_.size(); ++index)
-                insert_remapped(literal {static_cast<literal::raw_t>(index)}, direct_lists_[index]);
-
-            std::vector<literal::raw_t> overflow_indices {};
-            overflow_indices.reserve(overflow_lists_.size());
-            for (const auto& [index, list]: overflow_lists_)
-                if (!list.empty())
-                    overflow_indices.push_back(index);
-            std::sort(overflow_indices.begin(), overflow_indices.end());
-            for (const auto index: overflow_indices)
-                insert_remapped(literal {index}, overflow_lists_.at(index));
-
-            direct_lists_.swap(rebuilt_direct);
-            overflow_lists_.swap(rebuilt_overflow);
-        }
+        template <typename RemapFn>
+        void reindex_after_compaction(RemapFn&& remap) noexcept;
 
         /// @brief Prunes watch entries referring to clauses already marked garbage, shortening future list scans.
-        template <typename predicate_t>
-        void flush_large_watches(predicate_t&& is_garbage) noexcept
-        {
-            for (auto& list: direct_lists_)
-            {
-                list.erase(
-                    std::remove_if(list.begin(), list.end(), [&](const watch& entry) noexcept { return is_garbage(entry.clause_ref()); }),
-                    list.end());
-            }
-            for (auto it = overflow_lists_.begin(); it != overflow_lists_.end();)
-            {
-                auto& list = it->second;
-                list.erase(
-                    std::remove_if(list.begin(), list.end(), [&](const watch& entry) noexcept { return is_garbage(entry.clause_ref()); }),
-                    list.end());
-
-                if (list.empty())
-                {
-                    it = overflow_lists_.erase(it);
-                    continue;
-                }
-
-                ++it;
-            }
-        }
+        template <typename Predicate>
+        void flush_large_watches(Predicate&& is_garbage) noexcept;
 
     private:
-        static constexpr std::size_t direct_index_limit {std::size_t {1} << 24};
+        static constexpr std::size_t direct_index_limit {std::size_t {1u} << 24};
 
         /// @brief The list of a literal, created if it does not exist yet.
         /// @details The common case, an existing direct list, is the only code that lands in the propagation
@@ -309,7 +166,7 @@ namespace kmx::sat::cdcl::bank
         /// their allocation and termination paths sat inside `propagate` and cost it a sixth more instructions
         /// per call through the register pressure they added, and whether the compiler split them out varied
         /// from build to build.
-        [[gnu::always_inline]] inline std::vector<watch>& ensure_list(const literal lit) noexcept
+        [[gnu::always_inline]] inline literal_watches_t& ensure_list(const literal lit) noexcept
         {
             const auto index = static_cast<std::size_t>(lit.index_in_watch_bank());
             if (index < direct_lists_.size()) [[likely]]
@@ -317,27 +174,104 @@ namespace kmx::sat::cdcl::bank
             return grow_list(index);
         }
 
-        [[gnu::noinline, gnu::cold]] std::vector<watch>& grow_list(const std::size_t index) noexcept
-        {
-            if (index < direct_index_limit)
-            {
-                direct_lists_.resize(index + 1u);
-                return direct_lists_[index];
-            }
-            return overflow_lists_[static_cast<literal::raw_t>(index)];
-        }
+        [[gnu::noinline, gnu::cold]] literal_watches_t& grow_list(const std::size_t index) noexcept;
 
-        const std::vector<watch>* list_of(const literal lit) const noexcept
-        {
-            const auto index = static_cast<std::size_t>(lit.index_in_watch_bank());
-            if (index < direct_index_limit)
-                return index < direct_lists_.size() ? &direct_lists_[index] : nullptr;
-            const auto it = overflow_lists_.find(static_cast<literal::raw_t>(index));
-            return it != overflow_lists_.end() ? &it->second : nullptr;
-        }
+        const literal_watches_t* list_of(const literal lit) const noexcept;
 
-        std::vector<std::vector<watch>> direct_lists_ {};
-        std::unordered_map<literal::raw_t, std::vector<watch>> overflow_lists_ {};
+        direct_watch_table_t direct_lists_ {};
+        overflow_watch_map_t overflow_lists_ {};
         mutable std::size_t iterate_call_count_ {};
     };
+
+    template <typename Forward>
+    void watch_list::rewrite_refs(Forward&& forward) noexcept
+    {
+        const auto rewrite_list = [&](literal_watches_t& list) noexcept
+        {
+            std::size_t write {};
+            for (const auto entry: list)
+            {
+                const auto new_ref = forward(entry.clause_ref());
+                if (!new_ref.valid())
+                    continue;
+                list[write++] = watch {entry.blocking_literal(), new_ref, entry.is_binary()};
+            }
+            list.resize(write);
+        };
+        for (auto& list: direct_lists_)
+            rewrite_list(list);
+        for (auto& [index, list]: overflow_lists_)
+            rewrite_list(list);
+    }
+
+    template <typename RemapFn>
+    void watch_list::reindex_after_compaction(RemapFn&& remap) noexcept
+    {
+        direct_watch_table_t rebuilt_direct {};
+        overflow_watch_map_t rebuilt_overflow {};
+
+        auto insert_remapped = [&](const literal old_lit, const literal_watches_t& list) noexcept
+        {
+            if (list.empty())
+                return;
+            const auto new_lit = remap(old_lit);
+            const auto new_index = static_cast<std::size_t>(new_lit.index_in_watch_bank());
+            auto& target = (new_index < direct_index_limit) ? (
+                                                                  [&]() noexcept -> literal_watches_t&
+                                                                  {
+                                                                      if (new_index >= rebuilt_direct.size())
+                                                                          rebuilt_direct.resize(new_index + 1u);
+                                                                      return rebuilt_direct[new_index];
+                                                                  })() :
+                                                              rebuilt_overflow[static_cast<literal::raw_t>(new_index)];
+
+            for (const auto& entry: list)
+            {
+                const watch remapped_entry {remap(entry.blocking_literal()), entry.clause_ref(), entry.is_binary()};
+                if (std::find(target.begin(), target.end(), remapped_entry) == target.end())
+                    target.push_back(remapped_entry);
+            }
+        };
+
+        for (std::size_t index {}; index < direct_lists_.size(); ++index)
+            insert_remapped(literal {static_cast<literal::raw_t>(index)}, direct_lists_[index]);
+
+        std::vector<literal::raw_t> overflow_indices {};
+        overflow_indices.reserve(overflow_lists_.size());
+        for (const auto& [index, list]: overflow_lists_)
+            if (!list.empty())
+                overflow_indices.push_back(index);
+        std::sort(overflow_indices.begin(), overflow_indices.end());
+        for (const auto index: overflow_indices)
+            insert_remapped(literal {index}, overflow_lists_.at(index));
+
+        direct_lists_.swap(rebuilt_direct);
+        overflow_lists_.swap(rebuilt_overflow);
+    }
+
+    template <typename Predicate>
+    void watch_list::flush_large_watches(Predicate&& is_garbage) noexcept
+    {
+        for (auto& list: direct_lists_)
+        {
+            list.erase(
+                std::remove_if(list.begin(), list.end(), [&](const watch& entry) noexcept { return is_garbage(entry.clause_ref()); }),
+                list.end());
+        }
+        for (auto it = overflow_lists_.begin(); it != overflow_lists_.end();)
+        {
+            auto& list = it->second;
+            list.erase(
+                std::remove_if(list.begin(), list.end(), [&](const watch& entry) noexcept { return is_garbage(entry.clause_ref()); }),
+                list.end());
+
+            if (list.empty())
+            {
+                it = overflow_lists_.erase(it);
+                continue;
+            }
+
+            ++it;
+        }
+    }
 }

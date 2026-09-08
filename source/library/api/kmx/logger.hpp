@@ -42,7 +42,7 @@ namespace kmx::logger
                 '?'  // unknown
             };
             const auto index = static_cast<std::size_t>(l);
-            return index < chars.size() ? chars[index] : chars.back();
+            return (index < chars.size()) ? chars[index] : chars.back();
         }
     }
 
@@ -71,7 +71,7 @@ namespace kmx::logger
             if (const char* last_slash = std::strrchr(full, '/'))
                 file = last_slash + 1;
             // Route errors to stderr and all other levels to stdout, then flush immediately.
-            auto* output = lvl == level::error ? stderr : stdout;
+            auto* output = (lvl == level::error) ? stderr : stdout;
             std::println(output, "[{}] [{1}:{2}] {3}", detail::level_to_char(lvl), file, loc.line(),
                          std::format(fmt, std::forward<Args>(args)...));
             std::fflush(output);

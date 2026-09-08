@@ -14,11 +14,11 @@ namespace kmx::sat::telemetry
         logger.log_literal(lit);
         logger.log_gate();
         logger.log_extension();
-        logger.log_phase_summary("search");
+        logger.log_phase_summary(phase_id::search);
 
         REQUIRE(logger.event_count() == 5u);
         REQUIRE(logger.last_event().kind == logging_facade::event_kind::phase_summary);
-        REQUIRE(logger.last_event().phase_name == "search");
+        REQUIRE(logger.last_event().phase == phase_id::search);
         REQUIRE(logger.last_event().ref_offset == ref.offset());
         REQUIRE(logger.last_literal().literal_value == lit);
         REQUIRE(logger.last_clause_ref() == ref.offset());

@@ -67,13 +67,13 @@ namespace kmx::sat::cdcl
     struct extension_record final
     {
         /// @brief Alias keeping the payload types reachable through the record, as call sites spell them.
-        using bve_elimination = kmx::sat::cdcl::bve_elimination;
+        using bve_elimination_t = kmx::sat::cdcl::bve_elimination;
         /// @brief Alias keeping the payload types reachable through the record, as call sites spell them.
-        using bce_blocking = kmx::sat::cdcl::bce_blocking;
+        using bce_blocking_t = kmx::sat::cdcl::bce_blocking;
         /// @brief Alias keeping the payload types reachable through the record, as call sites spell them.
-        using factor_transformation = kmx::sat::cdcl::factor_transformation;
+        using factor_transformation_t = kmx::sat::cdcl::factor_transformation;
 
         /// @brief The concrete reversible-transformation payload for this record.
-        std::variant<bve_elimination, bce_blocking, factor_transformation> payload {};
+        std::variant<bve_elimination_t, bce_blocking_t, factor_transformation_t> payload {};
     };
 }

@@ -23,18 +23,7 @@ namespace kmx::sat::cdcl
 
         void push(const literal lit) noexcept { literals_.push_back(lit); }
 
-        void pop_to(const std::uint32_t position) noexcept
-        {
-            if (position >= literals_.size())
-            {
-                literals_.clear();
-                propagation_head_ = 0u;
-                return;
-            }
-            literals_.resize(position);
-            if (propagation_head_ > position)
-                propagation_head_ = position;
-        }
+        void pop_to(const std::uint32_t position) noexcept;
 
         std::uint32_t current_head() const noexcept { return static_cast<std::uint32_t>(literals_.size()); }
 
@@ -46,12 +35,7 @@ namespace kmx::sat::cdcl
                 ++propagation_head_;
         }
 
-        literal literal_at(const std::uint32_t position) const noexcept
-        {
-            if (position >= literals_.size())
-                return {};
-            return literals_[position];
-        }
+        literal literal_at(const std::uint32_t position) const noexcept;
 
     private:
         std::vector<literal> literals_ {};

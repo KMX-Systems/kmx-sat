@@ -39,21 +39,12 @@ namespace kmx::sat::runtime::controller
 
         /// @brief Installs async-signal-safe OS handlers for SIGINT/SIGTERM.
         /// @throws None (noexcept).
-        void install_handlers() noexcept
-        {
-            if (!handlers_installed_)
-            {
-                std::signal(SIGINT, &signal::handle_signal);
-                std::signal(SIGTERM, &signal::handle_signal);
-                handlers_installed_ = true;
-                ++install_count_;
-            }
-        }
+        void install_handlers() noexcept;
 
         /// @brief Checks whether a termination request is currently pending.
         /// @return True if termination has been requested and not yet cleared.
         /// @throws None (noexcept).
-        bool termination_requested() const noexcept { return termination_requested_ || pending_signal_ != 0; }
+        bool termination_requested() const noexcept { return termination_requested_ || (pending_signal_ != 0); }
 
         /// @brief Requests an orderly stop programmatically, without going through an OS signal.
         /// @throws None (noexcept).
@@ -65,22 +56,11 @@ namespace kmx::sat::runtime::controller
 
         /// @brief Requests an orderly stop through the installed OS-signal path.
         /// @throws None (noexcept).
-        void notify_os_signal() noexcept
-        {
-            if (!handlers_installed_)
-                return;
-            request_stop();
-            ++os_signal_request_count_;
-        }
+        void notify_os_signal() noexcept;
 
         /// @brief Clears any pending termination request.
         /// @throws None (noexcept).
-        void clear() noexcept
-        {
-            termination_requested_ = false;
-            pending_signal_ = 0;
-            ++clear_count_;
-        }
+        void clear() noexcept;
 
         [[nodiscard]] bool handlers_installed() const noexcept { return handlers_installed_; }
 
@@ -92,33 +72,14 @@ namespace kmx::sat::runtime::controller
 
         [[nodiscard]] std::uint32_t clear_count() const noexcept { return clear_count_; }
 
-        [[nodiscard]] metrics metrics_snapshot() const noexcept
-        {
-            return metrics {
-                .handlers_installed = handlers_installed_,
-                .termination_requested = termination_requested_,
-                .install_count = install_count_,
-                .stop_request_count = stop_request_count_,
-                .os_signal_request_count = os_signal_request_count_,
-                .clear_count = clear_count_,
-            };
-        }
+        [[nodiscard]] metrics metrics_snapshot() const noexcept;
 
-        void reset_metrics() noexcept
-        {
-            handlers_installed_ = false;
-            termination_requested_ = false;
-            pending_signal_ = 0;
-            install_count_ = 0u;
-            stop_request_count_ = 0u;
-            os_signal_request_count_ = 0u;
-            clear_count_ = 0u;
-        }
+        void reset_metrics() noexcept;
 
         static bool metrics_monotonic(const metrics& before, const metrics& after) noexcept
         {
-            return after.install_count >= before.install_count && after.stop_request_count >= before.stop_request_count &&
-                   after.os_signal_request_count >= before.os_signal_request_count && after.clear_count >= before.clear_count;
+            return (after.install_count >= before.install_count) && (after.stop_request_count >= before.stop_request_count) &&
+                   (after.os_signal_request_count >= before.os_signal_request_count) && (after.clear_count >= before.clear_count);
         }
 
     private:

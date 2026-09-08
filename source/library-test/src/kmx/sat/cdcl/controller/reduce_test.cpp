@@ -51,20 +51,20 @@ namespace kmx::sat::cdcl
         controller::reduce reduce;
         clause::database database;
 
-        const variable var_a {1};
-        const variable var_b {2};
+        const variable var_a {1u};
+        const variable var_b {2u};
         const literal a_pos {var_a, false};
         const literal b_pos {var_b, false};
 
-        const std::array<literal, 2> keep_literals {a_pos, b_pos};
+        const std::array<literal, 2u> keep_literals {a_pos, b_pos};
         const auto keep_ref = database.add_clause(keep_literals, true);
-        const auto reason_ref = database.add_clause(std::array<literal, 1> {a_pos}, true);
+        const auto reason_ref = database.add_clause(std::array<literal, 1u> {a_pos}, true);
 
         database.demote_clause(keep_ref);
         database.demote_clause(keep_ref);
         database.mark_reason_clause(reason_ref);
 
-        const std::array<clause::ref_t, 2> candidates {keep_ref, reason_ref};
+        const std::array<clause::ref_t, 2u> candidates {keep_ref, reason_ref};
         reduce.select_reduction_candidates(database, candidates);
         REQUIRE(reduce.last_selected_candidate_count() == 1u);
         REQUIRE(reduce.has_candidates());
@@ -103,12 +103,12 @@ namespace kmx::sat::cdcl
         clause::database database;
 
         const auto low_glue_used =
-            database.add_clause(std::array<literal, 2> {literal {variable {10}, false}, literal {variable {11}, false}}, true);
+            database.add_clause(std::array<literal, 2u> {literal {variable {10u}, false}, literal {variable {11u}, false}}, true);
         const auto high_glue_unused =
-            database.add_clause(std::array<literal, 4> {literal {variable {12}, false}, literal {variable {13}, false},
-                                                        literal {variable {14}, false}, literal {variable {15}, false}},
+            database.add_clause(std::array<literal, 4u> {literal {variable {12u}, false}, literal {variable {13u}, false},
+                                                        literal {variable {14u}, false}, literal {variable {15u}, false}},
                                 true);
-        const auto active_reason = database.add_clause(std::array<literal, 1> {literal {variable {16}, false}}, true);
+        const auto active_reason = database.add_clause(std::array<literal, 1u> {literal {variable {16u}, false}}, true);
 
         database.set_glue(low_glue_used, 1u);
         database.set_glue(high_glue_unused, 4u);
@@ -116,14 +116,14 @@ namespace kmx::sat::cdcl
         database.increment_used_count(low_glue_used);
         database.mark_reason_clause(active_reason);
 
-        const std::array<clause::ref_t, 3> candidates {low_glue_used, high_glue_unused, active_reason};
+        const std::array<clause::ref_t, 3u> candidates {low_glue_used, high_glue_unused, active_reason};
         reduce.set_reduction_fraction_percent(100u);
         reduce.select_reduction_candidates(database, candidates);
 
         const auto ranked = reduce.candidate_offsets();
         REQUIRE(ranked.size() == 2u);
-        REQUIRE(ranked[0] == high_glue_unused.offset());
-        REQUIRE(ranked[1] == low_glue_used.offset());
+        REQUIRE(ranked[0u] == high_glue_unused.offset());
+        REQUIRE(ranked[1u] == low_glue_used.offset());
         REQUIRE(reduce.last_selected_candidate_count() == 2u);
     }
 
@@ -132,22 +132,22 @@ namespace kmx::sat::cdcl
         controller::reduce reduce;
         clause::database database;
         const auto inactive =
-            database.add_clause(std::array<literal, 2> {literal {variable {40u}, false}, literal {variable {41u}, false}}, true);
+            database.add_clause(std::array<literal, 2u> {literal {variable {40u}, false}, literal {variable {41u}, false}}, true);
         const auto active =
-            database.add_clause(std::array<literal, 2> {literal {variable {42u}, false}, literal {variable {43u}, false}}, true);
+            database.add_clause(std::array<literal, 2u> {literal {variable {42u}, false}, literal {variable {43u}, false}}, true);
 
         database.set_glue(inactive, 3u);
         database.set_glue(active, 3u);
         database.increment_activity(active, 4.0);
 
-        const std::array<clause::ref_t, 2> candidates {active, inactive};
+        const std::array<clause::ref_t, 2u> candidates {active, inactive};
         reduce.set_reduction_fraction_percent(100u);
         reduce.select_reduction_candidates(database, candidates);
 
         const auto ranked = reduce.candidate_offsets();
         REQUIRE(ranked.size() == 2u);
-        REQUIRE(ranked[0] == inactive.offset());
-        REQUIRE(ranked[1] == active.offset());
+        REQUIRE(ranked[0u] == inactive.offset());
+        REQUIRE(ranked[1u] == active.offset());
     }
 
     TEST_CASE("reduce controller protects active low-glue clauses", "[sat]")
@@ -155,16 +155,16 @@ namespace kmx::sat::cdcl
         controller::reduce reduce;
         clause::database database;
         const auto active_low_glue =
-            database.add_clause(std::array<literal, 2> {literal {variable {60u}, false}, literal {variable {61u}, false}}, true);
+            database.add_clause(std::array<literal, 2u> {literal {variable {60u}, false}, literal {variable {61u}, false}}, true);
         const auto stale_low_glue =
-            database.add_clause(std::array<literal, 2> {literal {variable {62u}, false}, literal {variable {63u}, false}}, true);
+            database.add_clause(std::array<literal, 2u> {literal {variable {62u}, false}, literal {variable {63u}, false}}, true);
 
         database.set_glue(active_low_glue, 2u);
         database.set_glue(stale_low_glue, 2u);
         database.increment_activity(active_low_glue, 3.0);
         reduce.set_reduction_fraction_percent(100u);
 
-        const std::array<clause::ref_t, 2> candidates {active_low_glue, stale_low_glue};
+        const std::array<clause::ref_t, 2u> candidates {active_low_glue, stale_low_glue};
         reduce.select_reduction_candidates(database, candidates);
 
         REQUIRE(reduce.activity_retention_threshold() == 2.0);
@@ -176,11 +176,11 @@ namespace kmx::sat::cdcl
     {
         controller::reduce reduce;
         clause::database database;
-        std::array<clause::ref_t, 4> candidates {};
+        std::array<clause::ref_t, 4u> candidates {};
         for (std::size_t index {}; index < candidates.size(); ++index)
         {
             candidates[index] =
-                database.add_clause(std::array<literal, 2> {literal {variable {static_cast<std::uint32_t>(50u + index * 2u)}, false},
+                database.add_clause(std::array<literal, 2u> {literal {variable {static_cast<std::uint32_t>(50u + index * 2u)}, false},
                                                             literal {variable {static_cast<std::uint32_t>(51u + index * 2u)}, false}},
                                     true);
             database.set_glue(candidates[index], static_cast<std::uint32_t>(index + 1u));
@@ -196,10 +196,10 @@ namespace kmx::sat::cdcl
         reduce.select_reduction_candidates(database, candidates);
         REQUIRE(reduce.candidate_offsets().size() == 1u);
 
-        database.increment_activity(candidates[0], 8.0);
-        database.increment_used_count(candidates[0]);
+        database.increment_activity(candidates[0u], 8.0);
+        database.increment_used_count(candidates[0u]);
         database.decay_quality();
-        const auto aged = database.quality_of(candidates[0]);
+        const auto aged = database.quality_of(candidates[0u]);
         REQUIRE(aged.activity == 4.0);
         REQUIRE(aged.used_count == 0u);
     }

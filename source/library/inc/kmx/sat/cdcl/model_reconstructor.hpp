@@ -46,103 +46,16 @@ namespace kmx::sat::cdcl
         /// variable elimination cannot be enabled until reconstruction is real.
         /// @return Read-only view over the reconstructed external model.
         /// @throws None (noexcept).
-        model_view reconstruct_full_model() noexcept
-        {
-            load_values_from_initial_model();
-
-            if (extension_stack_ != nullptr)
-            {
-                const auto& records = extension_stack_->records();
-                for (auto index = records.size(); index-- > 0u;)
-                    apply_extension_record(records[index]);
-            }
-
-            reconstructed_model_.clear();
-            reconstructed_model_.reserve(values_.size());
-            for (std::size_t index = 1u; index < values_.size(); ++index)
-            {
-                // Only variables the model actually carried, plus any a replayed record restored. Emitting a value
-                // for every index up to the maximum would invent assignments for variables the caller never
-                // mentioned.
-                if (!present_[index])
-                    continue;
-                const auto external_index = static_cast<std::uint32_t>(index);
-                if (internal_only_variables_.contains(external_index))
-                    continue;
-                reconstructed_model_.push_back(literal {variable {external_index}, !values_[index]});
-            }
-
-            return model_view {std::span<const literal> {reconstructed_model_}};
-        }
+        model_view reconstruct_full_model() noexcept;
 
         /// @brief Applies one extension-stack record's reversal to the in-progress reconstructed model.
         /// @param record Extension record to apply.
         /// @throws None (noexcept).
-        void apply_extension_record(const extension_record& record) noexcept
-        {
-            std::visit(
-                [this](const auto& payload) noexcept
-                {
-                    using payload_t = std::decay_t<decltype(payload)>;
-                    if constexpr (std::is_same_v<payload_t, factor_transformation>)
-                    {
-                        mark_internal_only_variable(payload.introduced_variable);
-                    }
-                    else if constexpr (std::is_same_v<payload_t, bve_elimination>)
-                    {
-                        // The variable was resolved away, so the remaining model may falsify a clause it used to
-                        // satisfy. The witness holds only the clauses it occurred in positively: false satisfies
-                        // the negative ones outright, and if any positive one is otherwise unsatisfied, true
-                        // rescues it without endangering the rest.
-                        const auto eliminated = payload.eliminated_variable;
-                        // Force it false, overriding whatever the reduced model carried. That is not a default
-                        // for a missing value, it is the first half of the reconstruction rule: false satisfies
-                        // every clause the variable occurred in negatively, which is why those need no witness.
-                        // The override matters because the search reports a value for every variable index,
-                        // including eliminated ones it never assigned, so this variable arrives here already
-                        // labelled true and the repair below would then find nothing to do while the unwitnessed
-                        // negative clauses stayed violated.
-                        set_value(eliminated, false);
-                        for_each_witness_clause(payload.witness_begin, payload.witness_end,
-                                                [this, eliminated](const std::span<const literal> clause) noexcept
-                                                {
-                                                    if (clause_is_satisfied(clause))
-                                                        return;
-                                                    for (const auto lit: clause)
-                                                        if (lit.variable_of().index() == eliminated.index())
-                                                            set_value(lit.variable_of(), !lit.is_negated());
-                                                });
-                    }
-                    else if constexpr (std::is_same_v<payload_t, bce_blocking>)
-                    {
-                        // A clause is only blocked-removable because setting its blocking literal true cannot
-                        // falsify anything else, so restoring it is always safe when the clause is unsatisfied.
-                        const auto blocking = payload.blocking_literal;
-                        for_each_witness_clause(payload.witness_begin, payload.witness_end,
-                                                [this, blocking](const std::span<const literal> clause) noexcept
-                                                {
-                                                    if (!clause_is_satisfied(clause))
-                                                        set_value(blocking.variable_of(), !blocking.is_negated());
-                                                });
-                    }
-                },
-                record.payload);
-        }
+        void apply_extension_record(const extension_record& record) noexcept;
 
         /// @brief Removes internal-only variables from the reconstructed model before external exposure.
         /// @throws None (noexcept).
-        void drop_internal_only_variables() noexcept
-        {
-            std::vector<literal> filtered;
-            filtered.reserve(initial_model_.size());
-            for (const auto& lit: initial_model_)
-            {
-                if (internal_only_variables_.contains(lit.variable_of().index()))
-                    continue;
-                filtered.push_back(lit);
-            }
-            initial_model_ = filtered;
-        }
+        void drop_internal_only_variables() noexcept;
 
         /// @brief Performs a cheap self-check that the reconstructed model satisfies the tracked clause set.
         /// @return True if the reconstructed model satisfies every checked clause.
@@ -162,72 +75,33 @@ namespace kmx::sat::cdcl
     private:
         /// @brief Expands `initial_model_` into a dense truth-value table indexed by variable.
         /// @throws None (noexcept).
-        void load_values_from_initial_model() noexcept
-        {
-            std::uint32_t highest = 0u;
-            for (const auto lit: initial_model_)
-                if (lit.variable_of().index() > highest)
-                    highest = lit.variable_of().index();
-
-            values_.assign(static_cast<std::size_t>(highest) + 1u, false);
-            present_.assign(static_cast<std::size_t>(highest) + 1u, false);
-            for (const auto lit: initial_model_)
-            {
-                const auto index = static_cast<std::size_t>(lit.variable_of().index());
-                values_[index] = !lit.is_negated();
-                present_[index] = true;
-            }
-        }
+        void load_values_from_initial_model() noexcept;
 
         /// @brief Assigns a variable, growing the table when a replayed record reintroduces a higher index.
         /// @throws None (noexcept).
-        void set_value(const variable var, const bool value) noexcept
-        {
-            const auto index = static_cast<std::size_t>(var.index());
-            if (index >= values_.size())
-            {
-                values_.resize(index + 1u, false);
-                present_.resize(index + 1u, false);
-            }
-            values_[index] = value;
-            present_[index] = true;
-        }
+        void set_value(const variable var, const bool value) noexcept;
 
         /// @brief Returns whether a clause is satisfied by the values reconstructed so far.
         /// @throws None (noexcept).
-        [[nodiscard]] bool clause_is_satisfied(const std::span<const literal> clause) const noexcept
-        {
-            for (const auto lit: clause)
-            {
-                const auto index = static_cast<std::size_t>(lit.variable_of().index());
-                // A variable with no value yet cannot satisfy anything. Treating absent as false made every
-                // clause containing a negative literal over an unassigned variable look satisfied, so the
-                // elimination replay below skipped clauses it existed to repair.
-                if (index >= present_.size() || !present_[index])
-                    continue;
-                if (values_[index] != lit.is_negated())
-                    return true;
-            }
-            return false;
-        }
+        [[nodiscard]] bool clause_is_satisfied(const std::span<const literal> clause) const noexcept;
 
         /// @brief Returns whether a variable currently carries a value.
         [[nodiscard]] bool has_value(const variable var) const noexcept
         {
             const auto index = static_cast<std::size_t>(var.index());
-            return index < present_.size() && present_[index];
+            return (index < present_.size()) && present_[index];
         }
 
         /// @brief Splits one record's witness range into clauses and hands each to `visitor`.
         /// @throws None (noexcept).
-        template <typename visitor_t>
-        void for_each_witness_clause(const std::uint32_t begin, const std::uint32_t end, visitor_t&& visitor) const noexcept
+        template <typename Visitor>
+        void for_each_witness_clause(const std::uint32_t begin, const std::uint32_t end, Visitor&& visitor) const noexcept
         {
             if (extension_stack_ == nullptr)
                 return;
 
             const auto witness = extension_stack_->witness_literals();
-            const auto range_end = static_cast<std::size_t>(end) < witness.size() ? static_cast<std::size_t>(end) : witness.size();
+            const auto range_end = (static_cast<std::size_t>(end) < witness.size()) ? static_cast<std::size_t>(end) : witness.size();
             auto clause_begin = static_cast<std::size_t>(begin);
             for (auto index = clause_begin; index < range_end; ++index)
             {

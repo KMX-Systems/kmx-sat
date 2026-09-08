@@ -73,7 +73,7 @@ namespace kmx::sat::cdcl
         decision.notify_assignment_literal(literal {selected, true});
         decision.set_selectability_filter([](const variable var, const void* context) noexcept
                                           { return var.index() != static_cast<const variable*>(context)->index(); }, &blocked);
-        decision.notify_conflict_variables(std::array<variable, 1> {selected});
+        decision.notify_conflict_variables(std::array<variable, 1u> {selected});
 
         const auto branch = decision.pick_branch_literal();
         REQUIRE(branch.has_value());

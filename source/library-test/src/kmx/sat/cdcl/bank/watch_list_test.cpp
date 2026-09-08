@@ -17,58 +17,58 @@ namespace kmx::sat::cdcl
 
         bank::watch_list watches;
 
-        const literal lit_a {variable {1}, false};
-        const literal lit_b {variable {2}, false};
+        const literal lit_a {variable {1u}, false};
+        const literal lit_b {variable {2u}, false};
         // Watch entries fold the binary flag into the low bit of the reference, so clause offsets are the
         // four-byte-aligned values the arena hands out.
-        const cdcl::clause::ref_t ref_1 {4};
-        const cdcl::clause::ref_t ref_2 {8};
-        const cdcl::clause::ref_t ref_3 {12};
+        const cdcl::clause::ref_t ref_1 {4u};
+        const cdcl::clause::ref_t ref_2 {8u};
+        const cdcl::clause::ref_t ref_3 {12u};
 
         watches.watch_literal(lit_a, watch {lit_b, ref_1});
         watches.watch_literal(lit_a, watch {lit_b, ref_2, true});
         watches.watch_literal(lit_a, watch {lit_b.negated(), ref_1, true});
-        REQUIRE(watches.size_of(lit_a) == 2);
-        REQUIRE(watches.size_of(lit_b) == 0);
+        REQUIRE(watches.size_of(lit_a) == 2u);
+        REQUIRE(watches.size_of(lit_b) == 0u);
 
         std::vector<cdcl::clause::ref_t> visited {};
         watches.iterate(lit_a, [&](const watch& entry) noexcept { visited.push_back(entry.clause_ref()); });
-        REQUIRE(visited.size() == 2);
-        REQUIRE(visited[0] == ref_1);
-        REQUIRE(visited[1] == ref_2);
+        REQUIRE(visited.size() == 2u);
+        REQUIRE(visited[0u] == ref_1);
+        REQUIRE(visited[1u] == ref_2);
 
         // Unwatching removes only the matching entry (identity by clause_ref).
         watches.unwatch_literal(lit_a, watch {lit_b, ref_1});
-        REQUIRE(watches.size_of(lit_a) == 1);
+        REQUIRE(watches.size_of(lit_a) == 1u);
 
         // GC relocation rewrites the surviving entry's clause_ref in place.
         watches.replace_clause_ref_after_gc(ref_2, ref_3);
         std::vector<cdcl::clause::ref_t> after_gc {};
         watches.iterate(lit_a, [&](const watch& entry) noexcept { after_gc.push_back(entry.clause_ref()); });
-        REQUIRE(after_gc.size() == 1);
-        REQUIRE(after_gc[0] == ref_3);
+        REQUIRE(after_gc.size() == 1u);
+        REQUIRE(after_gc[0u] == ref_3);
 
         // Compaction remaps every populated literal partition to its new literal.
-        const literal lit_c {variable {3}, false};
-        watches.reindex_after_compaction([&](const literal old_lit) noexcept { return old_lit == lit_a ? lit_c : old_lit; });
-        REQUIRE(watches.size_of(lit_a) == 0);
-        REQUIRE(watches.size_of(lit_c) == 1);
+        const literal lit_c {variable {3u}, false};
+        watches.reindex_after_compaction([&](const literal old_lit) noexcept { return (old_lit == lit_a) ? lit_c : old_lit; });
+        REQUIRE(watches.size_of(lit_a) == 0u);
+        REQUIRE(watches.size_of(lit_c) == 1u);
 
         // Rewriting a reference that is not present leaves the watch list unchanged.
         watches.replace_clause_ref_after_gc(ref_1, ref_2);
         std::vector<cdcl::clause::ref_t> unchanged_after_noop {};
         watches.iterate(lit_c, [&](const watch& entry) noexcept { unchanged_after_noop.push_back(entry.clause_ref()); });
-        REQUIRE(unchanged_after_noop.size() == 1);
-        REQUIRE(unchanged_after_noop[0] == ref_3);
+        REQUIRE(unchanged_after_noop.size() == 1u);
+        REQUIRE(unchanged_after_noop[0u] == ref_3);
 
         // flush_large_watches prunes entries whose clause is reported garbage.
         watches.watch_literal(lit_c, watch {lit_b, ref_1});
-        REQUIRE(watches.size_of(lit_c) == 2);
+        REQUIRE(watches.size_of(lit_c) == 2u);
         watches.flush_large_watches([&](const cdcl::clause::ref_t ref) noexcept { return ref == ref_3; });
         std::vector<cdcl::clause::ref_t> after_flush {};
         watches.iterate(lit_c, [&](const watch& entry) noexcept { after_flush.push_back(entry.clause_ref()); });
-        REQUIRE(after_flush.size() == 1);
-        REQUIRE(after_flush[0] == ref_1);
+        REQUIRE(after_flush.size() == 1u);
+        REQUIRE(after_flush[0u] == ref_1);
 
         // removed std::cout: "watch list test passed\n";
     }
@@ -88,7 +88,7 @@ namespace kmx::sat::cdcl
         REQUIRE(watches.size_of(second) == 1u);
 
         watches.reindex_after_compaction([&](const literal literal_value) noexcept
-                                         { return literal_value == first || literal_value == second ? first : literal_value; });
+                                         { return ((literal_value == first) || (literal_value == second)) ? first : literal_value; });
 
         REQUIRE(watches.size_of(first) == 1u);
         REQUIRE(watches.size_of(second) == 0u);
@@ -117,7 +117,7 @@ namespace kmx::sat::cdcl
         watches.watch_literal(second, duplicate);
 
         watches.reindex_after_compaction([&](const literal literal_value) noexcept
-                                         { return literal_value == first || literal_value == second ? first : literal_value; });
+                                         { return ((literal_value == first) || (literal_value == second)) ? first : literal_value; });
 
         std::vector<watch> merged_entries {};
         watches.iterate(first, [&](const watch& entry) noexcept { merged_entries.push_back(entry); });

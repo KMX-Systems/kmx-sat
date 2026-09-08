@@ -5,12 +5,12 @@
 #ifndef PCH
     #include <cstddef>
     #include <cstdint>
-    #include <string>
-    #include <string_view>
+    #include <optional>
     #include <vector>
 #endif
 #include <kmx/sat/cdcl/clause/ref_t.hpp>
 #include <kmx/sat/literal.hpp>
+#include <kmx/sat/telemetry/phase_id.hpp>
 
 namespace kmx::sat::telemetry
 {
@@ -44,7 +44,8 @@ namespace kmx::sat::telemetry
         {
             event_kind kind {};
             std::uint64_t ref_offset {};
-            std::string phase_name {};
+            /// @brief Phase this event belongs to; empty for events that are not phase summaries.
+            std::optional<phase_id> phase {};
             literal literal_value {};
         };
 
@@ -60,12 +61,7 @@ namespace kmx::sat::telemetry
         /// @brief Logs a literal-related event (for example assignment or watch change).
         /// @param lit Literal being logged.
         /// @throws None (noexcept).
-        void log_literal(const literal lit) noexcept
-        {
-            events_.push_back({event_kind::literal, last_ref_offset_, {}, lit});
-            last_literal_index_ = events_.size() - 1u;
-            has_last_literal_ = true;
-        }
+        void log_literal(const literal lit) noexcept;
 
         /// @brief Logs a gate-extraction event from `extractor::gate`.
         /// @throws None (noexcept).
@@ -76,31 +72,15 @@ namespace kmx::sat::telemetry
         void log_extension() noexcept { events_.push_back({event_kind::extension, last_ref_offset_}); }
 
         /// @brief Logs a summary line for a completed phase.
-        /// @param phase_name Identifier of the phase that just completed.
+        /// @param id Phase that just completed.
         /// @throws None (noexcept).
-        void log_phase_summary(const std::string_view phase_name) noexcept
-        {
-            events_.push_back({event_kind::phase_summary, last_ref_offset_, std::string {phase_name}});
-        }
+        void log_phase_summary(const phase_id id) noexcept { events_.push_back({event_kind::phase_summary, last_ref_offset_, id}); }
 
         std::size_t event_count() const noexcept { return events_.size(); }
 
-        const event& last_event() const noexcept
-        {
-            if (events_.empty())
-            {
-                static const event empty_event {};
-                return empty_event;
-            }
-            return events_.back();
-        }
+        const event& last_event() const noexcept;
 
-        const event& last_literal() const noexcept
-        {
-            if (has_last_literal_)
-                return events_[last_literal_index_];
-            return last_event();
-        }
+        const event& last_literal() const noexcept;
 
         std::uint64_t last_clause_ref() const noexcept { return last_ref_offset_; }
 

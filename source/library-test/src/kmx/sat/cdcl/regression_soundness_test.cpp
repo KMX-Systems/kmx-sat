@@ -25,7 +25,7 @@ namespace kmx::sat::cdcl
 
         literal dimacs(const int value) noexcept
         {
-            return literal {variable {static_cast<variable::index_t>(value < 0 ? -value : value)}, value < 0};
+            return literal {variable {static_cast<variable::index_t>((value < 0) ? -value : value)}, value < 0};
         }
 
         clause_t clause_of(const std::initializer_list<int> values)
@@ -36,7 +36,10 @@ namespace kmx::sat::cdcl
             return clause;
         }
 
-        void add(solver_core& solver, const clause_t& clause) { solver.add_problem_clause(std::span<const literal> {clause}); }
+        void add(solver_core& solver, const clause_t& clause)
+        {
+            solver.add_problem_clause(std::span<const literal> {clause});
+        }
 
         /// @brief True if every clause has a literal the model makes true; a variable the model omits counts as false.
         bool satisfies(const std::span<const literal> model, const std::vector<clause_t>& clauses, const std::uint32_t variables)
@@ -47,7 +50,7 @@ namespace kmx::sat::cdcl
                     value[lit.variable_of().index()] = lit.is_negated() ? std::int8_t {-1} : std::int8_t {1};
             for (const auto& clause: clauses)
             {
-                bool satisfied = false;
+                bool satisfied {};
                 for (const auto lit: clause)
                     satisfied |= (value[lit.variable_of().index()] > 0) != lit.is_negated();
                 if (!satisfied)
@@ -64,7 +67,7 @@ namespace kmx::sat::cdcl
                 bool all = true;
                 for (const auto& clause: clauses)
                 {
-                    bool satisfied = false;
+                    bool satisfied {};
                     for (const auto lit: clause)
                     {
                         const bool is_true = ((assignment >> (lit.variable_of().index() - 1u)) & 1u) != 0u;
@@ -212,7 +215,8 @@ namespace kmx::sat::cdcl
             REQUIRE(solver.solve(request) == solver_core::status::satisfiable);
             const auto model = solver.extract_internal_model();
             REQUIRE(satisfies(model, clauses, 7u));
-            const auto seventh = std::find_if(model.begin(), model.end(), [](const literal lit) { return lit.variable_of().index() == 7u; });
+            const auto seventh =
+                std::find_if(model.begin(), model.end(), [](const literal lit) { return lit.variable_of().index() == 7u; });
             REQUIRE(seventh != model.end());
             REQUIRE(seventh->is_negated() == negative);
         }
@@ -237,8 +241,8 @@ namespace kmx::sat::cdcl
                 while (clause.size() < size)
                 {
                     const auto var = 1u + random.next(variables);
-                    const bool seen = std::any_of(clause.begin(), clause.end(),
-                                                  [var](const literal lit) { return lit.variable_of().index() == var; });
+                    const bool seen =
+                        std::any_of(clause.begin(), clause.end(), [var](const literal lit) { return lit.variable_of().index() == var; });
                     if (!seen)
                         clause.push_back(literal {variable {var}, random.next(2u) != 0u});
                 }

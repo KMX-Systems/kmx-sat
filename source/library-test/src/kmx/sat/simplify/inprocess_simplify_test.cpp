@@ -6,11 +6,11 @@
 
 #include <kmx/sat/cdcl/clause/database.hpp>
 #include <kmx/sat/cdcl/memory_governor.hpp>
+#include <kmx/sat/cdcl/stack/extension.hpp>
 #include <kmx/sat/literal.hpp>
 #include <kmx/sat/proof_manager.hpp>
 #include <kmx/sat/simplify/eliminator/variable/bounded.hpp>
 #include <kmx/sat/simplify/eliminator/variable/fast.hpp>
-#include <kmx/sat/cdcl/stack/extension.hpp>
 #include <kmx/sat/simplify/factorizer.hpp>
 #include <kmx/sat/simplify/scheduler/inprocess.hpp>
 #include <kmx/sat/variable.hpp>
@@ -25,7 +25,7 @@ namespace kmx::sat::simplify
 
         scheduler::inprocess scheduler;
         // These scenarios exercise all three known passes; `congruence` is opt-in in the shipped default set.
-        scheduler.enable_pass("congruence");
+        scheduler.enable_pass(pass_id::congruence);
         // These cases drive the scheduler at an explicit short cadence; the shipped default is far wider,
         // since a production epoch sweeps the whole clause database and has to be amortized over search.
         scheduler.set_trigger_windows(32u, 1u);
@@ -66,8 +66,8 @@ namespace kmx::sat::simplify
         // (2 v 3), so eliminating variable 1 replaces two clauses with one.
         cdcl::clause::database bounded_database;
         cdcl::stack::extension bounded_extension;
-        const std::array<literal, 2> bounded_first {literal {variable {1u}, false}, literal {variable {2u}, false}};
-        const std::array<literal, 2> bounded_second {literal {variable {1u}, true}, literal {variable {3u}, false}};
+        const std::array<literal, 2u> bounded_first {literal {variable {1u}, false}, literal {variable {2u}, false}};
+        const std::array<literal, 2u> bounded_second {literal {variable {1u}, true}, literal {variable {3u}, false}};
         bounded_database.add_clause(std::span<const literal> {bounded_first}, false);
         bounded_database.add_clause(std::span<const literal> {bounded_second}, false);
 
@@ -75,14 +75,14 @@ namespace kmx::sat::simplify
         bounded.attach_clause_database(bounded_database);
         bounded.attach_extension_stack(bounded_extension);
         bounded.refresh_occurrence_index();
-        REQUIRE(bounded.score_variable(variable {1u}) <= 0);
+        REQUIRE(bounded.score_variable(variable {1u}) <= 0L);
         bounded.run();
         REQUIRE(bounded.elimination_count() >= 1u);
         REQUIRE(!bounded.eliminated_variables().empty());
         REQUIRE(bounded_extension.size() >= 1u);
 
-        std::vector<std::vector<literal>> bounded_clauses {{literal {variable {1u}, false}, literal {variable {2u}, false}},
-                                                           {literal {variable {1u}, true}, literal {variable {3u}, false}}};
+        clause_list_t bounded_clauses {{literal {variable {1u}, false}, literal {variable {2u}, false}},
+                                       {literal {variable {1u}, true}, literal {variable {3u}, false}}};
         eliminator::variable::fast fast;
         fast.set_clauses(bounded_clauses);
         REQUIRE(fast.cheap_can_eliminate(variable {1u}));
@@ -96,7 +96,7 @@ namespace kmx::sat::simplify
         for (std::uint32_t left {4u}; left <= 6u; ++left)
             for (std::uint32_t right {7u}; right <= 9u; ++right)
             {
-                const std::array<literal, 2> pair {literal {variable {left}, false}, literal {variable {right}, false}};
+                const std::array<literal, 2u> pair {literal {variable {left}, false}, literal {variable {right}, false}};
                 factor_database.add_clause(pair, false);
             }
         factorizer factorizer;
@@ -144,11 +144,11 @@ namespace kmx::sat::simplify
         cdcl::clause::database database;
         scheduler.attach_clause_database(database);
 
-        scheduler.disable_pass("vivifier");
-        scheduler.disable_pass("congruence");
+        scheduler.disable_pass(pass_id::vivifier);
+        scheduler.disable_pass(pass_id::congruence);
 
-        const std::array<literal, 1> clause_a {literal {variable {11u}, false}};
-        const std::array<literal, 2> clause_b {literal {variable {11u}, false}, literal {variable {12u}, false}};
+        const std::array<literal, 1u> clause_a {literal {variable {11u}, false}};
+        const std::array<literal, 2u> clause_b {literal {variable {11u}, false}, literal {variable {12u}, false}};
         database.add_clause(clause_a, false);
         database.add_clause(clause_b, false);
 
@@ -172,7 +172,7 @@ namespace kmx::sat::simplify
 
         scheduler::inprocess scheduler;
         // These scenarios exercise all three known passes; `congruence` is opt-in in the shipped default set.
-        scheduler.enable_pass("congruence");
+        scheduler.enable_pass(pass_id::congruence);
         // These cases drive the scheduler at an explicit short cadence; the shipped default is far wider,
         // since a production epoch sweeps the whole clause database and has to be amortized over search.
         scheduler.set_trigger_windows(32u, 1u);
@@ -195,7 +195,7 @@ namespace kmx::sat::simplify
         REQUIRE(reported.size() == 3u);
         const auto vivifier_summary =
             std::find_if(reported.begin(), reported.end(),
-                         [](const scheduler::inprocess::pass_summary& summary) noexcept { return summary.pass_name == "vivifier"; });
+                         [](const scheduler::inprocess::pass_summary& summary) noexcept { return summary.id == pass_id::vivifier; });
         REQUIRE(vivifier_summary != reported.end());
         REQUIRE_FALSE(vivifier_summary->executed);
         REQUIRE(vivifier_summary->skipped_by_memory_policy);
@@ -223,12 +223,12 @@ namespace kmx::sat::simplify
         scheduler.attach_memory_governor(governor);
 
         proof_manager proof_manager;
-        proof_manager.enable_format("drat");
+        proof_manager.enable_format(proof::format_id::drat);
         scheduler.attach_proof_manager(proof_manager);
 
-        for (const auto pass_name: scheduler::inprocess::baseline_passes)
-            scheduler.disable_pass(pass_name);
-        scheduler.enable_pass("congruence");
+        for (const auto id: scheduler::inprocess::baseline_passes)
+            scheduler.disable_pass(id);
+        scheduler.enable_pass(pass_id::congruence);
 
         scheduler.set_conflicts_seen(64u);
         scheduler.set_restart_count(0u);
@@ -238,21 +238,21 @@ namespace kmx::sat::simplify
         REQUIRE(scheduler.epoch_count() == 1u);
         REQUIRE(scheduler.last_passes_executed() == 0u);
         REQUIRE(scheduler.last_reported_summaries().size() == 1u);
-        REQUIRE(scheduler.last_reported_summaries()[0].pass_name == "congruence");
-        REQUIRE_FALSE(scheduler.last_reported_summaries()[0].executed);
-        REQUIRE(scheduler.last_reported_summaries()[0].skipped_by_proof_format);
+        REQUIRE(scheduler.last_reported_summaries()[0u].id == pass_id::congruence);
+        REQUIRE_FALSE(scheduler.last_reported_summaries()[0u].executed);
+        REQUIRE(scheduler.last_reported_summaries()[0u].skipped_by_proof_format);
 
         proof_manager.disable_all();
-        proof_manager.enable_format("veripb");
+        proof_manager.enable_format(proof::format_id::veripb);
         scheduler.set_conflicts_seen(96u);
         scheduler.run_epoch();
         scheduler.report_epoch_summary();
 
         REQUIRE(scheduler.epoch_count() == 2u);
         REQUIRE(scheduler.last_reported_summaries().size() == 1u);
-        REQUIRE(scheduler.last_reported_summaries()[0].pass_name == "congruence");
-        REQUIRE(scheduler.last_reported_summaries()[0].executed);
-        REQUIRE_FALSE(scheduler.last_reported_summaries()[0].skipped_by_proof_format);
+        REQUIRE(scheduler.last_reported_summaries()[0u].id == pass_id::congruence);
+        REQUIRE(scheduler.last_reported_summaries()[0u].executed);
+        REQUIRE_FALSE(scheduler.last_reported_summaries()[0u].skipped_by_proof_format);
     }
 
     TEST_CASE("inprocess adaptive ordering prioritizes effective passes", "[sat]")
@@ -271,13 +271,13 @@ namespace kmx::sat::simplify
         cdcl::clause::database database;
         scheduler.attach_clause_database(database);
 
-        for (const auto pass_name: scheduler::inprocess::baseline_passes)
-            scheduler.disable_pass(pass_name);
-        scheduler.enable_pass("vivifier");
-        scheduler.enable_pass("forward_subsumer");
+        for (const auto id: scheduler::inprocess::baseline_passes)
+            scheduler.disable_pass(id);
+        scheduler.enable_pass(pass_id::vivifier);
+        scheduler.enable_pass(pass_id::forward_subsumer);
 
-        const std::array<literal, 1> clause_a {literal {variable {31u}, false}};
-        const std::array<literal, 2> clause_b {literal {variable {31u}, false}, literal {variable {32u}, false}};
+        const std::array<literal, 1u> clause_a {literal {variable {31u}, false}};
+        const std::array<literal, 2u> clause_b {literal {variable {31u}, false}, literal {variable {32u}, false}};
         database.add_clause(clause_a, false);
         database.add_clause(clause_b, false);
 
@@ -287,19 +287,19 @@ namespace kmx::sat::simplify
 
         REQUIRE(scheduler.epoch_count() == 1u);
         REQUIRE(scheduler.last_execution_order().size() == 2u);
-        REQUIRE(scheduler.last_execution_order()[0] == "vivifier");
-        REQUIRE(scheduler.last_execution_order()[1] == "forward_subsumer");
-        REQUIRE(scheduler.pass_effectiveness_of("vivifier").observed_runs >= 1u);
-        REQUIRE(scheduler.pass_effectiveness_of("forward_subsumer").observed_runs >= 1u);
-        REQUIRE(scheduler.pass_effectiveness_of("forward_subsumer").effective_runs >= 1u);
+        REQUIRE(scheduler.last_execution_order()[0u] == pass_id::vivifier);
+        REQUIRE(scheduler.last_execution_order()[1u] == pass_id::forward_subsumer);
+        REQUIRE(scheduler.pass_effectiveness_of(pass_id::vivifier).observed_runs >= 1u);
+        REQUIRE(scheduler.pass_effectiveness_of(pass_id::forward_subsumer).observed_runs >= 1u);
+        REQUIRE(scheduler.pass_effectiveness_of(pass_id::forward_subsumer).effective_runs >= 1u);
 
         scheduler.set_conflicts_seen(96u);
         scheduler.run_epoch();
 
         REQUIRE(scheduler.epoch_count() == 2u);
         REQUIRE(scheduler.last_execution_order().size() == 2u);
-        REQUIRE(scheduler.last_execution_order()[0] == "forward_subsumer");
-        REQUIRE(scheduler.last_execution_order()[1] == "vivifier");
+        REQUIRE(scheduler.last_execution_order()[0u] == pass_id::forward_subsumer);
+        REQUIRE(scheduler.last_execution_order()[1u] == pass_id::vivifier);
     }
 
     TEST_CASE("inprocess adaptive pass cap throttles on low yield and recovers on gain", "[sat]")
@@ -309,7 +309,7 @@ namespace kmx::sat::simplify
 
         scheduler::inprocess scheduler;
         // These scenarios exercise all three known passes; `congruence` is opt-in in the shipped default set.
-        scheduler.enable_pass("congruence");
+        scheduler.enable_pass(pass_id::congruence);
         // These cases drive the scheduler at an explicit short cadence; the shipped default is far wider,
         // since a production epoch sweeps the whole clause database and has to be amortized over search.
         scheduler.set_trigger_windows(32u, 1u);
@@ -337,8 +337,8 @@ namespace kmx::sat::simplify
         scheduler.run_epoch();
         REQUIRE(scheduler.epoch_count() == 2u);
 
-        const std::array<literal, 1> clause_a {literal {variable {51u}, false}};
-        const std::array<literal, 2> clause_b {literal {variable {51u}, false}, literal {variable {52u}, false}};
+        const std::array<literal, 1u> clause_a {literal {variable {51u}, false}};
+        const std::array<literal, 2u> clause_b {literal {variable {51u}, false}, literal {variable {52u}, false}};
         database.add_clause(clause_a, false);
         database.add_clause(clause_b, false);
 
@@ -374,9 +374,9 @@ namespace kmx::sat::simplify
         cdcl::clause::database database;
         scheduler.attach_clause_database(database);
 
-        for (const auto pass_name: scheduler::inprocess::baseline_passes)
-            scheduler.disable_pass(pass_name);
-        scheduler.enable_pass("forward_subsumer");
+        for (const auto id: scheduler::inprocess::baseline_passes)
+            scheduler.disable_pass(id);
+        scheduler.enable_pass(pass_id::forward_subsumer);
 
         scheduler.set_conflicts_seen(64u);
         scheduler.run_epoch();
@@ -393,8 +393,8 @@ namespace kmx::sat::simplify
         scheduler.set_conflicts_seen(128u);
         REQUIRE(!scheduler.should_run());
 
-        const std::array<literal, 1> clause_a {literal {variable {71u}, false}};
-        const std::array<literal, 2> clause_b {literal {variable {71u}, false}, literal {variable {72u}, false}};
+        const std::array<literal, 1u> clause_a {literal {variable {71u}, false}};
+        const std::array<literal, 2u> clause_b {literal {variable {71u}, false}, literal {variable {72u}, false}};
         database.add_clause(clause_a, false);
         database.add_clause(clause_b, false);
 
@@ -422,12 +422,12 @@ namespace kmx::sat::simplify
         cdcl::clause::database database;
         scheduler.attach_clause_database(database);
 
-        for (const auto pass_name: scheduler::inprocess::baseline_passes)
-            scheduler.disable_pass(pass_name);
-        scheduler.enable_pass("forward_subsumer");
+        for (const auto id: scheduler::inprocess::baseline_passes)
+            scheduler.disable_pass(id);
+        scheduler.enable_pass(pass_id::forward_subsumer);
 
-        const std::array<literal, 1> clause_a {literal {variable {91u}, false}};
-        const std::array<literal, 2> clause_b {literal {variable {91u}, false}, literal {variable {92u}, false}};
+        const std::array<literal, 1u> clause_a {literal {variable {91u}, false}};
+        const std::array<literal, 2u> clause_b {literal {variable {91u}, false}, literal {variable {92u}, false}};
         database.add_clause(clause_a, false);
         database.add_clause(clause_b, false);
 
@@ -463,9 +463,9 @@ namespace kmx::sat::simplify
         cdcl::clause::database database;
         scheduler.attach_clause_database(database);
 
-        for (const auto pass_name: scheduler::inprocess::baseline_passes)
-            scheduler.disable_pass(pass_name);
-        scheduler.enable_pass("forward_subsumer");
+        for (const auto id: scheduler::inprocess::baseline_passes)
+            scheduler.disable_pass(id);
+        scheduler.enable_pass(pass_id::forward_subsumer);
 
         scheduler.set_conflicts_seen(64u);
         scheduler.set_decisions_seen(1024u);
@@ -506,9 +506,9 @@ namespace kmx::sat::simplify
         cdcl::clause::database database;
         scheduler.attach_clause_database(database);
 
-        for (const auto pass_name: scheduler::inprocess::baseline_passes)
-            scheduler.disable_pass(pass_name);
-        scheduler.enable_pass("forward_subsumer");
+        for (const auto id: scheduler::inprocess::baseline_passes)
+            scheduler.disable_pass(id);
+        scheduler.enable_pass(pass_id::forward_subsumer);
 
         scheduler.set_conflicts_seen(64u);
         scheduler.set_decisions_seen(4096u);

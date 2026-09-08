@@ -67,31 +67,11 @@ namespace kmx::sat::cdcl::clause
         void increment_used_count() noexcept { ++used_count_; }
 
     private:
-        static std::uint8_t compose_flags(const bool redundant, const bool garbage, const bool reason, const bool shrunken) noexcept
-        {
-            std::uint8_t flags {};
-            if (redundant)
-                flags |= redundant_flag;
-            if (garbage)
-                flags |= garbage_flag;
-            if (reason)
-                flags |= reason_flag;
-            if (shrunken)
-                flags |= shrunken_flag;
-            return flags;
-        }
+        static std::uint8_t compose_flags(const bool redundant, const bool garbage, const bool reason, const bool shrunken) noexcept;
 
         bool has_flag(const std::uint8_t flag) const noexcept { return (flags_ & flag) != 0u; }
 
-        void set_flag(const std::uint8_t flag, const bool enabled) noexcept
-        {
-            if (enabled)
-            {
-                flags_ |= flag;
-                return;
-            }
-            flags_ &= static_cast<std::uint8_t>(~flag);
-        }
+        void set_flag(const std::uint8_t flag, const bool enabled) noexcept;
 
         std::uint32_t size_ {};
         std::uint32_t glue_ {};

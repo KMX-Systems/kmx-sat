@@ -3,6 +3,7 @@
 /// @copyright Copyright (C) 2026 - present KMX Systems. All rights reserved.
 #pragma once
 #ifndef PCH
+    #include <algorithm>
     #include <cstddef>
     #include <span>
     #include <vector>
@@ -32,26 +33,7 @@ namespace kmx::sat::cdcl::clause
         /// @param literals Literals composing the learned clause.
         /// @return Reference to the newly registered clause.
         /// @throws None (noexcept).
-        ref_t learn_clause(const std::span<const literal> literals) noexcept
-        {
-            if (literals.empty())
-                return {};
-
-            const auto normalized_clause = normalize_clause_literals(literals);
-            switch (normalized_clause.size())
-            {
-                case 0u:
-                    return {};
-                case 1u:
-                    register_unit(normalized_clause.front());
-                    return last_learned_ref_;
-                case 2u:
-                    register_binary(normalized_clause[0], normalized_clause[1]);
-                    return last_learned_ref_;
-                default:
-                    return register_large(std::span<const literal> {normalized_clause});
-            }
-        }
+        ref_t learn_clause(const std::span<const literal> literals) noexcept;
 
         /// @brief Registers a learned unit clause using the specialized unit fast path.
         /// @param lit The single literal of the unit clause.
@@ -95,12 +77,7 @@ namespace kmx::sat::cdcl::clause
         /// @brief Returns the most recently recorded learned clause.
         /// @return Read-only span over the latest learned clause, or empty if none exists.
         /// @throws None (noexcept).
-        std::span<const literal> last_learned_clause() const noexcept
-        {
-            if (learned_clauses_.empty())
-                return {};
-            return learned_clauses_.back();
-        }
+        std::span<const literal> last_learned_clause() const noexcept;
 
         /// @brief Returns the most recently assigned asserting literal.
         /// @return Last asserting literal assigned via `assign_asserting_literal`.
@@ -114,52 +91,16 @@ namespace kmx::sat::cdcl::clause
         /// @brief Returns how many learned clauses of the requested size were registered.
         /// @param size Clause size to count.
         /// @return Number of learned clauses with the given size.
-        std::size_t clause_count_for_size(const std::size_t size) const noexcept
-        {
-            std::size_t count {};
-            for (const auto& clause: learned_clauses_)
-                if (clause.size() == size)
-                    ++count;
-            return count;
-        }
+        std::size_t clause_count_for_size(const std::size_t size) const noexcept;
 
     private:
-        static std::vector<literal> normalize_clause_literals(const std::span<const literal> literals) noexcept
-        {
-            std::vector<literal> normalized {};
-            normalized.reserve(literals.size());
+        static std::vector<literal> normalize_clause_literals(const std::span<const literal> literals) noexcept;
 
-            for (const auto lit: literals)
-            {
-                const auto duplicate_it = std::find_if(normalized.begin(), normalized.end(),
-                                                       [lit](const literal existing) noexcept { return existing.raw() == lit.raw(); });
-                if (duplicate_it != normalized.end())
-                    continue;
+        ref_t append_clause(const std::span<const literal> literals) noexcept;
 
-                const auto opposite_it = std::find_if(
-                    normalized.begin(), normalized.end(), [lit](const literal existing) noexcept
-                    { return existing.variable_of().index() == lit.variable_of().index() && existing.is_negated() != lit.is_negated(); });
-                if (opposite_it != normalized.end())
-                    return {};
-
-                normalized.push_back(lit);
-            }
-
-            return normalized;
-        }
-
-        ref_t append_clause(const std::span<const literal> literals) noexcept
-        {
-            if (literals.empty())
-                return {};
-
-            learned_clauses_.emplace_back(literals.begin(), literals.end());
-            return ref_t {next_clause_offset_++};
-        }
-
-        std::vector<std::vector<literal>> learned_clauses_ {};
+        clause_list_t learned_clauses_ {};
         ref_t last_learned_ref_ {};
         literal last_asserting_literal_ {};
-        ref_t::offset_t next_clause_offset_ {1};
+        ref_t::offset_t next_clause_offset_ {1u};
     };
 }

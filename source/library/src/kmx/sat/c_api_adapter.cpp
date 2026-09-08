@@ -37,17 +37,17 @@ extern "C"
 
     int ipasir_solve(kmx_sat_ipasir_solver* solver)
     {
-        return solver == nullptr ? 0 : solver->adapter.ipasir_solve();
+        return (solver == nullptr) ? 0 : solver->adapter.ipasir_solve();
     }
 
     int ipasir_val(const kmx_sat_ipasir_solver* solver, const int lit)
     {
-        return solver == nullptr ? 0 : solver->adapter.ipasir_val(lit);
+        return (solver == nullptr) ? 0 : solver->adapter.ipasir_val(lit);
     }
 
     int ipasir_failed(const kmx_sat_ipasir_solver* solver, const int lit)
     {
-        return solver != nullptr && solver->adapter.ipasir_failed(lit) ? 1 : 0;
+        return ((solver != nullptr) && solver->adapter.ipasir_failed(lit)) ? 1 : 0;
     }
 }
 
@@ -55,7 +55,7 @@ namespace kmx::sat
 {
     static bool is_valid_ipasir_literal(const std::int32_t lit) noexcept
     {
-        return lit != 0 && lit != std::numeric_limits<std::int32_t>::min();
+        return (lit != 0) && (lit != std::numeric_limits<std::int32_t>::min());
     }
 
     static literal from_ipasir_literal(const std::int32_t lit) noexcept
@@ -134,7 +134,7 @@ namespace kmx::sat
         if (!value.has_value())
             return 0;
 
-        const bool literal_true = lit > 0 ? *value : !*value;
+        const bool literal_true = (lit > 0) ? *value : !*value;
         return literal_true ? lit : -lit;
     }
 
@@ -151,12 +151,20 @@ namespace kmx::sat
 
     void c_api_adapter::ipasir_set_option(const std::string_view name, const std::int64_t value) noexcept
     {
-        solver_.set_option(name, value);
+        // Names arrive as text from C callers, so they are resolved to an option identity here, once, and every
+        // layer below this one works in terms of `option_id`. An unrecognized name is ignored.
+        if (const auto id = parse_option_id(name); id.has_value())
+            solver_.set_option(*id, value);
     }
 
     void c_api_adapter::ipasir_set_configuration(const std::string_view profile_name) noexcept
     {
-        solver_.set_configuration(profile_name);
+        // An unrecognized profile name clears the persisted configuration, which is what the facade did back when
+        // it matched profile names itself.
+        if (const auto id = parse_configuration_profile_id(profile_name); id.has_value())
+            solver_.set_configuration(*id);
+        else
+            solver_.clear_persisted_configuration();
     }
 
     void c_api_adapter::ipasir_clear_persisted_configuration() noexcept
@@ -200,18 +208,19 @@ namespace kmx::sat
 
     std::string_view c_api_adapter::ipasir_configuration_profile_name() const noexcept
     {
-        return solver_.configuration_profile_name();
+        const auto profile = solver_.configuration_profile();
+        return profile.has_value() ? name_of(*profile) : std::string_view {};
     }
 
     void c_api_adapter::ipasir_set_statistics_verbose_reporting(const std::int32_t verbose) noexcept
     {
-        solver_.set_statistics_report_detail(verbose == 0 ? solver::statistics_report_detail::compact :
-                                                            solver::statistics_report_detail::verbose);
+        solver_.set_statistics_report_detail((verbose == 0) ? solver::statistics_report_detail::compact :
+                                                              solver::statistics_report_detail::verbose);
     }
 
     std::int32_t c_api_adapter::ipasir_statistics_verbose_reporting() const noexcept
     {
-        return solver_.statistics_report_detail_of() == solver::statistics_report_detail::verbose ? 1 : 0;
+        return (solver_.statistics_report_detail_of() == solver::statistics_report_detail::verbose) ? 1 : 0;
     }
 
     std::string c_api_adapter::ipasir_statistics_report_line() const
