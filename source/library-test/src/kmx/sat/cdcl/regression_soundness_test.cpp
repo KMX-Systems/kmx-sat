@@ -264,6 +264,98 @@ namespace kmx::sat::cdcl
         REQUIRE(satisfiable_count < 380u);
     }
 
+    TEST_CASE("the first phase decides a small formula without preprocessing it", "[sat][regression]")
+    {
+        // x1 xor x2 xor x3 = 0 and = 1 together: no lucky assignment satisfies it and root propagation derives
+        // nothing, so only the first phase's search can decide it, within a budget of two propagations per
+        // literal. The pipeline must never run for it.
+        solver_core solver;
+        for (const auto& clause: {clause_of({1, 2, 3}), clause_of({1, -2, -3}), clause_of({-1, 2, -3}), clause_of({-1, -2, 3}),
+                                  clause_of({-1, -2, -3}), clause_of({-1, 2, 3}), clause_of({1, -2, 3}), clause_of({1, 2, -3})})
+            add(solver, clause);
+        REQUIRE(solver.solve({}) == solver_core::status::unsatisfiable);
+        REQUIRE(solver.preprocess_run_count() == 0u);
+        REQUIRE(solver.conflict_event_count() >= 1u);
+    }
+
+    TEST_CASE("the walk stays off when probing derived a unit", "[sat][regression]")
+    {
+        // Random 3-SAT at the threshold is what the walk is for: on this unsatisfiable instance the search
+        // outlives the opening probe and the walk runs. Two binary clauses on fresh variables make failed-literal
+        // probing derive a unit, and that structure turns the walk off for the episode (`hanoi4`: 718k flips
+        // stuck at two unsatisfied clauses for a search that finished 230 conflicts later).
+        generator random {0x9e377fb97f4a7627ull};
+        std::vector<clause_t> clauses;
+        for (std::size_t index = 0u; index < 645u; ++index)
+        {
+            clause_t clause;
+            while (clause.size() < 3u)
+            {
+                const auto var = 1u + random.next(150u);
+                if (std::none_of(clause.begin(), clause.end(), [var](const literal lit) { return lit.variable_of().index() == var; }))
+                    clause.push_back(literal {variable {var}, random.next(2u) != 0u});
+            }
+            clauses.push_back(clause);
+        }
+        {
+            solver_core plain;
+            for (const auto& clause: clauses)
+                add(plain, clause);
+            REQUIRE(plain.solve({}) == solver_core::status::unsatisfiable);
+            REQUIRE(plain.probe_unit_count() == 0u);
+            REQUIRE(plain.walk_flip_count() > 0u);
+        }
+        {
+            solver_core structured;
+            for (const auto& clause: clauses)
+                add(structured, clause);
+            add(structured, clause_of({151, 152}));
+            add(structured, clause_of({151, -152}));
+            REQUIRE(structured.solve({}) == solver_core::status::unsatisfiable);
+            REQUIRE(structured.probe_unit_count() >= 1u);
+            REQUIRE(structured.walk_flip_count() == 0u);
+        }
+    }
+
+    TEST_CASE("a formula the first phase cannot decide is searched exactly as without it", "[sat][regression]")
+    {
+        // The pigeonhole formula with six holes outlives the first phase's budget. Everything the first phase
+        // touched (clauses, literal order, phases, activities, counters) goes back, so the second phase must take
+        // the very same decisions as a solve that skipped the first phase, which a request with an explicit
+        // conflict limit does.
+        const auto pigeonhole = [](solver_core& solver)
+        {
+            constexpr int holes = 6, pigeons = 7;
+            const auto var = [](const int pigeon, const int hole) { return pigeon * holes + hole + 1; };
+            for (int pigeon = 0; pigeon < pigeons; ++pigeon)
+            {
+                clause_t clause;
+                for (int hole = 0; hole < holes; ++hole)
+                    clause.push_back(dimacs(var(pigeon, hole)));
+                add(solver, clause);
+            }
+            for (int hole = 0; hole < holes; ++hole)
+                for (int first = 0; first < pigeons; ++first)
+                    for (int second = first + 1; second < pigeons; ++second)
+                        add(solver, clause_of({-var(first, hole), -var(second, hole)}));
+        };
+        solver_core with_first_phase;
+        pigeonhole(with_first_phase);
+        REQUIRE(with_first_phase.solve({}) == solver_core::status::unsatisfiable);
+        REQUIRE(with_first_phase.raw_probe_conflict_count() >= 1u);
+        REQUIRE(with_first_phase.preprocess_run_count() == 1u);
+
+        solver_core without_first_phase;
+        pigeonhole(without_first_phase);
+        solve_request limited {};
+        limited.conflict_limit = 1'000'000'000u;
+        REQUIRE(without_first_phase.solve(limited) == solver_core::status::unsatisfiable);
+        REQUIRE(without_first_phase.raw_probe_conflict_count() == 0u);
+
+        REQUIRE(with_first_phase.decision_event_count() == without_first_phase.decision_event_count());
+        REQUIRE(with_first_phase.conflict_event_count() == without_first_phase.conflict_event_count());
+    }
+
     TEST_CASE("a proof tracer attached after clauses were added names every clause", "[sat][regression]")
     {
         // Without a consumer no proof event is dispatched and no clause id exists; a tracer attached later must

@@ -37,31 +37,39 @@ static int read_dimacs_cnf(const fs::path& cnf_file, kmx::sat::solver& solver, c
         return 1;
     }
 
-    char buffer[65536];
-    std::size_t buf_pos = 0;
-    std::size_t buf_len = 0;
-
-    const auto read_char = [&]() noexcept -> int
+    // The whole file in one buffer, then a scan over contiguous bytes: reading it a character at a time through a
+    // refilling buffer and handing every literal to the solver one call at a time was a tenth of the run on the
+    // larger classic instances.
+    std::vector<char> text;
     {
-        if (buf_pos >= buf_len)
+        char chunk[65536];
+        std::size_t got {};
+        while ((got = std::fread(chunk, 1, sizeof(chunk), file)) != 0u)
+            text.insert(text.end(), chunk, chunk + got);
+    }
+    std::fclose(file);
+    // A trailing newline so a number at the very end of the file terminates like any other.
+    text.push_back('\n');
+
+    const char* cursor = text.data();
+    const char* const end = text.data() + text.size();
+    const auto is_space = [](const char ch) noexcept { return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n'; };
+    const auto is_digit = [](const char ch) noexcept { return ch >= '0' && ch <= '9'; };
+    std::vector<kmx::sat::literal> clause;
+    clause.reserve(64u);
+
+    while (cursor < end)
+    {
+        const char ch = *cursor;
+        if (is_space(ch))
         {
-            buf_len = std::fread(buffer, 1, sizeof(buffer), file);
-            buf_pos = 0;
-            if (buf_len == 0)
-                return EOF;
-        }
-        return static_cast<unsigned char>(buffer[buf_pos++]);
-    };
-
-    int ch = 0;
-    while ((ch = read_char()) != EOF)
-    {
-        if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n')
+            ++cursor;
             continue;
+        }
         if (ch == 'c')
         {
-            while ((ch = read_char()) != EOF && ch != '\n')
-                ;
+            while (cursor < end && *cursor != '\n')
+                ++cursor;
             continue;
         }
         // SATLIB CNF files terminate the clause list with a '%' line followed by a stray '0'. Without this
@@ -70,17 +78,19 @@ static int read_dimacs_cnf(const fs::path& cnf_file, kmx::sat::solver& solver, c
             break;
         if (ch == 'p')
         {
-            while ((ch = read_char()) != EOF && ch != '\n')
+            ++cursor;
+            while (cursor < end && *cursor != '\n')
             {
-                if (ch == 'c' && (ch = read_char()) == 'n' && (ch = read_char()) == 'f')
+                if (*cursor == 'c' && cursor + 2 < end && cursor[1] == 'n' && cursor[2] == 'f')
                 {
-                    while ((ch = read_char()) != EOF && (ch == ' ' || ch == '\t'))
-                        ;
+                    cursor += 3;
+                    while (cursor < end && (*cursor == ' ' || *cursor == '\t'))
+                        ++cursor;
                     int vars = 0;
-                    while (ch >= '0' && ch <= '9')
+                    while (is_digit(*cursor))
                     {
-                        vars = vars * 10 + (ch - '0');
-                        ch = read_char();
+                        vars = vars * 10 + (*cursor - '0');
+                        ++cursor;
                     }
                     if (vars > 0)
                     {
@@ -88,7 +98,9 @@ static int read_dimacs_cnf(const fs::path& cnf_file, kmx::sat::solver& solver, c
                         if (retained != nullptr)
                             retained->declared_variable_count = vars;
                     }
+                    continue;
                 }
+                ++cursor;
             }
             continue;
         }
@@ -97,38 +109,41 @@ static int read_dimacs_cnf(const fs::path& cnf_file, kmx::sat::solver& solver, c
         if (ch == '-')
         {
             sign = -1;
-            ch = read_char();
+            ++cursor;
         }
         else if (ch == '+')
-        {
-            ch = read_char();
-        }
+            ++cursor;
 
-        if (ch >= '0' && ch <= '9')
+        if (!is_digit(*cursor))
         {
-            int val = 0;
-            while (ch >= '0' && ch <= '9')
-            {
-                val = val * 10 + (ch - '0');
-                ch = read_char();
-            }
-            if (val == 0)
-            {
-                solver.add_literal(kmx::sat::literal(0));
-                if (retained != nullptr)
-                    retained->literals.push_back(0);
-            }
-            else
-            {
-                kmx::sat::variable var(static_cast<kmx::sat::variable::index_t>(val));
-                solver.add_literal(kmx::sat::literal {var, sign < 0});
-                if (retained != nullptr)
-                    retained->literals.push_back(sign < 0 ? -val : val);
-            }
+            // Anything else is skipped, one byte at a time, as before.
+            ++cursor;
+            continue;
+        }
+        int val = 0;
+        while (is_digit(*cursor))
+        {
+            val = val * 10 + (*cursor - '0');
+            ++cursor;
+        }
+        if (val == 0)
+        {
+            solver.add_clause(std::span<const kmx::sat::literal> {clause});
+            clause.clear();
+            if (retained != nullptr)
+                retained->literals.push_back(0);
+        }
+        else
+        {
+            clause.emplace_back(kmx::sat::variable {static_cast<kmx::sat::variable::index_t>(val)}, sign < 0);
+            if (retained != nullptr)
+                retained->literals.push_back(sign < 0 ? -val : val);
         }
     }
-
-    std::fclose(file);
+    // A last clause without its terminating zero stays pending, exactly as it did when literals were added one by
+    // one; the solver closes it when solving starts.
+    for (const auto lit: clause)
+        solver.add_literal(lit);
     return 0;
 }
 

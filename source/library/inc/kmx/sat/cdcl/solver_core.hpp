@@ -12,6 +12,7 @@
     #include <variant>
     #include <vector>
 #endif
+#include <kmx/sat/cdcl/bank/trail.hpp>
 #include <kmx/sat/cdcl/bank/watch_list.hpp>
 #include <kmx/sat/cdcl/clause/database.hpp>
 #include <kmx/sat/cdcl/incremental_context.hpp>
@@ -147,19 +148,9 @@ namespace kmx::sat::cdcl
             for (const auto assumption: request.assumptions)
                 frozen_variables_scratch_.push_back(assumption.variable_of());
             preprocess_scheduler_.set_frozen_variables(frozen_variables_scratch_);
-            preprocess_scheduler_.set_problem_variable_count(find_max_variable(request.assumptions));
-
-            // The walker takes the formula as stated, before preprocessing rewrites it. Factoring replaces the
-            // at-most-one clauses of a colouring instance with definitions of fresh variables, and on that formula
-            // the walk that solves `gcp125_17` in a third of a second finds nothing in thirty. A model of the
-            // original formula seeds the original variables' phases; the fresh variables follow by propagation.
-            local_search_variable_count_ = find_max_variable(request.assumptions);
-            local_search_prepared_ = local_search_applicable(local_search_variable_count_) &&
-                                     local_search_.prepare(clause_database_, local_search_variable_count_);
-
-            preprocess_scheduler_.run_initial_pipeline();
-            preprocess_scheduler_.report_pass_summary();
-            inprocess_scheduler_.clear_abort();
+            // One scan of the formula as stated serves the scheduler, the walker and the first phase alike.
+            const auto stated_variable_count = find_max_variable(request.assumptions);
+            preprocess_scheduler_.set_problem_variable_count(stated_variable_count);
 
             const auto finalize_epoch = [this](const status result) noexcept
             {
@@ -171,13 +162,108 @@ namespace kmx::sat::cdcl
                 return status_;
             };
 
+            // The formula as stated gets the first word: the lucky check and the 2,000-conflict probe run on it
+            // before any preprocessing, so an instance the search settles there never pays for the pipeline (the
+            // scheduling and circuit instances of the classic set: 20-30 ms of passes for a search of a few
+            // conflicts). Everything the probe learns, clauses, phases, activities, is kept for the second phase,
+            // which is the old order: pipeline, walk, search. A request with its own limits keeps the old order
+            // outright, so that the limits mean what they say.
+            raw_probe_conflicts_ = 0u;
+            raw_probe_ran_ = false;
+            // Assumption solves keep the old order: the lucky check stands aside under assumptions, and an
+            // incremental caller's episode should look exactly as it did.
+            if (raw_probe_enabled && !proof_manager_.has_active_consumers() && request.assumptions.empty() && request.conflict_limit == 0u &&
+                request.decision_limit == 0u)
+            {
+                variable_count_ = stated_variable_count;
+                initialize_search_state(request);
+                entry_phase_snapshot_.assign(saved_phase_.begin(), saved_phase_.end());
+                // The lucky check restores the phases it started from, and the probe search starts from them too.
+                opening_phase_snapshot_.assign(saved_phase_.begin(), saved_phase_.end());
+                heap_snapshot_ = heap_;
+                const auto learned_before = clause_database_.redundant_refs().size();
+                clause_database_.storage_of().snapshot_arena(arena_image_);
+                opening_walk_pending_ = false;
+                rebuild_propagation_state();
+                root_refuted_ = false;
+                solve_request probe_request = request;
+                probe_request.conflict_limit = raw_probe_conflict_cap;
+                raw_phase_active_ = true;
+                search_coordinator_.apply_assumptions(probe_request);
+                propagator_.reset_episode_state();
+                propagator_.set_pending_assumption_count(request.assumptions.size());
+                (void) propagator_.propagate_assumptions();
+                // The budget is the search's alone: the lucky check's attempts, up to four assignments of every
+                // variable, are not charged against it (charged, they took a third of it on `ssa2670-130`).
+                const auto lucky = try_lucky_assignments(request, false);
+                raw_probe_propagation_limit_ = propagation_assignment_count_ + database_literal_count_ * raw_probe_propagations_per_literal;
+                status_ = lucky                                    ? status::satisfiable
+                          : root_refuted_                          ? root_conflict()
+                          : raw_probe_propagations_per_literal == 0u ? status::unknown
+                                                                   : run_search(probe_request);
+                raw_phase_active_ = false;
+                raw_probe_propagation_limit_ = 0u;
+                if (status_ != status::unknown)
+                {
+                    if (status_ == status::satisfiable)
+                        build_internal_model();
+                    (void) run_inprocess_if_due();
+                    return finalize_epoch(status_);
+                }
+                // The probe was only an early exit: everything it learned goes, so the second phase is the same
+                // run it would have been without the probe. Carrying its clauses and activities into the
+                // preprocessed formula had cost `hole9` and `par16` two to four times.
+                raw_probe_conflicts_ = search_coordinator_.conflict_event_count();
+                raw_probe_ran_ = true;
+                backtrack(0u);
+                clause_database_.clear_reason_clauses();
+                // The database goes back byte for byte: the probe's learned clauses vanish, and the literal order
+                // inside every clause, which propagation permutes as watches move, is what it was, so the second
+                // phase watches the same pairs the search would have watched without the probe.
+                clause_database_.discard_redundant_since(learned_before);
+                clause_database_.storage_of().restore_arena(arena_image_);
+                heap_ = heap_snapshot_;
+                std::copy(entry_phase_snapshot_.begin(), entry_phase_snapshot_.end(), saved_phase_.begin());
+                // Fresh episode counters before the second phase computes its schedules, so restarts, modes and
+                // the walk fall exactly where they would have without the probe.
+                search_coordinator_.apply_assumptions(request);
+            }
+
+            // The walker takes the formula as stated, before preprocessing rewrites it. Factoring replaces the
+            // at-most-one clauses of a colouring instance with definitions of fresh variables, and on that formula
+            // the walk that solves `gcp125_17` in a third of a second finds nothing in thirty. A model of the
+            // original formula seeds the original variables' phases; the fresh variables follow by propagation.
+            // It is prepared here, not at entry, so a formula the first phase decides never pays for it.
+            local_search_variable_count_ = stated_variable_count;
+            local_search_prepared_ = local_search_applicable(local_search_variable_count_) &&
+                                     local_search_.prepare(clause_database_, local_search_variable_count_);
+
+            preprocess_scheduler_.run_initial_pipeline();
+            preprocess_scheduler_.report_pass_summary();
+            inprocess_scheduler_.clear_abort();
+
             variable_count_ = find_max_variable(request.assumptions);
             initialize_search_state(request);
+            // The phases as they are before probing: the opening walk starts from them, and the lucky check
+            // restores them, whether or not a walk is pending. (Restoring only when one was pending let the last
+            // lucky attempt's phases leak into the search of every formula too large for an opening walk.)
+            opening_phase_snapshot_.assign(saved_phase_.begin(), saved_phase_.end());
             opening_walk_pending_ = prepare_opening_walk();
             opening_walk_due_at_ = search_coordinator_.conflict_event_count() + local_search_opening_probe_conflicts;
             rebuild_propagation_state();
             root_refuted_ = false;
+            const auto probe_units_before = probe_unit_count_ + probe_lifted_count_;
             probe_failed_literals();
+            // Units from probing mean implication structure the walk cannot use and the search can: on such
+            // formulas every walk stalled far from a model while the search finished soon after (`hanoi4`:
+            // 718k flips at two unsatisfied clauses for a search that ends 230 conflicts after the walk starts;
+            // `bmc-ibm-13`, `bw_large_d`: re-walks ending at 8-20 unsatisfied clauses). The formulas the walk
+            // solves, random k-SAT and colouring, yield no units at all.
+            if (walk_only_without_probe_units && probe_unit_count_ + probe_lifted_count_ != probe_units_before)
+            {
+                opening_walk_pending_ = false;
+                local_search_enabled_ = false;
+            }
 
             search_coordinator_.apply_assumptions(request);
             propagator_.reset_episode_state();
@@ -314,6 +400,8 @@ namespace kmx::sat::cdcl
 
         /// @brief Returns conflicts handled during the latest solve episode.
         counter_t conflict_event_count() const noexcept { return search_coordinator_.conflict_event_count(); }
+        /// @brief Conflicts the raw-formula probe spent before the second phase discarded its state.
+        counter_t raw_probe_conflict_count() const noexcept { return raw_probe_conflicts_; }
 
         /// @brief Returns decisions produced during the latest solve episode.
         counter_t decision_event_count() const noexcept { return search_coordinator_.decision_event_count(); }
@@ -593,6 +681,15 @@ namespace kmx::sat::cdcl
         /// Walking first therefore charged the structured formulas a hundred milliseconds each for nothing;
         /// probing first charges the walk winners a few percent and the held-out random set about as much.
         static constexpr counter_t local_search_opening_probe_conflicts {2000u};
+        /// @brief Conflicts the search spends on the formula as stated before the preprocessing pipeline runs.
+        /// @details Every instance the raw probe is meant to finish (the scheduling, circuit and small IBM
+        /// instances) does so within a few hundred conflicts; a longer probe wastes work on the formulas whose
+        /// search depends on preprocessing (`hole9`, `par16`), which the 2,000-conflict variant cost fourfold.
+        static constexpr counter_t raw_probe_conflict_cap {500u};
+        /// First-phase search budget in propagated assignments per literal of the stated formula (0 = lucky only).
+        static constexpr std::size_t raw_probe_propagations_per_literal {2u};
+
+        static constexpr bool raw_probe_enabled {true};
         /// @brief Largest learned clause whose reason-side variables are bumped along with the analyzed ones.
         static constexpr std::size_t reason_bump_size_limit {32u};
         /// @brief Trail growth allowed to failed-literal probing, per irredundant clause, plus a minimum.
@@ -619,6 +716,8 @@ namespace kmx::sat::cdcl
         static constexpr std::size_t local_search_opening_rounds {10u};
         /// @brief Unsatisfied-clause count at or below which a walk is treated as a near miss worth more effort.
         static constexpr std::size_t local_search_near_miss_limit {2u};
+        /// Walk only on formulas where failed-literal probing derived no unit: those are the ones a walk solves.
+        static constexpr bool walk_only_without_probe_units {true};
         /// @brief Fixed seed: the probe feeds branching, so it must be reproducible across repeats.
         static constexpr std::uint64_t local_search_seed {0x5851f42d4c957f2dull};
         /// @brief The walk portfolio, cycled through by successive walks.
@@ -693,21 +792,26 @@ namespace kmx::sat::cdcl
             return true;
         }
 
-        [[nodiscard]] std::uint32_t find_max_variable(const std::span<const literal> assumptions) const noexcept
+        [[nodiscard]] std::uint32_t find_max_variable(const std::span<const literal> assumptions) noexcept
         {
             // Seeded from what the problem was stated over, not from what survives simplification. Bounded
             // variable elimination removes a variable's clauses outright, so scanning only the current database
             // would shrink the variable range after preprocessing and the reported model would omit variables.
+            // The same scan sizes the first phase's budget by the literals it will propagate over.
             std::uint32_t max_variable = max_problem_variable_;
+            std::size_t literal_count {};
             const auto& storage = clause_database_.storage_of();
-            const auto process_clause = [&storage, &max_variable](const clause::ref_t ref) noexcept
+            const auto process_clause = [&storage, &max_variable, &literal_count](const clause::ref_t ref) noexcept
             {
-                for (const auto lit: storage.view_literals(ref))
+                const auto literals = storage.view_literals(ref);
+                literal_count += literals.size();
+                for (const auto lit: literals)
                     if (lit.variable_of().index() > max_variable)
                         max_variable = lit.variable_of().index();
             };
             clause_database_.iterate_irredundant(process_clause);
             clause_database_.iterate_redundant(process_clause);
+            database_literal_count_ = literal_count;
             for (const auto lit: assumptions)
                 if (lit.variable_of().index() > max_variable)
                     max_variable = lit.variable_of().index();
@@ -753,11 +857,10 @@ namespace kmx::sat::cdcl
             // configured (stable) schedule, the periods doubling so both modes get equal time in the long run.
             focused_mode_ = mode_switching_enabled && mode_start_focused;
             mode_period_ = mode_initial_period;
-            mode_switch_at_ = mode_switching_enabled ? search_coordinator_.conflict_event_count() + mode_period_
-                                                     : std::numeric_limits<counter_t>::max();
+            mode_switch_at_ = mode_switching_enabled ? conflict_event_count() + mode_period_ : std::numeric_limits<counter_t>::max();
             search_coordinator_.set_restart_interval(focused_mode_ ? focused_restart_interval : stable_restart_interval_);
             next_local_search_at_ = local_search_initial_interval;
-            visits_at_last_walk_ = 0u;
+            visits_at_last_walk_ = watch_entry_scan_count_;
             best_walk_unsatisfied_ = std::numeric_limits<std::size_t>::max();
             local_search_scale_ = 1.0;
         }
@@ -1035,7 +1138,7 @@ namespace kmx::sat::cdcl
         /// Phases are restored afterwards so a failed attempt leaves no trace; assumptions and a root conflict
         /// hand straight over to the search.
         /// @return True if an attempt assigned every variable without a conflict; the trail then holds the model.
-        [[nodiscard]] bool try_lucky_assignments(const solve_request& request) noexcept
+        [[nodiscard]] bool try_lucky_assignments(const solve_request& request, const bool count_decisions = true) noexcept
         {
             if (!request.assumptions.empty() || variable_count_ == 0u || level_ != 0u || root_refuted_)
                 return false;
@@ -1060,9 +1163,11 @@ namespace kmx::sat::cdcl
                     if (is_assigned(var))
                         continue;
                     // Each attempt's decisions count against the request's decision limit like any other, so a
-                    // limited request that would have stopped in the search stops here too.
-                    search_coordinator_.note_decision();
-                    if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
+                    // limited request that would have stopped in the search stops here too. The raw-formula phase
+                    // runs without limits and leaves the coordinator untouched, so its attempts are not counted.
+                    if (count_decisions)
+                        search_coordinator_.note_decision();
+                    if (count_decisions && search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
                     {
                         backtrack(0u);
                         if (!opening_phase_snapshot_.empty())
@@ -1108,11 +1213,9 @@ namespace kmx::sat::cdcl
             const auto budget = static_cast<std::size_t>(local_search_variable_count_) * local_search_flips_per_variable_;
             if (budget == 0u || budget > local_search_opening_flip_cap)
                 return false;
-            // The walk starts from the phases as they are now, not from what the probe leaves behind: the probe's
-            // phase-saved assignment is a local minimum the walk climbs out of slowly, and starting there turned
-            // a 0.2 s solve of `lran_f2000` into a timeout. Keeping the snapshot makes the walk's trajectory
-            // independent of the probe.
-            opening_phase_snapshot_.assign(saved_phase_.begin(), saved_phase_.end());
+            // The walk starts from the phase snapshot `solve` took before probing, not from what the probe
+            // leaves behind: the probe's phase-saved assignment is a local minimum the walk climbs out of
+            // slowly, and starting there turned a 0.2 s solve of `lran_f2000` into a timeout.
             return true;
         }
 
@@ -1181,6 +1284,29 @@ namespace kmx::sat::cdcl
             watch_list_.reserve(static_cast<std::size_t>(variable_count_) * 2u + 2u);
             watch_list_.clear_entries();
             unit_clause_refs_.clear();
+            // Each list is sized before it is filled: grown one push at a time, the lists of a 55k-clause
+            // formula went through tens of thousands of reallocations for a state that is rebuilt three times.
+            const auto& storage = clause_database_.storage_of();
+            watch_count_scratch_.assign(static_cast<std::size_t>(variable_count_) * 2u + 2u, 0u);
+            const auto count = [this, &storage](const clause::ref_t ref) noexcept
+            {
+                const auto literals = storage.view_literals(ref);
+                if (literals.size() < 2u)
+                    return;
+                for (const auto lit: {literals[0], literals[1]})
+                {
+                    const auto index = static_cast<std::size_t>(lit.index_in_watch_bank());
+                    if (index < watch_count_scratch_.size())
+                        ++watch_count_scratch_[index];
+                }
+            };
+            clause_database_.iterate_irredundant(count);
+            clause_database_.iterate_redundant(count);
+            // An eighth of slack on top of the exact count: sized exactly, every list reallocated on the first
+            // learned clause that watched it (a thousand reallocations on `dubois100`).
+            for (std::size_t index = 0u; index < watch_count_scratch_.size(); ++index)
+                if (watch_count_scratch_[index] != 0u)
+                    watch_list_.list_at(index).reserve(watch_count_scratch_[index] + watch_count_scratch_[index] / 8u + 2u);
             const auto attach = [this](const clause::ref_t ref) noexcept { attach_clause_for_propagation(ref); };
             clause_database_.iterate_irredundant(attach);
             clause_database_.iterate_redundant(attach);
@@ -1287,9 +1413,12 @@ namespace kmx::sat::cdcl
             (void) propagator_.propagate();
             auto& storage = clause_database_.storage_of();
             std::int8_t* const values = values_.data();
+            // The counters are settled per partition and at the end, not per entry: every value live inside the
+            // scan loop competes for a register with the cursors and the value table, and a counter that lost
+            // that competition put the table on the stack in one build.
+            const auto trail_before = trail_.size();
             std::size_t visits {};
             std::size_t binary_visits {};
-            std::size_t assigned {};
             std::size_t partitions {};
             clause::ref_t conflict {};
 
@@ -1307,7 +1436,6 @@ namespace kmx::sat::cdcl
                 while (read != end)
                 {
                     const watch entry = *read++;
-                    ++visits;
                     const literal blocking = entry.blocking_literal();
                     const auto blocking_value = values[blocking.raw()];
                     if (blocking_value > 0)
@@ -1327,12 +1455,12 @@ namespace kmx::sat::cdcl
                             break;
                         }
                         assign(blocking, entry.clause_ref());
-                        ++assigned;
                         continue;
                     }
 
-                    const clause::ref_t ref {entry.raw_offset()};
-                    literal* const lits = storage.literal_data(ref);
+                    // Resolved once: the two accessors below would otherwise each test for relocations.
+                    const clause::ref_t ref = storage.resolve_ref(clause::ref_t {entry.raw_offset()});
+                    literal* const lits = storage.literal_data_at_home(ref);
                     const literal other {lits[0].raw() ^ lits[1].raw() ^ not_lit.raw()};
                     const auto other_value = values[other.raw()];
                     if (other_value > 0)
@@ -1341,7 +1469,7 @@ namespace kmx::sat::cdcl
                         continue;
                     }
 
-                    literal* const lits_end = lits + storage.header_at(ref).size;
+                    literal* const lits_end = lits + storage.header_at_home(ref).size;
                     literal* candidate = lits + 2;
                     while (candidate != lits_end && values[candidate->raw()] < 0)
                         ++candidate;
@@ -1352,7 +1480,7 @@ namespace kmx::sat::cdcl
                         lits[0] = other;
                         lits[1] = replacement;
                         *candidate = not_lit;
-                        watch_list_.list_at(replacement.raw()).push_back(watch {other, ref, false});
+                        watch_list_.push_watch_at(replacement.raw(), watch {other, ref, false});
                         continue;
                     }
 
@@ -1365,9 +1493,9 @@ namespace kmx::sat::cdcl
                     lits[0] = other;
                     lits[1] = not_lit;
                     assign(other, ref);
-                    ++assigned;
                 }
 
+                visits += static_cast<std::size_t>(read - begin);
                 while (read != end)
                     *write++ = *read++;
                 list.resize(static_cast<std::size_t>(write - begin));
@@ -1377,7 +1505,7 @@ namespace kmx::sat::cdcl
 
             watch_entry_scan_count_ += visits;
             binary_watch_scan_count_ += binary_visits;
-            propagation_assignment_count_ += assigned;
+            propagation_assignment_count_ += trail_.size() - trail_before;
             watch_list_.add_iterate_count(partitions);
             return conflict;
         }
@@ -1466,41 +1594,80 @@ namespace kmx::sat::cdcl
         /// root, or recursively redundant. Two early rejections from CaDiCaL prune the search: a literal that is
         /// the only one of its level in the clause, or the earliest one of its level on the trail, cannot be
         /// implied by the others. `poison` caches failures and `removable` successes for the rest of this clause.
-        [[nodiscard]] bool minimize_literal(const std::uint32_t var, const std::uint32_t depth) noexcept
+        /// @brief Whether a learned-clause literal is implied by the others (recursive minimization), marking what
+        /// it visits.
+        /// @details A depth-first walk over the implication graph with an explicit stack: a variable is removable
+        /// when every literal of its reason is removable in turn, and the walk stops at the first one that is not,
+        /// poisoning every variable on the path (each is settled once it is left, in post-order, exactly as the
+        /// recursive formulation did). Written without recursion so the cost does not depend on whether the
+        /// compiler inlines a recursion level: one build did and one did not, at a million calls apart.
+        /// @param var Variable of the literal to test, at the top of the walk.
+        /// @return True if the literal can be dropped from the learned clause.
+        [[nodiscard]] bool minimize_literal(const std::uint32_t var) noexcept
         {
-            const auto var_flags = flags_[var];
-            const auto lvl = levels_[var];
-            if (lvl == 0u || (var_flags & (removable_flag | keep_flag)) != 0u)
-                return true;
-            const auto reason = reasons_[var];
-            if (!reason.valid() || (var_flags & poison_flag) != 0u || lvl == level_)
-                return false;
-            const auto& frame = control_[lvl];
-            if (depth == 0u && frame.seen_count < 2u)
-                return false;
-            if (trail_positions_[var] <= frame.seen_min_trail)
-                return false;
-            if (depth > minimize_depth_limit)
-                return false;
-
-            bool removable = true;
-            const auto& storage = clause_database_.storage_of();
-            const literal* const lits = storage.literal_data(reason);
-            const literal* const lits_end = lits + storage.header_at(reason).size;
-            for (const literal* current = lits; current != lits_end; ++current)
+            // The checks a visit makes before it is worth expanding; `depth` is the stack depth of the visit.
+            const auto verdict = [this](const std::uint32_t candidate, const std::uint32_t depth) noexcept -> std::int8_t
             {
-                const auto other_var = var_of(*current);
-                if (other_var == var)
-                    continue;
-                if (!minimize_literal(other_var, depth + 1u))
+                const auto candidate_flags = flags_[candidate];
+                const auto lvl = levels_[candidate];
+                if (lvl == 0u || (candidate_flags & (removable_flag | keep_flag)) != 0u)
+                    return 1;
+                if (!reasons_[candidate].valid() || (candidate_flags & poison_flag) != 0u || lvl == level_)
+                    return -1;
+                const auto& frame = control_[lvl];
+                if (depth == 0u && frame.seen_count < 2u)
+                    return -1;
+                if (trail_positions_[candidate] <= frame.seen_min_trail)
+                    return -1;
+                if (depth > minimize_depth_limit)
+                    return -1;
+                return 0;
+            };
+            const auto& storage = clause_database_.storage_of();
+            const auto open = [&storage, this](const std::uint32_t candidate) noexcept
+            {
+                const auto reason = reasons_[candidate];
+                const literal* const lits = storage.literal_data(reason);
+                minimize_stack_.push_back(minimize_frame {candidate, lits, lits + storage.header_at(reason).size});
+            };
+
+            const auto top_verdict = verdict(var, 0u);
+            if (top_verdict != 0)
+                return top_verdict > 0;
+            minimize_stack_.clear();
+            open(var);
+            for (;;)
+            {
+                auto& frame = minimize_stack_.back();
+                if (frame.cursor == frame.end)
                 {
-                    removable = false;
-                    break;
+                    // Every reason literal was removable: so is this one.
+                    flags_[frame.var] |= removable_flag;
+                    minimized_.push_back(frame.var);
+                    minimize_stack_.pop_back();
+                    if (minimize_stack_.empty())
+                        return true;
+                    continue;
                 }
+                const auto other_var = var_of(*frame.cursor++);
+                if (other_var == frame.var)
+                    continue;
+                const auto other_verdict = verdict(other_var, static_cast<std::uint32_t>(minimize_stack_.size()));
+                if (other_verdict > 0)
+                    continue;
+                if (other_verdict < 0)
+                {
+                    // A literal that cannot be removed poisons the whole path, innermost first.
+                    for (auto it = minimize_stack_.rbegin(); it != minimize_stack_.rend(); ++it)
+                    {
+                        flags_[it->var] |= poison_flag;
+                        minimized_.push_back(it->var);
+                    }
+                    minimize_stack_.clear();
+                    return false;
+                }
+                open(other_var);
             }
-            flags_[var] |= removable ? removable_flag : poison_flag;
-            minimized_.push_back(var);
-            return removable;
         }
 
         /// @brief Runs first-UIP analysis from `conflict`, minimizes, bumps, and leaves the result in `learned_`.
@@ -1569,7 +1736,7 @@ namespace kmx::sat::cdcl
             {
                 const auto lit = learned_[index];
                 const auto var = var_of(lit);
-                if (minimize_literal(var, 0u))
+                if (minimize_literal(var))
                 {
                     if (want_chain)
                         collect_minimize_chain(var);
@@ -1829,6 +1996,9 @@ namespace kmx::sat::cdcl
         /// @return `unsatisfiable` if the simplified formula is refuted at the root, `unknown` otherwise.
         [[nodiscard]] status run_inprocess_if_due() noexcept
         {
+            // The first phase's database goes back byte for byte afterwards; an inprocessing epoch would not.
+            if (raw_phase_active_)
+                return status::unknown;
             inprocess_scheduler_.set_conflicts_seen(search_coordinator_.conflict_event_count());
             inprocess_scheduler_.set_restart_count(search_coordinator_.restart_count());
             inprocess_scheduler_.set_decisions_seen(search_coordinator_.decision_event_count());
@@ -1898,6 +2068,8 @@ namespace kmx::sat::cdcl
                     note_conflict(glue);
                     if (search_coordinator_.current_outcome() == search_coordinator::outcome::terminated)
                         return status::unknown;
+                    if (raw_probe_propagation_limit_ != 0u && propagation_assignment_count_ >= raw_probe_propagation_limit_)
+                        return status::unknown;
                     continue;
                 }
 
@@ -1933,7 +2105,7 @@ namespace kmx::sat::cdcl
                     continue;
                 }
 
-                if (search_coordinator_.conflict_event_count() >= mode_switch_at_)
+                if (conflict_event_count() >= mode_switch_at_)
                 {
                     // Stable/focused alternation, as CaDiCaL and Kissat do it: a satisfiable structured formula
                     // (`hanoi5`: 30k conflicts at a 50-conflict interval, 109k at 4,096) wants frequent restarts
@@ -1943,7 +2115,7 @@ namespace kmx::sat::cdcl
                         mode_period_ *= 2u;
                     // Stable periods are four times the focused ones: random 3-SAT wants the stable schedule for
                     // most of the run, and the structured formulas need only a few focused periods.
-                    mode_switch_at_ = search_coordinator_.conflict_event_count() + (focused_mode_ ? mode_period_ : mode_period_ * stable_period_factor);
+                    mode_switch_at_ = conflict_event_count() + (focused_mode_ ? mode_period_ : mode_period_ * stable_period_factor);
                     search_coordinator_.set_restart_interval(focused_mode_ ? focused_restart_interval : stable_restart_interval_);
                 }
 
@@ -2054,7 +2226,7 @@ namespace kmx::sat::cdcl
         std::vector<std::uint32_t> levels_ {};
         std::vector<clause::ref_t> reasons_ {};
         std::vector<std::uint32_t> trail_positions_ {};
-        std::vector<literal> trail_ {};
+        bank::trail trail_ {};
         std::vector<control_frame> control_ {};
         std::size_t propagated_ {};
         std::uint32_t level_ {};
@@ -2076,6 +2248,15 @@ namespace kmx::sat::cdcl
         counter_t opening_walk_due_at_ {};
         bool local_search_prepared_ {};
         std::uint32_t local_search_variable_count_ {};
+        bool raw_probe_ran_ {};
+        counter_t raw_probe_conflicts_ {};
+        std::vector<std::int8_t> entry_phase_snapshot_ {};
+        std::size_t raw_probe_propagation_limit_ {};
+        bool raw_phase_active_ {};
+        std::size_t database_literal_count_ {};
+        std::vector<std::uint32_t> watch_count_scratch_ {};
+        var_heap heap_snapshot_ {};
+        std::vector<std::uint8_t> arena_image_ {};
         std::uint64_t lucky_success_count_ {};
         std::uint64_t probe_count_ {};
         std::uint64_t probe_unit_count_ {};
@@ -2088,6 +2269,13 @@ namespace kmx::sat::cdcl
         std::vector<std::uint8_t> probe_marks_ {};
         std::vector<literal> lifted_scratch_ {};
         std::vector<literal> marked_scratch_ {};
+        struct minimize_frame final
+        {
+            std::uint32_t var;
+            const literal* cursor;
+            const literal* end;
+        };
+        std::vector<minimize_frame> minimize_stack_ {};
         std::vector<std::int8_t> probe_phase_scratch_ {};
         std::vector<std::int8_t> opening_phase_snapshot_ {};
         std::size_t best_walk_unsatisfied_ {};

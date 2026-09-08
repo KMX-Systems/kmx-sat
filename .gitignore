@@ -54,3 +54,6 @@ tools/bin/
 tools/veripb-venv/
 tools/src/
 benchmark-release-results*/
+
+# Generated single-file source concatenation (LLM context dump), not a source artifact
+source/library/sat.txt

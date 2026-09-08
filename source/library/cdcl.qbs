@@ -39,6 +39,7 @@ StaticLibrary {
         prefix: "inc/kmx/sat/cdcl/bank/"
         files: [
             "arena.hpp",
+            "trail.hpp",
             "watch_list.hpp",
         ]
     }

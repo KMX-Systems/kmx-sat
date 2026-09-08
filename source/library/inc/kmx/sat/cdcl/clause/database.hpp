@@ -219,7 +219,7 @@ namespace kmx::sat::cdcl::clause
         }
 
         /// @brief Checks whether a clause is currently marked garbage.
-        [[nodiscard]] bool is_garbage(const ref_t ref) const noexcept
+        [[nodiscard]] [[gnu::always_inline]] inline bool is_garbage(const ref_t ref) const noexcept
         {
             return storage_.is_alive(ref) && (storage_.header_of(ref).flags & bank::garbage_flag) != 0u;
         }
@@ -312,6 +312,13 @@ namespace kmx::sat::cdcl::clause
         [[nodiscard]] stats stats_snapshot() const noexcept
         {
             return stats {irredundant_refs_.size(), redundant_refs_.size(), garbage_count_};
+        }
+
+        /// @brief Forgets the redundant clauses added after the first `count`, for a caller that rolls the arena back.
+        void discard_redundant_since(const std::size_t count) noexcept
+        {
+            if (redundant_refs_.size() > count)
+                redundant_refs_.resize(count);
         }
 
         /// @brief Returns the underlying physical clause storage.

@@ -46,6 +46,9 @@ namespace kmx::sat::cdcl::bank
     inline constexpr std::uint8_t shrunken_flag {1u << 3u};
     inline constexpr std::uint8_t tracked_flag {1u << 4u};
     inline constexpr std::uint8_t alive_flag {1u << 5u};
+    /// Set by the forward subsumer on every clause it has checked; cleared whenever the clause body changes, so
+    /// a later run knows which pairs of clauses it can skip (two unchanged clauses cannot newly subsume).
+    inline constexpr std::uint8_t subsumption_checked_flag {1u << 6u};
 
     class byte_storage final
     {
@@ -420,6 +423,21 @@ namespace kmx::sat::cdcl::bank
         }
 
         /// @brief Lowers the active arena's used size after compaction; committed pages stay for reuse.
+        /// @brief Copies the active region into `image`, for a caller that will put it back with `restore_active`.
+        void snapshot_active(std::vector<std::uint8_t>& image) const noexcept
+        {
+            image.assign(active_.data(), active_.data() + active_.size());
+        }
+
+        /// @brief Puts back an image taken by `snapshot_active`: the active region shrinks to the image's size and
+        /// its bytes are overwritten, so clauses created since vanish and clauses that were permuted by
+        /// propagation regain their literal order.
+        void restore_active(const std::vector<std::uint8_t>& image) noexcept
+        {
+            shrink_active(image.size());
+            std::copy(image.begin(), image.end(), active_.data());
+        }
+
         void shrink_active(const std::size_t new_size) noexcept
         {
             if (new_size <= active_.size())

@@ -88,7 +88,12 @@ namespace kmx::sat::cdcl::clause
         /// @param ref Reference to the clause to shrink.
         /// @param new_size New literal count, which must not exceed the clause's current size.
         /// @throws None (noexcept).
-        void shrink_clause(const ref_t ref, const std::uint32_t new_size) noexcept { arena_.truncate_literals(resolve_ref(ref), new_size); }
+        void shrink_clause(const ref_t ref, const std::uint32_t new_size) noexcept
+        {
+            const auto resolved = resolve_ref(ref);
+            arena_.truncate_literals(resolved, new_size);
+            arena_.header_at(resolved).flags &= static_cast<std::uint8_t>(~bank::subsumption_checked_flag);
+        }
 
         /// @brief Re-validates a reference against the current arena generation, updating it if relocated.
         /// @param ref Reference to resolve.
@@ -145,7 +150,7 @@ namespace kmx::sat::cdcl::clause
         /// @brief Reads back a clause's current literal payload as a copy.
         [[nodiscard]] std::vector<literal> literals_of(const ref_t ref) const noexcept { return arena_.read_literals(resolve_ref(ref)); }
 
-        [[nodiscard]] std::span<const literal> view_literals(const ref_t ref) const noexcept
+        [[nodiscard]] [[gnu::always_inline]] inline std::span<const literal> view_literals(const ref_t ref) const noexcept
         {
             return arena_.view_literals(resolve_ref(ref));
         }
@@ -172,6 +177,18 @@ namespace kmx::sat::cdcl::clause
             return arena_.literal_data(resolve_ref(ref));
         }
 
+        /// @brief Header of a clause whose reference the caller has already passed through `resolve_ref`.
+        [[nodiscard]] [[gnu::always_inline]] inline bank::clause_header& header_at_home(const ref_t resolved) noexcept
+        {
+            return arena_.header_at(resolved);
+        }
+
+        /// @brief Literals of a clause whose reference the caller has already passed through `resolve_ref`.
+        [[nodiscard]] [[gnu::always_inline]] inline literal* literal_data_at_home(const ref_t resolved) noexcept
+        {
+            return arena_.literal_data(resolved);
+        }
+
         [[nodiscard]] [[gnu::always_inline]] inline const literal* literal_data(const ref_t ref) const noexcept
         {
             return arena_.literal_data(resolve_ref(ref));
@@ -183,7 +200,10 @@ namespace kmx::sat::cdcl::clause
         /// @throws None (noexcept).
         [[nodiscard]] std::uint32_t literal_count(const ref_t ref) const noexcept { return arena_.literal_count(resolve_ref(ref)); }
 
-        [[nodiscard]] bank::clause_header header_of(const ref_t ref) const noexcept { return arena_.header_of(resolve_ref(ref)); }
+        [[nodiscard]] [[gnu::always_inline]] inline bank::clause_header header_of(const ref_t ref) const noexcept
+        {
+            return arena_.header_of(resolve_ref(ref));
+        }
 
         void set_header(const ref_t ref, const bank::clause_header header) noexcept { arena_.set_header(resolve_ref(ref), header); }
 
@@ -198,6 +218,7 @@ namespace kmx::sat::cdcl::clause
                 return;
             arena_.write_literals(resolved, literals);
             arena_.truncate_literals(resolved, static_cast<std::uint32_t>(literals.size()));
+            arena_.header_at(resolved).flags &= static_cast<std::uint8_t>(~bank::subsumption_checked_flag);
         }
 
         /// @brief Checks whether a clause was created as a learned (redundant) clause.
@@ -209,7 +230,9 @@ namespace kmx::sat::cdcl::clause
         /// @brief Returns whether a clause is currently known to be alive in storage.
         /// @param ref Reference to the clause to query.
         /// @return True if the clause has been created and not yet destroyed.
-        [[nodiscard]] bool is_alive(const ref_t ref) const noexcept
+        // Inlined by attribute: these three are a few instructions each and are called from every loop that
+        // walks the database (the passes, the watch rebuild, the reduction), where a call per clause showed up.
+        [[nodiscard]] [[gnu::always_inline]] inline bool is_alive(const ref_t ref) const noexcept
         {
             const auto resolved = resolve_ref(ref);
             return arena_.contains(resolved) && (arena_.header_of(resolved).flags & bank::alive_flag) != 0u;
@@ -217,6 +240,19 @@ namespace kmx::sat::cdcl::clause
 
         /// @brief Returns the number of arena bytes currently in use, live and dead clauses included.
         [[nodiscard]] std::size_t arena_bytes() const noexcept { return arena_.active_size(); }
+
+        /// @brief Drops every clause created since the arena held `active_bytes`, byte for byte.
+        /// @details Only valid when every clause created since then has been dropped from the lists that name it
+        /// and no relocation has happened in between: the search's raw-formula probe uses it to leave the
+        /// database exactly as it found it.
+        void rollback_arena(const std::size_t active_bytes) noexcept { arena_.shrink_active(active_bytes); }
+
+        /// @brief Copies the arena's active bytes into `image` (see `restore_arena`).
+        void snapshot_arena(std::vector<std::uint8_t>& image) const noexcept { arena_.snapshot_active(image); }
+
+        /// @brief Restores an image taken by `snapshot_arena`: clauses created since vanish and every clause's
+        /// literal order is as it was, which a caller needs when propagation ran in between.
+        void restore_arena(const std::vector<std::uint8_t>& image) noexcept { arena_.restore_active(image); }
 
         /// @brief Slides every listed clause towards the arena base, in offset order, and cuts the arena after the
         /// last one.

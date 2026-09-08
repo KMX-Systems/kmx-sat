@@ -153,6 +153,83 @@ namespace kmx::sat::simplify
         (void) learned_ref;
     }
 
+    TEST_CASE("a second subsumption run over a grown database finds what a fresh run finds", "[sat][regression]")
+    {
+        // The subsumer skips pairs of clauses it has already checked and that have not changed since (the
+        // inprocessing epochs re-ran it over the whole formula every two thousand conflicts). Adding learned
+        // clauses, strengthening one, and running again must leave exactly the live clause set a fresh subsumer
+        // leaves on an identical database.
+        generator random {0x1234567890abcdefull};
+        std::size_t differing_samples {};
+        for (std::size_t sample = 0u; sample < 150u; ++sample)
+        {
+            const std::uint32_t variables = 6u + random.next(4u);
+            const auto random_clause = [&](const std::uint32_t size)
+            {
+                clause_t clause;
+                while (clause.size() < size)
+                {
+                    const auto var = 1u + random.next(variables);
+                    if (std::none_of(clause.begin(), clause.end(), [var](const literal lit) { return lit.variable_of().index() == var; }))
+                        clause.push_back(literal {variable {var}, random.next(2u) != 0u});
+                }
+                return clause;
+            };
+            std::vector<clause_t> original, learned;
+            const std::uint32_t original_count = 8u + random.next(10u), learned_count = 4u + random.next(8u);
+            for (std::uint32_t index = 0u; index < original_count; ++index)
+                original.push_back(random_clause(2u + random.next(3u)));
+            for (std::uint32_t index = 0u; index < learned_count; ++index)
+                learned.push_back(random_clause(1u + random.next(4u)));
+
+            // Incremental: originals, run, learned clauses added, run again.
+            cdcl::clause::database incremental;
+            fill(incremental, original);
+            forward_subsumer twice;
+            twice.attach_database(incremental);
+            twice.run();
+            for (const auto& clause: learned)
+                incremental.add_clause(std::span<const literal> {clause}, true);
+            twice.run();
+
+            // Fresh: the same clauses in the same order, subsumed by a subsumer that has never seen them.
+            cdcl::clause::database reference;
+            fill(reference, original);
+            forward_subsumer first;
+            first.attach_database(reference);
+            first.run(); // the originals among themselves, as the pipeline does before the search
+            for (const auto& clause: learned)
+                reference.add_clause(std::span<const literal> {clause}, true);
+            forward_subsumer once;
+            once.attach_database(reference);
+            once.set_incremental(false); // a full pass, whatever the first run marked
+            once.run();
+
+            const auto left = live_clauses(incremental);
+            const auto right = live_clauses(reference);
+            const auto dump = [](const std::vector<clause_t>& clauses)
+            {
+                std::string text;
+                for (const auto& clause: clauses)
+                {
+                    text += "[";
+                    for (const auto lit: clause)
+                        text += (lit.is_negated() ? "-" : "") + std::to_string(lit.variable_of().index()) + " ";
+                    text += "] ";
+                }
+                return text;
+            };
+            INFO("sample " << sample << " originals " << original_count << " learned " << learned_count << "\nincremental: " << dump(left)
+                           << "\nfresh:       " << dump(right) << "\noriginals:   " << dump(original) << "\nlearned:     " << dump(learned));
+            REQUIRE(left == right);
+            REQUIRE(incremental.stats_snapshot().redundant_count == reference.stats_snapshot().redundant_count);
+            if (twice.subsumed_count() != 0u)
+                ++differing_samples;
+        }
+        // The generator must produce subsumptions in the second run, or the test proves little.
+        REQUIRE(differing_samples > 20u);
+    }
+
     TEST_CASE("factoring preserves the model set over the original variables", "[sat][regression]")
     {
         // Bounded variable addition introduces variables; the models of the new formula, projected onto the

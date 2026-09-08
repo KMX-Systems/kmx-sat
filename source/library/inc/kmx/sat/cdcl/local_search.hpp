@@ -128,7 +128,11 @@ namespace kmx::sat::cdcl
         /// @param initial_phase Polarity each variable starts at (index zero unused); random where absent.
         /// @return True if an assignment satisfying every original clause was found.
         /// @throws None (noexcept).
-        bool walk(const configuration& config, const std::size_t max_flips, const std::span<const std::uint8_t> initial_phase = {}) noexcept
+        /// @note Never inlined, and its helpers always are: the flip loop then compiles the same way whatever the
+        /// rest of the program looks like. Left to link-time optimisation, one build ran it 8% slower than another
+        /// on the same flips.
+        [[gnu::noinline]] bool walk(const configuration& config, const std::size_t max_flips,
+                                    const std::span<const std::uint8_t> initial_phase = {}) noexcept
         {
             if (clause_offsets_.size() < 2u)
                 return false;
@@ -199,7 +203,7 @@ namespace kmx::sat::cdcl
             }
         }
 
-        [[nodiscard]] bool is_true(const std::uint32_t raw) const noexcept
+        [[nodiscard]] [[gnu::always_inline]] inline bool is_true(const std::uint32_t raw) const noexcept
         {
             return assignment_[raw >> 1u] != (raw & 1u);
         }
@@ -237,7 +241,7 @@ namespace kmx::sat::cdcl
             }
         }
 
-        void record_best() noexcept
+        [[gnu::noinline]] void record_best() noexcept
         {
             best_assignment_ = assignment_;
             best_unsatisfied_count_ = unsatisfied_.size();
@@ -250,7 +254,7 @@ namespace kmx::sat::cdcl
                 probabilities_[break_count] = std::pow(config.break_epsilon + static_cast<double>(break_count), -config.break_exponent);
         }
 
-        [[nodiscard]] std::uint32_t select_probsat(const std::uint32_t clause_index) noexcept
+        [[nodiscard]] [[gnu::always_inline]] inline std::uint32_t select_probsat(const std::uint32_t clause_index) noexcept
         {
             const auto begin = clause_offsets_[clause_index];
             const auto end = clause_offsets_[clause_index + 1u];
@@ -275,7 +279,7 @@ namespace kmx::sat::cdcl
             return clause_literals_[position] >> 1u;
         }
 
-        [[nodiscard]] std::uint32_t select_walksat(const std::uint32_t clause_index, const configuration& config) noexcept
+        [[nodiscard]] [[gnu::always_inline]] inline std::uint32_t select_walksat(const std::uint32_t clause_index, const configuration& config) noexcept
         {
             const auto begin = clause_offsets_[clause_index];
             const auto end = clause_offsets_[clause_index + 1u];
@@ -302,7 +306,7 @@ namespace kmx::sat::cdcl
             return best_variable;
         }
 
-        void flip_variable(const std::uint32_t variable_index) noexcept
+        [[gnu::always_inline]] inline void flip_variable(const std::uint32_t variable_index) noexcept
         {
             const auto was_true = assignment_[variable_index];
             assignment_[variable_index] = static_cast<std::uint8_t>(was_true ^ 1u);
@@ -353,7 +357,7 @@ namespace kmx::sat::cdcl
             }
         }
 
-        [[nodiscard]] std::uint64_t next_random() noexcept
+        [[nodiscard]] [[gnu::always_inline]] inline std::uint64_t next_random() noexcept
         {
             // splitmix64: cheap, full-period, and every output bit is usable.
             std::uint64_t value = (random_state_ += 0x9e3779b97f4a7c15ull);

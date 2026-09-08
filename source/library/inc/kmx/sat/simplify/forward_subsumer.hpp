@@ -78,14 +78,22 @@ namespace kmx::sat::simplify
                 return [&storage, this, redundant](const cdcl::clause::ref_t ref) noexcept
                 {
                     const auto literals = storage.view_literals(ref);
-                    clauses_.push_back(indexed_clause {ref, literals, signature_of(literals), true, redundant});
+                    const bool checked = incremental_ && (storage.header_at(ref).flags & cdcl::bank::subsumption_checked_flag) != 0u;
+                    clauses_.push_back(indexed_clause {ref, literals, signature_of(literals), true, redundant, checked});
                 };
             };
             database_->iterate_irredundant(append_clause(false));
             const auto irredundant_clause_count = clauses_.size();
             database_->iterate_redundant(append_clause(true));
 
-            build_occurrence_index();
+            // Two clauses this pass has already checked against each other, and that have not changed since,
+            // cannot newly subsume one another; every pair that matters involves a clause added or rewritten since
+            // the previous run (a learned clause, a strengthened one). Such pairs are skipped below, which is what
+            // keeps the inprocessing epochs from re-examining the whole formula every two thousand conflicts. The
+            // lists scanned, and their order, are exactly the full pass's, so the same subsumptions are found in the
+            // same order (the order decides which clauses are promoted first, and that order reaches the watch
+            // lists); only the tests the full pass would have rejected are left out.
+            build_occurrence_index(full_index_, [](const indexed_clause&) noexcept { return true; });
 
             for (std::uint32_t left_index {}; left_index < clauses_.size(); ++left_index)
             {
@@ -93,13 +101,14 @@ namespace kmx::sat::simplify
                 if (!left.active || left.literals.empty())
                     continue;
 
-                // Any clause subsuming `left` must contain every literal of `left`, so it necessarily occurs in the
-                // rarest of `left`'s occurrence lists; scanning that single list is exact and avoids redundant work.
+                // Any clause `left` subsumes contains every literal of `left`, so it occurs in the rarest of `left`'s
+                // occurrence lists; that list is also where a subsumer of `left` is looked for first (the pass that
+                // processes the subsumer as `left` finds the pair in any case).
                 std::span<const std::uint32_t> rarest_candidates {};
                 bool has_rarest {};
                 for (const auto lit: left.literals)
                 {
-                    const auto candidates = occurrences_of(lit);
+                    const auto candidates = occurrences_of(full_index_, lit);
                     if (candidates.empty())
                     {
                         has_rarest = false;
@@ -121,6 +130,8 @@ namespace kmx::sat::simplify
                         continue;
 
                     auto& candidate = clauses_[candidate_index];
+                    if (left.checked && candidate.checked)
+                        continue;
                     const bool precedes_equal_clause = candidate_index < left_index && candidate.literals.size() == left.literals.size();
                     if ((candidate.literals.size() < left.literals.size() || precedes_equal_clause) &&
                         (candidate.signature & ~left.signature) == 0u && clause_subsumes(candidate.literals, left.literals))
@@ -139,11 +150,19 @@ namespace kmx::sat::simplify
                         continue;
 
                     auto& candidate = clauses_[candidate_index];
+                    if (left.checked && candidate.checked)
+                        continue;
                     if (left.literals.size() <= candidate.literals.size() && (left.signature & ~candidate.signature) == 0u &&
                         clause_subsumes(left.literals, candidate.literals))
                         subsume(candidate, left);
                 }
             }
+
+            // Everything still standing has now been checked against everything; strengthening below clears the
+            // mark again on the clauses it rewrites, through the storage.
+            for (const auto& clause: clauses_)
+                if (clause.active)
+                    storage.header_at(clause.ref).flags |= cdcl::bank::subsumption_checked_flag;
 
             if (self_subsuming_resolution_enabled_)
                 run_self_subsuming_resolution(irredundant_clause_count);
@@ -271,6 +290,10 @@ namespace kmx::sat::simplify
             return true;
         }
 
+        /// @brief Whether a run may skip pairs of clauses an earlier run checked (the default); off, every run is
+        /// a full pass, which the tests use as the reference.
+        void set_incremental(const bool enabled) noexcept { incremental_ = enabled; }
+
         std::size_t run_count() const noexcept { return run_count_; }
 
         std::size_t subsumed_count() const noexcept { return subsumed_count_; }
@@ -287,6 +310,15 @@ namespace kmx::sat::simplify
             std::uint64_t signature {};
             bool active {};
             bool redundant {};
+            bool checked {};
+        };
+
+        /// @brief Literal-to-clause occurrence lists over a subset of `clauses_`, as two contiguous arrays.
+        struct occurrence_index final
+        {
+            std::vector<std::uint32_t> start {};
+            std::vector<std::uint32_t> entries {};
+            std::vector<std::uint32_t> fill {};
         };
 
         /// @brief Tests whether `candidate` resolved on `pivot` produces a clause subsuming `target`.
@@ -340,44 +372,51 @@ namespace kmx::sat::simplify
         }
 
         /// Compressed literal-to-clause occurrence index; avoids per-literal container allocation.
-        void build_occurrence_index() noexcept
+        template <typename include_t>
+        void build_occurrence_index(occurrence_index& index, include_t&& include) noexcept
         {
             literal::raw_t highest_raw {};
             std::size_t total_occurrences {};
             for (const auto& clause: clauses_)
             {
+                if (!include(clause))
+                    continue;
                 total_occurrences += clause.literals.size();
                 for (const auto lit: clause.literals)
                     if (lit.raw() > highest_raw)
                         highest_raw = lit.raw();
             }
-
             const auto literal_slots = total_occurrences == 0u ? 0u : static_cast<std::size_t>(highest_raw) + 1u;
-            occurrence_start_.assign(literal_slots + 1u, 0u);
-            occurrence_entries_.clear();
+            index.start.assign(literal_slots + 1u, 0u);
+            index.entries.clear();
             if (literal_slots == 0u)
                 return;
-
             for (const auto& clause: clauses_)
-                for (const auto lit: clause.literals)
-                    ++occurrence_start_[static_cast<std::size_t>(lit.raw()) + 1u];
+                if (include(clause))
+                    for (const auto lit: clause.literals)
+                        ++index.start[static_cast<std::size_t>(lit.raw()) + 1u];
             for (std::size_t slot {1u}; slot <= literal_slots; ++slot)
-                occurrence_start_[slot] += occurrence_start_[slot - 1u];
+                index.start[slot] += index.start[slot - 1u];
+            index.entries.resize(total_occurrences);
+            index.fill.assign(index.start.begin(), index.start.end() - 1);
+            for (std::uint32_t clause_index {}; clause_index < clauses_.size(); ++clause_index)
+                if (include(clauses_[clause_index]))
+                    for (const auto lit: clauses_[clause_index].literals)
+                        index.entries[index.fill[lit.raw()]++] = clause_index;
+        }
 
-            occurrence_entries_.resize(total_occurrences);
-            occurrence_fill_.assign(occurrence_start_.begin(), occurrence_start_.end() - 1);
-            for (std::uint32_t index {}; index < clauses_.size(); ++index)
-                for (const auto lit: clauses_[index].literals)
-                    occurrence_entries_[occurrence_fill_[lit.raw()]++] = index;
+        [[nodiscard]] static std::span<const std::uint32_t> occurrences_of(const occurrence_index& index, const literal lit) noexcept
+        {
+            const auto slot = static_cast<std::size_t>(lit.raw());
+            if (slot + 1u >= index.start.size())
+                return {};
+            const auto begin = index.start[slot];
+            return {index.entries.data() + begin, index.start[slot + 1u] - begin};
         }
 
         [[nodiscard]] std::span<const std::uint32_t> occurrences_of(const literal lit) const noexcept
         {
-            const auto slot = static_cast<std::size_t>(lit.raw());
-            if (slot + 1u >= occurrence_start_.size())
-                return {};
-            const auto begin = occurrence_start_[slot];
-            return {occurrence_entries_.data() + begin, occurrence_start_[slot + 1u] - begin};
+            return occurrences_of(full_index_, lit);
         }
 
         /// @brief Deletes `subsumed`, which `subsuming` makes redundant.
@@ -447,8 +486,7 @@ namespace kmx::sat::simplify
         std::function<void(cdcl::clause::ref_t)> clause_sink_ {};
         cdcl::clause::ref_t last_subsumed_ref_ {};
         std::vector<indexed_clause> clauses_ {};
-        std::vector<std::uint32_t> occurrence_start_ {};
-        std::vector<std::uint32_t> occurrence_entries_ {};
-        std::vector<std::uint32_t> occurrence_fill_ {};
+        occurrence_index full_index_ {};
+        bool incremental_ {true};
     };
 }

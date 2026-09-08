@@ -383,7 +383,7 @@ namespace kmx::sat
         const auto failed_core_span = impl_->core_.extract_failed_core();
         impl_->last_failed_core_.assign(failed_core_span.begin(), failed_core_span.end());
 
-        impl_->statistics_.add("conflicts", impl_->core_.conflict_event_count());
+        impl_->statistics_.add("conflicts", impl_->core_.conflict_event_count() + impl_->core_.raw_probe_conflict_count());
         impl_->statistics_.add("decisions", impl_->core_.decision_event_count());
         impl_->statistics_.add("restarts", impl_->core_.restart_count());
         impl_->statistics_.add("learned_clauses", impl_->core_.episode_learned_clause_count());

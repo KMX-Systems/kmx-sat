@@ -84,7 +84,31 @@ namespace kmx::sat::cdcl::bank
         /// @param lit Literal whose list receives the new entry.
         /// @param entry Watch entry to append.
         /// @throws None (noexcept).
-        void push_watch(const literal lit, const watch entry) noexcept { ensure_list(lit).push_back(entry); }
+        void push_watch(const literal lit, const watch entry) noexcept
+        {
+            auto& list = ensure_list(lit);
+            // Growth is rare (a learned clause's first watches, a list a moved watch lands on for the first time);
+            // kept in a cold routine so the reallocation never sits inside the propagation loop.
+            if (list.size() == list.capacity()) [[unlikely]]
+                push_growing(list, entry);
+            else
+                list.push_back(entry);
+        }
+
+        [[gnu::noinline, gnu::cold]] static void push_growing(std::vector<watch>& list, const watch entry) noexcept
+        {
+            list.push_back(entry);
+        }
+
+        /// @brief Appends to the list of a literal whose index is below the reserved bound (see `list_at`).
+        [[gnu::always_inline]] inline void push_watch_at(const std::size_t literal_index, const watch entry) noexcept
+        {
+            auto& list = list_at(literal_index);
+            if (list.size() == list.capacity()) [[unlikely]]
+                push_growing(list, entry);
+            else
+                list.push_back(entry);
+        }
 
         /// @brief Removes one watch entry from the list for the given literal.
         /// @param lit Literal whose list loses the entry.
@@ -279,13 +303,25 @@ namespace kmx::sat::cdcl::bank
     private:
         static constexpr std::size_t direct_index_limit {std::size_t {1} << 24};
 
-        std::vector<watch>& ensure_list(const literal lit) noexcept
+        /// @brief The list of a literal, created if it does not exist yet.
+        /// @details The common case, an existing direct list, is the only code that lands in the propagation
+        /// loop; growing the table and the overflow map live in a cold routine that is never inlined. Inlined,
+        /// their allocation and termination paths sat inside `propagate` and cost it a sixth more instructions
+        /// per call through the register pressure they added, and whether the compiler split them out varied
+        /// from build to build.
+        [[gnu::always_inline]] inline std::vector<watch>& ensure_list(const literal lit) noexcept
         {
             const auto index = static_cast<std::size_t>(lit.index_in_watch_bank());
+            if (index < direct_lists_.size()) [[likely]]
+                return direct_lists_[index];
+            return grow_list(index);
+        }
+
+        [[gnu::noinline, gnu::cold]] std::vector<watch>& grow_list(const std::size_t index) noexcept
+        {
             if (index < direct_index_limit)
             {
-                if (index >= direct_lists_.size())
-                    direct_lists_.resize(index + 1u);
+                direct_lists_.resize(index + 1u);
                 return direct_lists_[index];
             }
             return overflow_lists_[static_cast<literal::raw_t>(index)];

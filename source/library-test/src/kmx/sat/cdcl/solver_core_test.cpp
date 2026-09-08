@@ -22,15 +22,39 @@ namespace kmx::sat::cdcl
         solver.add_problem_clause({literal {variable {1}, true}});
         REQUIRE(solver.original_clause_count() == 2);
         REQUIRE(solver.solve({}) == solver_core::status::unsatisfiable);
-        REQUIRE(solver.preprocess_run_count() == 1u);
+        // Two contradicting units are refuted by root propagation in the first phase, before any preprocessing.
+        REQUIRE(solver.preprocess_run_count() == 0u);
         REQUIRE(solver.current_search_outcome() == search_coordinator::outcome::unsatisfiable);
 
         solver_core satisfiable_solver;
         std::vector<literal> satisfiable_clause {literal {variable {1}, true}, literal {variable {2}, true}};
         satisfiable_solver.add_problem_clause(std::span<const literal> {satisfiable_clause});
         REQUIRE(satisfiable_solver.solve({}) == solver_core::status::satisfiable);
-        REQUIRE(satisfiable_solver.preprocess_run_count() == 1u);
+        // The first phase on the formula as stated decides this one (the lucky check), so the preprocessing
+        // pipeline never runs; a formula the first phase cannot decide still runs it exactly once.
+        REQUIRE(satisfiable_solver.preprocess_run_count() == 0u);
         REQUIRE(!satisfiable_solver.extract_internal_model().empty());
+        {
+            // The pigeonhole formula with six holes outlives the first phase's budget (two propagations per
+            // literal), so it reaches the pipeline, which runs exactly once.
+            solver_core searched_solver;
+            constexpr std::uint32_t holes = 6u, pigeons = 7u;
+            const auto var = [](const std::uint32_t pigeon, const std::uint32_t hole) { return variable {pigeon * holes + hole + 1u}; };
+            for (std::uint32_t pigeon = 0u; pigeon < pigeons; ++pigeon)
+            {
+                std::vector<literal> clause;
+                for (std::uint32_t hole = 0u; hole < holes; ++hole)
+                    clause.emplace_back(var(pigeon, hole), false);
+                searched_solver.add_problem_clause(std::span<const literal> {clause});
+            }
+            for (std::uint32_t hole = 0u; hole < holes; ++hole)
+                for (std::uint32_t first = 0u; first < pigeons; ++first)
+                    for (std::uint32_t second = first + 1u; second < pigeons; ++second)
+                        searched_solver.add_problem_clause({literal {var(first, hole), true}, literal {var(second, hole), true}});
+            REQUIRE(searched_solver.solve({}) == solver_core::status::unsatisfiable);
+            REQUIRE(searched_solver.raw_probe_conflict_count() >= 1u);
+            REQUIRE(searched_solver.preprocess_run_count() == 1u);
+        }
         REQUIRE(satisfiable_solver.propagation_assignment_count() > 0u);
         REQUIRE(satisfiable_solver.watch_entry_scan_count() > 0u);
         REQUIRE(satisfiable_solver.watch_partition_iterate_count() > 0u);
@@ -98,7 +122,8 @@ namespace kmx::sat::cdcl
         learning_solver.add_problem_clause({literal {variable {1}, false}, literal {variable {2}, false}});
         learning_solver.add_problem_clause({literal {variable {1}, false}, literal {variable {2}, true}});
         REQUIRE(learning_solver.solve({}) == solver_core::status::unsatisfiable);
-        REQUIRE(learning_solver.preprocess_run_count() == 1u);
+        // Refuted by the first phase's search on the formula as stated, so the pipeline never runs.
+        REQUIRE(learning_solver.preprocess_run_count() == 0u);
         REQUIRE(learning_solver.learned_clause_count() >= 1u);
         // The learned clause here is a single asserting unit literal (the decision variable's negation), so the
         // minimizer correctly skips it (minimization/shrink only apply to clauses with more than one literal).
@@ -137,10 +162,19 @@ namespace kmx::sat::cdcl
         REQUIRE(tautology_guard_solver.minimized_learned_clause_count() == 0u);
         REQUIRE(tautology_guard_solver.shrunk_learned_clause_count() == 0u);
 
+        // The subsumable pair sits next to a contradiction; the first phase's search would refute it before any
+        // preprocessing, so the request carries a conflict limit, which keeps the old order (pipeline first) and
+        // lets the subsumption pass be exercised.
         solver_core subsumed_solver;
-        subsumed_solver.add_problem_clause({literal {variable {4}, false}});
+        solve_request subsumed_request {};
+        subsumed_request.conflict_limit = 1'000'000'000u;
         subsumed_solver.add_problem_clause({literal {variable {4}, false}, literal {variable {5}, false}});
-        REQUIRE(subsumed_solver.solve({}) == solver_core::status::satisfiable);
+        subsumed_solver.add_problem_clause({literal {variable {4}, false}, literal {variable {5}, false}, literal {variable {6}, false}});
+        subsumed_solver.add_problem_clause({literal {variable {1}, false}, literal {variable {2}, false}});
+        subsumed_solver.add_problem_clause({literal {variable {1}, true}, literal {variable {2}, false}});
+        subsumed_solver.add_problem_clause({literal {variable {1}, false}, literal {variable {2}, true}});
+        subsumed_solver.add_problem_clause({literal {variable {1}, true}, literal {variable {2}, true}});
+        REQUIRE(subsumed_solver.solve(subsumed_request) == solver_core::status::unsatisfiable);
         REQUIRE(subsumed_solver.preprocess_run_count() == 1u);
         REQUIRE(subsumed_solver.subsumed_clause_count() >= 1u);
         const auto inprocess_snapshot = subsumed_solver.current_inprocess_telemetry_snapshot();
