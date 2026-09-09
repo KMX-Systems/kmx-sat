@@ -58,3 +58,9 @@ benchmark-release-results*/
 
 # Generated single-file source concatenation (LLM context dump), not a source artifact
 source/library/sat.txt
+
+# SAT Competition instances fetched by benchmarks/fetch_competition_corpus.py; the manifests that pin
+# them are tracked, the CNF payload (1.5 GB) is not
+benchmarks/corpus/competition/**/*.cnf.xz
+benchmarks/corpus/competition/.gbd-meta.db
+benchmarks/corpus/competition/.gbd-sizes.json

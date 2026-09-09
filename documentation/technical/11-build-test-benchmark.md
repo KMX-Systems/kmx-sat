@@ -108,6 +108,28 @@ instance at least one reference solver decided within 60 s; `open-manifest.json`
 with `run_solver_comparison.py`, which runs it by default together with the base and extended sets
 (`--set classic` restricts a run to it).
 
+**SAT Competition main tracks (added 2026-09-08).** `benchmarks/corpus/competition` holds the four main
+tracks of SAT Competition 2023-2026 — 1,291 instances with a competition-verified status, 1.6 GB of
+xz-compressed CNF, fetched by
+[fetch_competition_corpus.py](../../benchmarks/fetch_competition_corpus.py) from the
+[Global Benchmark Database](https://benchmark-database.de) that the competition publishes through. Only the
+per-track `manifest.json` is committed; the CNF payload is gitignored and fetched on demand, and the
+fetcher is resumable, idempotent and `--verify`-checkable. The selection is every instance whose result is
+`sat` or `unsat` and whose compressed file is at most 20 MB; without that bound the four tracks are 14.3 GB.
+The tracks are opt-in sets in `run_solver_comparison.py` (`--set competition`, or `--set main_2026`) and are
+absent until fetched. Instances keep the distributed `.cnf.xz` encoding: CaDiCaL and Kissat read it
+directly and kmx-sat has no decompressing reader, so the harness decompresses each instance once outside
+every timed round and hands all three solvers the identical plain CNF (`--scratch-dir` places the
+decompressed copy).
+
+> **This set answers a question the pinned corpora cannot.** Everything above is SATLIB and DIMACS material
+> from the 1990s and 2000s; the largest formula in it is 39,598 variables and 194,778 clauses, and the whole
+> 90-instance default run takes seconds. The competition instances are the modern workload the field is
+> measured on: only 79 of them are solvable by MiniSat within one million conflicts, and the competition
+> allows 5,000 s per instance. At a laptop-scale timeout most of them time out for all three solvers, so the
+> signal is the solved count and which instances each solver decides, not per-instance milliseconds. A run is
+> also a 1,291-instance soundness test against independently verified statuses.
+
 > **Do not tune on this corpus.** Most of the pinned instances finish in 1–3 ms and measure process
 > startup rather than search; only `satlib_uf250_01/050` and `satlib_uuf250_01/050` are real search
 > workloads, and random 3-SAT runtimes are heavy-tailed enough that four samples cannot separate a real
